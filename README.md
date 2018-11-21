@@ -1,5 +1,5 @@
 # Shioaji
-![shioaji-logo](https://github.com/Sinotrade/Shioaji/releases/download/0.0.1.dev9/shioaji-logo-01.png)![sinopac-logo](http://www.sinotrade.com.tw/Images/logo.png)
+![shioaji-logo](https://sinotrade.github.io/images/shioaji-logo-01.png)![sinopac-logo](http://www.sinotrade.com.tw/Images/logo.png)
 
 Shioaji is sinopac provide the most pythonic api for trading the taiwan and global financial market.
 You can use your favorite Python packages such as numpy, scipy, pandas, pytorch or tensorflow to build your own trading model with intergrated the shioaji api on cross platform.
