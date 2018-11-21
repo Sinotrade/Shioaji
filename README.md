@@ -1,5 +1,5 @@
 # Shioaji
-![logo](http://www.sinotrade.com.tw/Images/logo.png)
+![shioaji-logo](https://github.com/Sinotrade/Shioaji/releases/download/0.0.1.dev9/shioaji-logo-01.png)![sinopac-logo](http://www.sinotrade.com.tw/Images/logo.png)
 
 Shioaji is sinopac provide the most pythonic api for trading the taiwan and global financial market.
 You can use your favorite Python packages such as numpy, scipy, pandas, pytorch or tensorflow to build your own trading model with intergrated the shioaji api on cross platform.
@@ -37,12 +37,40 @@ import pandas as pd
 import shioaji as sj
 ```
 ### Use Shioaji object to setup setting and login
-
+```python
+sj.Shioaji?
+```
+    Init signature: sj.Shioaji(backend='http', simulation=True, proxies={}, currency='NTD')
+    Init docstring:
+    initialize Shioaji to start trading
+    backend: {http, socket}
+        use http or socket as backend currently only support http, socket backend coming soon.
+        - http: will support taiwan stock, future, and global stock
+        - socket: will support taiwan stock, future and global future
+    simulation: bool
+        - False: to trading on real market (just use your Sinopac account to start trading)
+        - True: become simulation account(need to contract as to open simulation account)
+    proxies: dict
+        specific the proxies of your https
+        {'https': 'your-proxy-url'}
+    currency: {NTX, USX, NTD, USD, HKD, EUR, JPY, GBP}
+        set the default currency for display 
 
 ```python
-api = sj.Shioaji(backend='http', simulation=True)
+api = sj.Shioaji(backend='http', simulation=False)
 ```
 
+```python
+api.login?
+```
+
+    Signature: api.login(person_id, passwd)
+    Docstring:
+    login to trading server
+    person_id: str
+        Same as your eleader, ileader login id(usually your person ID)
+    passwd: str
+        the password of your eleader login password(not ca password)
 
 ```python
 person_id = 'SCCEIEFAJA'
@@ -109,6 +137,19 @@ api.set_default_account(api.fut_account)
 ```
 
 ### Activate your cetifacation to start ordering
+```
+api.activate_ca?
+```
+
+    Signature: api.activate_ca(ca_path, ca_passwd, person_id)
+    Docstring:
+    activate your ca for trading
+    ca_path: str
+        the path of your ca, support both absloutely and relatively path, use same ca with eleader
+    ca_passwd: str
+        password of your ca
+    person_id: str
+        the ca belong which person ID
 
 
 ```python
@@ -427,7 +468,7 @@ df_margin
 
 
 <div>
-<table border="1" class="dataframe">
+<table>
   <thead>
     <tr style="text-align: right;">
       <th></th>
@@ -531,7 +572,7 @@ df_positions
 
 
 <div>
-<table border="1" class="dataframe">
+<table>
   <thead>
     <tr style="text-align: right;">
       <th></th>
@@ -749,7 +790,7 @@ df_profitloss
 
 
 <div>
-<table border="1" class="dataframe">
+<table>
   <thead>
     <tr style="text-align: right;">
       <th></th>
