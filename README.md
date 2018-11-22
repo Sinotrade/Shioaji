@@ -847,8 +847,14 @@ df_profitloss
 
 
 ## Communication
+[![Gitter](https://badges.gitter.im/Sinotrade/Shioaji.svg)](https://gitter.im/Sinotrade/Shioaji?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+- Gitter: general chat, online discussions, collaboration etc.
+- GitHub issues: bug reports, feature requests, install issues, RFCs, thoughts, etc.
 
 ## Releases and Contributing
+Shioaji current state is Pre-Alpha, we expect no obvious bugs. Please let us know if you encounter a bug by [filing an issue](https://github.com/Sinotrade/Shioaji/issues).
+
+We appreciate all suggestions. If you have any idea want us to implement, please discuss with us in gitter.
 
 ## The Team
-
+Shioaji is currently maintained by [Yvictor](https://github.com/Yvictor), [TK Huang](https://github.com/TKHuang), [Sky Wu](https://github.com/strangenaiad) and [Po Chien Yang](https://github.com/ypochien) with major contributions.
