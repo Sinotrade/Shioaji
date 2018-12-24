@@ -35,7 +35,7 @@ pip install shioaji
 ### Docker Image
 simple run with interactive mode in docker 
 ```
-docker run -it shioaji:latest
+docker run -it sinotrade/shioaji:latest
 ```
 
 ## Getting Started
