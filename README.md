@@ -1,4 +1,7 @@
 # Shioaji
+
+[![Join the chat at https://gitter.im/Sinotrade/Shioaji](https://badges.gitter.im/Sinotrade/Shioaji.svg)](https://gitter.im/Sinotrade/Shioaji?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 ![shioaji-logo](https://sinotrade.github.io/images/shioaji-logo-01.png)![sinopac-logo](http://www.sinotrade.com.tw/Images/logo.png)
 
 
