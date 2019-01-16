@@ -53,20 +53,40 @@ import shioaji as sj
 sj.Shioaji?
 ```
     Init signature: sj.Shioaji(backend='http', simulation=True, proxies={}, currency='NTD')
-    Init docstring:
+    Docstring:    
+    shioaji api 
+    
+    Functions:
+        login 
+        activate_ca
+        list_accounts
+        set_default_account
+        get_account_margin 
+        get_account_openposition
+        get_account_settle_profitloss
+        place_order
+        update_order
+        update_status
+        list_trades
+    
+    Objects:
+        Contracts
+        Order
+    Init docstring:
     initialize Shioaji to start trading
-    backend: {http, socket}
-        use http or socket as backend currently only support http, socket backend coming soon.
-        - http: will support taiwan stock, future, and global stock
-        - socket: will support taiwan stock, future and global future
-    simulation: bool
-        - False: to trading on real market (just use your Sinopac account to start trading)
-        - True: become simulation account(need to contract as to open simulation account)
-    proxies: dict
-        specific the proxies of your https
-        {'https': 'your-proxy-url'}
-    currency: {NTX, USX, NTD, USD, HKD, EUR, JPY, GBP}
-        set the default currency for display 
+    
+    Args:
+        backend (str): {http, socket} 
+            use http or socket as backend currently only support http, async socket backend coming soon.
+        simulation (bool): 
+            - False: to trading on real market (just use your Sinopac account to start trading)
+            - True: become simulation account(need to contract as to open simulation account)
+        proxies (dict): specific the proxies of your https
+            ex: {'https': 'your-proxy-url'}
+        currency (str): {NTX, USX, NTD, USD, HKD, EUR, JPY, GBP}
+            set the default currency for display 
+    File:           shioaji/shioaji.py
+    Type:           type
 
 ```python
 api = sj.Shioaji(backend='http', simulation=False)
@@ -79,11 +99,12 @@ api.login?
     Signature: api.login(person_id, passwd)
     Docstring:
     login to trading server
-    person_id: str
-        Same as your eleader, ileader login id(usually your person ID)
-    passwd: str
-        the password of your eleader login password(not ca password)
-
+    
+    Args:
+        person_id (str): Same as your eleader, ileader login id(usually your person ID)
+        passwd  (str): the password of your eleader login password(not ca password)
+    File:      shioaji/shioaji.py
+    Type:     method
 ```python
 person_id = 'SCCEIEFAJA'
 ```
@@ -101,12 +122,7 @@ api.fut_account
 
 
 
-    {'account': '9104000',
-     'username': '莊*芬',
-     'datacount': 0,
-     'accttype': 'F',
-     'broker_id': 'F002000',
-     'idno': 'SCCEIEFAJA'}
+    FutureAccount(person_id='SCCEIEFAJA', broker_id='F002000', account_id='9104000', username='莊*芬')
 
 
 
@@ -120,24 +136,9 @@ api.list_accounts()
 
 
 
-    [{'account': '9104000',
-      'username': '莊*芬',
-      'datacount': 0,
-      'accttype': 'F',
-      'broker_id': 'F002000',
-      'idno': 'SCCEIEFAJA'},
-     {'account': '9802195',
-      'username': '莊*芬',
-      'datacount': 1,
-      'accttype': 'S',
-      'broker_id': '9A92',
-      'idno': 'SCCEIEFAJA'},
-     {'account': '09800762',
-      'username': 'n*m',
-      'datacount': 3,
-      'accttype': 'H',
-      'broker_id': '1300',
-      'idno': 'QCCAHIFFDH'}]
+    [Account(account_type='H', person_id='QCCAHIFFDH', broker_id='1300', account_id='09800762', username='n*m'),
+     FutureAccount(person_id='SCCEIEFAJA', broker_id='F002000', account_id='9104000', username='莊*芬'),
+     StockAccount(person_id='SCCEIEFAJA', broker_id='9A92', account_id='9802195', username='莊*芬')]
 
 
 
@@ -149,19 +150,22 @@ api.set_default_account(api.fut_account)
 ```
 
 ### Activate your cetifacation to start ordering
-```
+
+```python
 api.activate_ca?
 ```
 
     Signature: api.activate_ca(ca_path, ca_passwd, person_id)
     Docstring:
     activate your ca for trading
-    ca_path: str
-        the path of your ca, support both absloutely and relatively path, use same ca with eleader
-    ca_passwd: str
-        password of your ca
-    person_id: str
-        the ca belong which person ID
+    
+    Args: 
+        ca_path (str):
+            the path of your ca, support both absloutely and relatively path, use same ca with eleader
+        ca_passwd (str): password of your ca
+        person_id (str): the ca belong which person ID
+    File:     shioaji/shioaji.py
+    Type:     method
 
 
 ```python
@@ -181,38 +185,60 @@ api.Order?
 ```
 
 
-    Init signature: api.Order(product_id, product_type, opt_type, price, price_type, order_bs, order_type, octype, quantity, account)
-    Docstring: 
-    create order object
-    product_id: str 
-        the product code
-    product_type: {'F', 'O'}
-        - F: future
-        - O: option
-    opt_type: {' ', 'C', 'P'}
-        the option type Call or Put, leave blank if place future order
-        - ' ': Future
-        - 'C': Call
-        - 'P': Put 
-    price: float or int
-        order price
-    price_type: {LMT, MKT, MKP}
-        - LMT: limit
-        - MKT: market
-        - MKP: market range
-    order_bs: {'B', 'S'}, 
-        - 'B': buy
-        - 'S': sell
-    order_type: {ROD, IOC, FOK}
-        - ROD: Rest of Day
-        - IOC: Immediate-or-Cancel
-        - FOK: Fill-or-Kill
-    octype: {' ', '0', '1', '6'}, 
-        - ' ': auto
-        - '0': new position
-        - '1': close position
-        - '6': day trade
-    quantity: int
+    Init signature: api.Order(action, price_type, order_type, price, quantity, *args, **kwargs)
+    Docstring:     
+    The basic order object to place order
+    
+    Attributes:
+        product_id (str): the code of product that order to placing
+        action (srt): {B, S}, order action to buy or sell
+            - B: buy
+            - S: sell
+        price_type (str): {LMT, MKT, MKP}, pricing type of order
+            - LMT: limit
+            - MKT: market
+            - MKP: market range
+        order_type (str): {ROD, IOC, FOK}, the type of order
+            - ROD: Rest of Day
+            - IOC: Immediate-or-Cancel
+            - FOK: Fill-or-Kill
+        octype (str): {' ', '0', '1', '6'}, the type or order to open new position or close position 
+            - ' ': auto
+            - '0': new position
+            - '1': close position
+            - '6': day trade
+        price (float or int): the price of order
+        quantity (int): the quantity of order
+        account (:obj:Account): which account to place this order
+        ca (binary): the ca of this order
+    Init docstring:
+    the __init__ method of order
+    
+    Args:
+        product_id (str, optional): the code of product that order to placing 
+                                    if not provide will gen from contract when placing order 
+        action (srt): {B, S}, order action to buy or sell
+            - B: buy
+            - S: sell
+        price_type (str): {LMT, MKT, MKP}, pricing type of order
+            - LMT: limit
+            - MKT: market
+            - MKP: market range
+        order_type (str): {ROD, IOC, FOK}, the type of order
+            - ROD: Rest of Day
+            - IOC: Immediate-or-Cancel
+            - FOK: Fill-or-Kill
+        octype (str, optional): {' ', '0', '1', '6'}, the type or order 
+                                to open new position or close position 
+                                if not provide will become auto mode 
+            - ' ': auto
+            - '0': new position
+            - '1': close position
+            - '6': day trade
+        price (float or int): the price of order
+        quantity (int): the quantity of order
+    File:          shioaji/order.py
+    Type:          type
 
 
 
@@ -220,96 +246,138 @@ api.Order?
 
 
 ```python
-api.Order_props.
+api.OrderProps.
+```
+    shioaji.backend.http.order.Order_props
+```python
+api.OrderProps.order_type.IOC
 ```
 
-
-
-
-    shioaji.backend.http.order.Order_props
-
-
+    'IOC'
 
 #### using tab to direct get avaliable trading product with Contracts
 
-
 ```python
-api.Contracts.Future.TXF.TXF201903
+api.Contracts
 ```
 
-
-
-
-    Contract
-        Code: TXFC9
-        Detail:
-            code: TXFC9
-            deliverymonth: 201903
-            poc: 
-            eprice: 0.0
-            ename: TXF
-            category: TXF
-            prod_kind: I
-            csname: 台指期貨
-            ostock: #001
-            basic: 0001.000000
-
-
+    Contracts(Futures=(BRF, CAF, CBF, CCF, CDF, CEF, CFF, CGF, CHF, CJ1, CJF, CKF, CLF, CM1, CMF, CNF, CQF, CRF, CSF, CUF, CWF, CXF, CYF, CZ1, CZF, DC1, DCF, DDF, DE1, DEF, DF1, DFF, DGF, DHF, DJF, DKF, DLF, DN1, DNF, DOF, DP1, DPF, DQF, DSF, DUF, DVF, DWF, DX1, DXF, DYF, DZ1, DZF, EEF, EGF, EHF, EMF, EPF, ERF, ESF, EXF, EY1, EYF, FF1, FFF, FGF, FKF, FQF, FRF, FTF, FVF, FWF, FXF, FYF, FZF, GAF, GBF, GCF, GDF, GHF, GIF, GJF, GLF, GMF, GNF, GOF, GPF, GRF, GTF, GUF, GWF, GXF, GZF, HAF, HBF, HCF, HHF, HIF, HLF, HMF, HOF, HS1, HSF, HY1, HYF, I5F, IA1, IAF, IHF, IIF, IJF, IMF, IOF, IPF, IQF, IRF, ITF, IVF, IXF, IYF, IZF, JBF, JDF, JFF, JGF, JIF, JNF, JPF, JSF, JWF, JZF, KAF, KCF, KDF, KFF, KG1, KGF, KIF, KKF, KLF, KOF, KPF, KSF, KWF, LBF, LCF, LIF, LMF, LO1, LOF, LQF, LRF, LTF, LUF, LV1, LVF, LWF, LX1, LXF, LZF, MAF, MBF, MCF, MEF, MIF, MJF, MKF, ML1, MPF, MQF, MVF, MXF, MYF, NAF, NBF, NCF, NDF, NEF, NGF, NHF, NI1, NIF, NJF, NLF, NMF, NNF, NOF, NQF, NSF, NTF, NUF, NVF, NWF, NXF, NYF, NZF, OAF, OBF, OCF, ODF, OEF, OFF, OGF, OHF, OJF, OKF, OLF, OMF, ONF, OOF, OPF, OQF, ORF, OSF, OTF, OUF, OVF, OWF, OXF, OYF, OZF, PAF, PBF, RHF, RTF, SPF, T5F, TGF, TJF, TXF, UDF, XAF, XBF, XEF, XIF, XJF), Options=(CAO, CBA, CBO, CCO, CDO, CEO, CFO, CGA, CGO, CHO, CJA, CJO, CKO, CLA, CLO, CMA, CMO, CNO, CQO, CRO, CSO, CXO, CZA, CZO, DCO, DEA, DEO, DFA, DFO, DGO, DHA, DHO, DJO, DKA, DKO, DLO, DNA, DNO, DOO, DPO, DQO, DSO, DUO, DVO, DWO, DXA, DXO, GIA, GIO, GTO, GXO, HCO, IJA, IJO, LOA, LOO, NYA, NYO, NZO, OAO, OBO, OCO, OJO, OKO, OOO, OZA, OZO, RHO, RTO, TEO, TFO, TGO, TXO, XIO))
 
 
 ```python
-sample_order = api.Order(product_id=api.Contracts.Future.TXF.TXF201903.code, 
-                         product_type=api.Order_props.product_type.Future, 
-                         opt_type=api.Order_props.opt_type.Future,
+api.Contracts.Futures
+```
+
+    (BRF, CAF, CBF, CCF, CDF, CEF, CFF, CGF, CHF, CJ1, CJF, CKF, CLF, CM1, CMF, CNF, CQF, CRF, CSF, CUF, CWF, CXF, CYF, CZ1, CZF, DC1, DCF, DDF, DE1, DEF, DF1, DFF, DGF, DHF, DJF, DKF, DLF, DN1, DNF, DOF, DP1, DPF, DQF, DSF, DUF, DVF, DWF, DX1, DXF, DYF, DZ1, DZF, EEF, EGF, EHF, EMF, EPF, ERF, ESF, EXF, EY1, EYF, FF1, FFF, FGF, FKF, FQF, FRF, FTF, FVF, FWF, FXF, FYF, FZF, GAF, GBF, GCF, GDF, GHF, GIF, GJF, GLF, GMF, GNF, GOF, GPF, GRF, GTF, GUF, GWF, GXF, GZF, HAF, HBF, HCF, HHF, HIF, HLF, HMF, HOF, HS1, HSF, HY1, HYF, I5F, IA1, IAF, IHF, IIF, IJF, IMF, IOF, IPF, IQF, IRF, ITF, IVF, IXF, IYF, IZF, JBF, JDF, JFF, JGF, JIF, JNF, JPF, JSF, JWF, JZF, KAF, KCF, KDF, KFF, KG1, KGF, KIF, KKF, KLF, KOF, KPF, KSF, KWF, LBF, LCF, LIF, LMF, LO1, LOF, LQF, LRF, LTF, LUF, LV1, LVF, LWF, LX1, LXF, LZF, MAF, MBF, MCF, MEF, MIF, MJF, MKF, ML1, MPF, MQF, MVF, MXF, MYF, NAF, NBF, NCF, NDF, NEF, NGF, NHF, NI1, NIF, NJF, NLF, NMF, NNF, NOF, NQF, NSF, NTF, NUF, NVF, NWF, NXF, NYF, NZF, OAF, OBF, OCF, ODF, OEF, OFF, OGF, OHF, OJF, OKF, OLF, OMF, ONF, OOF, OPF, OQF, ORF, OSF, OTF, OUF, OVF, OWF, OXF, OYF, OZF, PAF, PBF, RHF, RTF, SPF, T5F, TGF, TJF, TXF, UDF, XAF, XBF, XEF, XIF, XJF)
+
+
+```python
+api.Contracts.Futures.TXF
+```
+
+    TXF(TXF201903, TXF201906, TXF201809, TXF201810, TXF201811, TXF201812)
+
+```python
+api.Contracts.Futures.TXF.TXF201903
+```
+    Future(symbol='TXF201903', code='TXFC9', name='台指期貨', category='TXF', delivery_month='201903', underlying_kind='I', underlying_code='#001', unit=1.0)
+
+```python
+TXFR3 = api.Contracts.Futures.TXF.TXF201903
+```
+
+```python
+sample_order = api.Order(product_id=TXFR3.code, 
                          price=9600,
-                         price_type=api.Order_props.price_type.LMT,
-                         order_bs=api.Order_props.order_bs.Buy,
-                         order_type=api.Order_props.order_type.ROD,
-                         octype=api.Order_props.octype.auto,
+                         action=api.OrderProps.action.Buy,
+                         price_type=api.OrderProps.price_type.LMT,
+                         order_type=api.OrderProps.order_type.ROD,
+                         octype=api.OrderProps.octype.auto,
                          quantity=5,
                          account=api.fut_account,
                         )
+sample_order
 ```
 
-just pass Order object to place_order fuction to place order then will get the Trade object return
-
+    Order(product_id='TXFC9', action='B', price_type='LMT', order_type='ROD', price=9600, quantity=5, account=FutureAccount(person_id='SCCEIEFAJA', broker_id='F002000', account_id='9104000', username='莊*芬')
 
 ```python
-trade = api.place_order(sample_order)
+print(api.LimitOrder.__init__.__doc__)
+```
+     LimitOrder
+    
+            Args:
+                product_id (str, optional): the code of product that order to placing 
+                                            if not provide will gen from contract when placing order 
+                action (srt): {B, S}, order action to buy or sell
+                    - B: buy
+                    - S: sell
+                price (float or int): the price of order
+                quantity (int): the quantity of order
+                order_type (str, optional): {ROD, IOC, FOK}, the type of order
+                    - ROD: Rest of Day
+                    - IOC: Immediate-or-Cancel
+                    - FOK: Fill-or-Kill
+                octype (str, optional): {' ', '0', '1', '6'}, the type or order 
+                                        to open new position or close position 
+                                        if not provide will become auto mode 
+                    - ' ': auto
+                    - '0': new position
+                    - '1': close position
+                    - '6': day trade
+
+```python
+sample_limit_order = api.LimitOrder('B', 9700, 5)
+sample_limit_order
+```
+    LimitOrder(action='B', order_type='ROD', price=9700, quantity=5)
+
+
+### Using LimitOrder, MarketOrder, etc.
+
+```python
+print(api.MarketOrder.__init__.__doc__)
 ```
 
+     MarketOrder
+    
+            Args:
+                product_id (str, optional): the code of product that order to placing 
+                                            if not provide will gen from contract when placing order 
+                action (srt): {B, S}, order action to buy or sell
+                    - B: buy
+                    - S: sell
+                quantity (int): the quantity of order
+                order_type (str, optional): {IOC, FOK}, the type of order
+                    - IOC: Immediate-or-Cancel
+                    - FOK: Fill-or-Kill
+                octype (str, optional): {' ', '0', '1', '6'}, the type or order 
+                                        to open new position or close position 
+                                        if not provide will become auto mode 
+                    - ' ': auto
+                    - '0': new position
+                    - '1': close position
+                    - '6': day trade
+
+```python
+sample_mkt_order = api.MarketOrder('B', 5)
+sample_mkt_order
+```
+
+    MarketOrder(action='B', order_type='IOC', quantity=5)
+
+### just pass Order object to place_order fuction to place order then will get the Trade object return
+
+```python
+trade = api.place_order(TXFR3, sample_order)
+```
 
 
 ```python
 trade
 ```
 
-
-
-
-    Trade
-        status: order_sent
-            status_code: 
-            errmsg: 
-            product_id: TXFC9
-            ordno: 
-            seqno: 702330
-            ord_bs: B
-            price: 9600
-            quantity: 5
-            price_type: LMT
-            account: {'account': '9104000', 'username': '莊*芬', 'datacount': 0, 'accttype': 'F', 'broker_id': 'F002000', 'idno': 'SCCEIEFAJA'}
-            msg:                                                             
-            trade_type: 01
-            octype:  
-            mttype: 0
-            composit: 00
-            ord_date: 20181119
-            preord_date: 20181119
-            ord_time: 15:45:48
-            ord_type: ROD
-            product_type: F
-            opt_type:  
+    Trade(contract=Future(symbol='TXF201903', code='TXFC9', name='台指期貨', category='TXF', delivery_month='201903', underlying_kind='I', underlying_code='#001', unit=1.0), order=Order(product_id='TXFC9', action='B', price_type='LMT', order_type='ROD', price=9600, quantity=5, account=FutureAccount(person_id='SCCEIEFAJA', broker_id='F002000', account_id='9104000', username='莊*芬')), status=OrderStatus(seqno='701124', order_id='7521840eb43914f94f98f025b1762e0b250ded21', status='PendingSubmit', order_datetime=datetime.datetime(2019, 1, 16, 12, 39, 28)))
 
 
 
@@ -317,7 +385,7 @@ trade
 
 
 ```python
-trade.update_status(api.client)
+api.update_status()
 ```
 
 
@@ -325,32 +393,7 @@ trade.update_status(api.client)
 trade
 ```
 
-
-
-
-    Trade
-        status: order_sent
-            status_code: 0000
-            errmsg: 
-            product_id: TXFC9
-            ordno: kY012
-            seqno: 702330
-            ord_bs: B
-            price: 9600.0
-            quantity: 5
-            price_type: LMT
-            account: {'account': '9104000', 'username': '莊*芬', 'datacount': 0, 'accttype': 'F', 'broker_id': 'F002000', 'idno': 'SCCEIEFAJA'}
-            msg:                                                             
-            trade_type: 01
-            octype:  
-            mttype: 0
-            composit: 00
-            ord_date: 20181119
-            preord_date: 20181119
-            ord_time: 15:45:48
-            ord_type: ROD
-            product_type: F
-            opt_type:  
+    Trade(contract=Future(symbol='TXF201903', code='TXFC9', name='台指期貨', category='TXF', delivery_month='201903', underlying_kind='I', underlying_code='#001', unit=1.0), order=Order(product_id='TXFC9', action='B', price_type='LMT', order_type='ROD', price=9600, quantity=5, account=FutureAccount(person_id='SCCEIEFAJA', broker_id='F002000', account_id='9104000', username='莊*芬')), status=OrderStatus(seqno='701124', ordno='ky00P', order_id='7521840eb43914f94f98f025b1762e0b250ded21', status='Submitted', status_code='0000', msg='ky00P', modified_price=9600.0, remaining=5, order_datetime=datetime.datetime(2019, 1, 16, 12, 39, 28)))
 
 
 
@@ -366,33 +409,7 @@ trade = api.update_order(trade, price=9800, qty=1)
 trade
 ```
 
-
-
-
-    Trade
-        status: order_sent
-            status_code: 0000
-            errmsg: 
-            product_id: TXFC9
-            ordno: kY012
-            seqno: 702330
-            ord_bs: B
-            price: 9800.0
-            quantity: 5
-            price_type: LMT
-            account: {'account': '9104000', 'username': '莊*芬', 'datacount': 0, 'accttype': 'F', 'broker_id': 'F002000', 'idno': 'SCCEIEFAJA'}
-            msg:                                                             
-            trade_type: 01
-            octype:  
-            mttype: 0
-            composit: 00
-            ord_date: 20181119
-            preord_date: 20181119
-            ord_time: 15:45:48
-            ord_type: ROD
-            product_type: F
-            opt_type:  
-
+    Trade(contract=Future(symbol='TXF201903', code='TXFC9', name='台指期貨', category='TXF', delivery_month='201903', underlying_kind='I', underlying_code='#001', unit=1.0), order=Order(product_id='TXFC9', action='B', price_type='LMT', order_type='ROD', price=9600, quantity=5, account=FutureAccount(person_id='SCCEIEFAJA', broker_id='F002000', account_id='9104000', username='莊*芬')), status=OrderStatus(seqno='701124', ordno='ky00P', order_id='7521840eb43914f94f98f025b1762e0b250ded21', status='Submitted', status_code='0000', msg='ky00P', modified_price=9800.0, remaining=5, order_datetime=datetime.datetime(2019, 1, 16, 12, 39, 28)))
 
 
 ### Account Margin
