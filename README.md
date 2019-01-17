@@ -37,6 +37,10 @@ simple run with interactive mode in docker
 ```
 docker run -it sinotrade/shioaji:latest
 ```
+run with jupyter lab or notebook
+```
+docker run -p 8888:8888 sinotrade/shioaji:jupyter
+```
 
 ## Getting Started
 
