@@ -12,5 +12,6 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.5.11-Linux-x86
 
 RUN pip install shioaji
 
+WORKDIR /home/work
 CMD ["/bin/bash"]
 

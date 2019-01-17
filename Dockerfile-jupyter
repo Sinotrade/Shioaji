@@ -11,7 +11,9 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.5.11-Linux-x86
     echo "conda activate base" >> ~/.bashrc
 
 RUN pip install shioaji
-
 RUN conda install jupyterlab pandas -y
+WORKDIR /home/work
+RUN wget https://raw.githubusercontent.com/Sinotrade/Sinotrade.github.io/master/tutorial/shioaji_tutorial.ipynb
 EXPOSE 8888
+
 ENTRYPOINT [ "jupyter", "lab", "--allow-root", "--ip=0.0.0.0"]

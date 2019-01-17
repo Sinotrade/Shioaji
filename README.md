@@ -76,7 +76,7 @@ sj.Shioaji?
     Objects:
         Contracts
         Order
-    Init docstring:
+    Init docstring:
     initialize Shioaji to start trading
     
     Args:
@@ -88,7 +88,7 @@ sj.Shioaji?
         proxies (dict): specific the proxies of your https
             ex: {'https': 'your-proxy-url'}
         currency (str): {NTX, USX, NTD, USD, HKD, EUR, JPY, GBP}
-            set the default currency for display 
+            set the default currency for display
     File:           shioaji/shioaji.py
     Type:           type
 
@@ -107,7 +107,7 @@ api.login?
     Args:
         person_id (str): Same as your eleader, ileader login id(usually your person ID)
         passwd  (str): the password of your eleader login password(not ca password)
-    File:      shioaji/shioaji.py
+    File:      shioaji/shioaji.py
     Type:     method
 ```python
 person_id = 'SCCEIEFAJA'
@@ -168,7 +168,7 @@ api.activate_ca?
             the path of your ca, support both absloutely and relatively path, use same ca with eleader
         ca_passwd (str): password of your ca
         person_id (str): the ca belong which person ID
-    File:     shioaji/shioaji.py
+    File:     shioaji/shioaji.py
     Type:     method
 
 
@@ -215,7 +215,7 @@ api.Order?
         quantity (int): the quantity of order
         account (:obj:Account): which account to place this order
         ca (binary): the ca of this order
-    Init docstring:
+    Init docstring:
     the __init__ method of order
     
     Args:
@@ -241,7 +241,7 @@ api.Order?
             - '6': day trade
         price (float or int): the price of order
         quantity (int): the quantity of order
-    File:          shioaji/order.py
+    File:          shioaji/order.py
     Type:          type
 
 
