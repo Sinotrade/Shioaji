@@ -425,10 +425,10 @@ api.quote?
 ```
 
 
-    Type:        Quote
-    String form: <shioaji.backend.solace.quote.Quote object at 0x7fe4bba6d828>
-    File:        shioaji/backend/solace/quote.py
-    Docstring:  
+    Type:        Quote
+    String form: <shioaji.backend.solace.quote.Quote object at 0x7fe4bba6d828>
+    File:        shioaji/backend/solace/quote.py
+    Docstring:  
     Quote Api
     
     Functions:
@@ -446,15 +446,15 @@ api.quote.set_callback?
 ```
 
 
-    Signature: api.quote.set_callback(func)
-    Docstring:
+    Signature: api.quote.set_callback(func)
+    Docstring:
     set quote callback
     
     Args: 
         func (:function): func(topic: str, quote_msg: dict) -> int
             when receive quote will call this function to processed the msg
-    File:      shioaji/backend/solace/quote.py
-    Type:      method
+    File:      shioaji/backend/solace/quote.py
+    Type:      method
 
 
 
@@ -464,15 +464,15 @@ api.quote.set_event_callback?
 ```
 
 
-    Signature: api.quote.set_event_callback(func)
-    Docstring:
+    Signature: api.quote.set_event_callback(func)
+    Docstring:
     set event callback
     
     Args:
         func (:function): func(resp_code: int, event_code: int, event: str) -> None
             when event happend will call this function to deal with event
-    File:      shioaji/backend/solace/quote.py
-    Type:      method
+    File:      shioaji/backend/solace/quote.py
+    Type:      method
 
 
 
@@ -503,15 +503,15 @@ api.quote.subscribe?
 ```
 
 
-    Signature: api.quote.subscribe(contract, quote_type='tick')
-    Docstring:
+    Signature: api.quote.subscribe(contract, quote_type='tick')
+    Docstring:
     subscribe the quote of contract 
     
     Args:
         contract (:obj:Shioaji.Contract): the contract you want to subscribe
         quote_type (str): {tick, bidask}
-    File:      shioaji/backend/solace/quote.py
-    Type:      method
+    File:      shioaji/backend/solace/quote.py
+    Type:      method
 
 
 
