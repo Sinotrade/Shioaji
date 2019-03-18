@@ -416,6 +416,130 @@ trade
     Trade(contract=Future(symbol='TXF201903', code='TXFC9', name='台指期貨', category='TXF', delivery_month='201903', underlying_kind='I', underlying_code='#001', unit=1.0), order=Order(product_id='TXFC9', action='B', price_type='LMT', order_type='ROD', price=9600, quantity=5, account=FutureAccount(person_id='SCCEIEFAJA', broker_id='F002000', account_id='9104000', username='莊*芬')), status=OrderStatus(seqno='701124', ordno='ky00P', order_id='7521840eb43914f94f98f025b1762e0b250ded21', status='Submitted', status_code='0000', msg='ky00P', modified_price=9800.0, remaining=5, order_datetime=datetime.datetime(2019, 1, 16, 12, 39, 28)))
 
 
+
+## Quote Api
+
+
+```python
+api.quote?
+```
+
+
+    Type:        Quote
+    String form: <shioaji.backend.solace.quote.Quote object at 0x7fe4bba6d828>
+    File:        shioaji/backend/solace/quote.py
+    Docstring:  
+    Quote Api
+    
+    Functions:
+        set_callback
+        set_event_callback
+        subscribe 
+
+
+
+### Set event and quote callback
+
+
+```python
+api.quote.set_callback?
+```
+
+
+    Signature: api.quote.set_callback(func)
+    Docstring:
+    set quote callback
+    
+    Args: 
+        func (:function): func(topic: str, quote_msg: dict) -> int
+            when receive quote will call this function to processed the msg
+    File:      shioaji/backend/solace/quote.py
+    Type:      method
+
+
+
+
+```python
+api.quote.set_event_callback?
+```
+
+
+    Signature: api.quote.set_event_callback(func)
+    Docstring:
+    set event callback
+    
+    Args:
+        func (:function): func(resp_code: int, event_code: int, event: str) -> None
+            when event happend will call this function to deal with event
+    File:      shioaji/backend/solace/quote.py
+    Type:      method
+
+
+
+### Prepare your callback, now just keep it simple
+
+
+```python
+@sj.on_quote
+def quote_callback(topic, quote_msg):
+    print(topic, quote_msg)
+
+@sj.on_event
+def event_callback(resp_code, event_code, event):
+    print("Respone Code: {} | Event Code: {} | Event: {}".format(resp_code, event_code, event))
+```
+
+
+```python
+api.quote.set_callback(quote_callback)
+api.quote.set_event_callback(event_callback)
+```
+
+### Subscribe quote of the contract
+
+
+```python
+api.quote.subscribe?
+```
+
+
+    Signature: api.quote.subscribe(contract, quote_type='tick')
+    Docstring:
+    subscribe the quote of contract 
+    
+    Args:
+        contract (:obj:Shioaji.Contract): the contract you want to subscribe
+        quote_type (str): {tick, bidask}
+    File:      shioaji/backend/solace/quote.py
+    Type:      method
+
+
+
+
+```python
+TXFR1 = api.Contracts.Futures.TXF.TXF201903
+TSE2330 = api.Contracts.Stocks.TSE.TSE2330
+```
+
+
+```python
+api.quote.subscribe(TXFR1)
+api.quote.subscribe(TXFR1, quote_type='bidask')
+api.quote.subscribe(TSE2330)
+api.quote.subscribe(TSE2330, quote_type='bidask')
+```
+
+    Respone Code: 200 | Event Code: 16 | Event: Subscribe or Unsubscribe ok
+    Respone Code: 200 | Event Code: 16 | Event: Subscribe or Unsubscribe ok
+    Respone Code: 200 | Event Code: 16 | Event: Subscribe or Unsubscribe ok
+    MKT/redisrd/TSE/2330 {'Close': [239.5], 'Time': '11:11:42.624718', 'VolSum': [12206], 'Volume': [5]}
+    QUT/redisrd/TSE/2330 {'AskPrice': [240.0, 240.5, 241.0, 241.5, 242.0], 'AskVolume': [1808, 1789, 1645, 582, 1170], 'BidPrice': [239.5, 239.0, 238.5, 238.0, 237.5], 'BidVolume': [204, 765, 389, 475, 359], 'Date': '2019/03/18', 'Time': '11:11:42.624718'}
+    L/TFE/TXFC9 {'Amount': [10466.0], 'AmountSum': [631295113.0], 'AvgPrice': [10465.247302024103], 'Close': [10466.0], 'Code': 'TXFC9', 'Date': '2019/03/18', 'DiffPrice': [53.0], 'DiffRate': [0.508979160664554], 'DiffType': [2], 'High': [10474.0], 'Low': [10420.0], 'Open': 10437.0, 'TargetKindPrice': 10476.09, 'TickType': [2], 'Time': '11:11:44.457000', 'TradeAskVolSum': 29697, 'TradeBidVolSum': 27732, 'VolSum': [60323], 'Volume': [1]}
+    MKT/redisrd/TSE/2330 {'Close': [240.0], 'Time': '11:11:47.643968', 'VolSum': [12208], 'Volume': [2]}
+    QUT/redisrd/TSE/2330 {'AskPrice': [240.0, 240.5, 241.0, 241.5, 242.0], 'AskVolume': [1807, 1791, 1645, 582, 1170], 'BidPrice': [239.5, 239.0, 238.5, 238.0, 237.5], 'BidVolume': [207, 763, 389, 475, 359], 'Date': '2019/03/18', 'Time': '11:11:47.643968'}
+
+
+## Account & Portfolio
 ### Account Margin
 
 
@@ -560,7 +684,7 @@ df_margin
 
 
 
-# Get Open Position
+### Get Open Position
 
 
 ```python
