@@ -1,5 +1,5 @@
 # Shioaji
-![shioaji-logo](https://sinotrade.github.io/images/shioaji-logo-01.png)![sinopac-logo](http://www.sinotrade.com.tw/Images/logo.png)
+![shioaji-logo](https://sinotrade.github.io/images/shioaji-logo-01.png)![sinopac-logo](https://www.sinotrade.com.tw/Images/logo.png)
 
 
 [![PyPI - Status](https://img.shields.io/pypi/v/shioaji.svg?style=for-the-badge)](https://pypi.org/project/shioaji)
@@ -254,7 +254,7 @@ api.OrderProps.
 ```
     shioaji.backend.http.order.Order_props
 ```python
-api.OrderProps.order_type.IOC
+api.OrderProps.Future.order_type.IOC
 ```
 
     'IOC'
@@ -293,10 +293,10 @@ TXFR3 = api.Contracts.Futures.TXF.TXF201903
 ```python
 sample_order = api.Order(product_id=TXFR3.code, 
                          price=9600,
-                         action=api.OrderProps.action.Buy,
-                         price_type=api.OrderProps.price_type.LMT,
-                         order_type=api.OrderProps.order_type.ROD,
-                         octype=api.OrderProps.octype.auto,
+                         action=api.OrderProps.Future.action.Buy,
+                         price_type=api.OrderProps.Future.price_type.LMT,
+                         order_type=api.OrderProps.Future.order_type.ROD,
+                         octype=api.OrderProps.Future.octype.auto,
                          quantity=5,
                          account=api.fut_account,
                         )
