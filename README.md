@@ -287,6 +287,11 @@ api.Contracts.Futures.TXF.TXF201903
     Future(symbol='TXF201903', code='TXFC9', name='台指期貨', category='TXF', delivery_month='201903', underlying_kind='I', underlying_code='#001', unit=1.0)
 
 ```python
+api.Contracts.Futures.TXF['TXFC9']
+```
+    Future(symbol='TXF201903', code='TXFC9', name='台指期貨', category='TXF', delivery_month='201903', underlying_kind='I', underlying_code='#001', unit=1.0)
+
+```python
 TXFR3 = api.Contracts.Futures.TXF.TXF201903
 ```
 
