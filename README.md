@@ -179,6 +179,252 @@ api.activate_ca(ca_path='../ca/Sinopac.pfx', ca_passwd='SCCEIEFAJA', person_id=p
     Ca Initial Done.
     0
 
+### Contract object for subscribe quote and place order
+
+#### using tab to direct get avaliable trading product with Contracts
+
+
+```python
+api.Contracts
+```
+
+
+
+
+    Contracts(Stocks=(OTC, TSE), Futures=(BRF, CAF, CBF, CCF, CDF, CEF, CFF, CGF, CHF, CJF, CKF, CLF, CMF, CNF, CQF, CRF, CSF, CUF, CWF, CXF, CYF, CZ1, CZ2, CZF, DCF, DD1, DDF, DEF, DFF, DGF, DH1, DHF, DIF, DJF, DKF, DLF, DNF, DOF, DPF, DQF, DSF, DUF, DVF, DWF, DXF, DYF, DZF, EEF, EGF, EHF, EMF, EPF, ERF, EXF, EYF, FEF, FFF, FGF, FKF, FQF, FRF, FTF, FVF, FWF, FXF, FYF, FZF, GAF, GBF, GCF, GDF, GHF, GIF, GJF, GLF, GMF, GNF, GOF, GRF, GTF, GUF, GWF, GXF, GZF, HAF, HBF, HCF, HHF, HIF, HLF, HOF, HS1, HSF, HYF, I5F, IA1, IAF, IHF, IIF, IJF, IMF, INF, IOF, IPF, IQF, IRF, ITF, IVF, IXF, IYF, IZF, JBF, JFF, JIF, JNF, JPF, JSF, JWF, JZF, KAF, KCF, KDF, KFF, KGF, KIF, KKF, KLF, KOF, KPF, KSF, KWF, LBF, LCF, LEF, LIF, LMF, LOF, LQF, LRF, LTF, LUF, LVF, LWF, LXF, MAF, MBF, MCF, MEF, MIF, MJF, MKF, MPF, MQF, MVF, MXF, MYF, NAF, NBF, NCF, NDF, NEF, NGF, NHF, NIF, NJF, NLF, NMF, NNF, NOF, NQF, NSF, NTF, NUF, NVF, NWF, NXF, NYF, NZF, OAF, OBF, OCF, ODF, OEF, OGF, OHF, OJF, OKF, OLF, OMF, OOF, OPF, OQF, ORF, OSF, OTF, OUF, OVF, OWF, OXF, OYF, OZF, PAF, PBF, PCF, PDF, PEF, PFF, PGF, PHF, PIF, PJF, PKF, PLF, PMF, PNF, RHF, RTF, SPF, T5F, TGF, TJF, TXF, UDF, XAF, XBF, XEF, XIF, XJF), Options=(CAO, CBO, CCO, CDO, CEO, CFO, CGO, CHO, CJO, CKO, CLO, CMO, CNO, CQO, CRO, CSO, CXO, CZO, DCO, DEO, DFO, DGO, DHO, DJO, DKO, DLO, DNO, DOO, DPO, DQO, DSO, DUO, DVO, DWO, DXO, GIO, GTO, GXO, HCO, IJO, LOO, NYO, NZO, OAO, OBO, OCO, OJO, OKO, OOO, OZO, RHO, RTO, TEO, TFO, TGO, TXO, XIO))
+
+
+
+### Futures
+
+
+```python
+api.Contracts.Futures
+```
+
+
+
+
+    (BRF, CAF, CBF, CCF, CDF, CEF, CFF, CGF, CHF, CJF, CKF, CLF, CMF, CNF, CQF, CRF, CSF, CUF, CWF, CXF, CYF, CZ1, CZ2, CZF, DCF, DD1, DDF, DEF, DFF, DGF, DH1, DHF, DIF, DJF, DKF, DLF, DNF, DOF, DPF, DQF, DSF, DUF, DVF, DWF, DXF, DYF, DZF, EEF, EGF, EHF, EMF, EPF, ERF, EXF, EYF, FEF, FFF, FGF, FKF, FQF, FRF, FTF, FVF, FWF, FXF, FYF, FZF, GAF, GBF, GCF, GDF, GHF, GIF, GJF, GLF, GMF, GNF, GOF, GRF, GTF, GUF, GWF, GXF, GZF, HAF, HBF, HCF, HHF, HIF, HLF, HOF, HS1, HSF, HYF, I5F, IA1, IAF, IHF, IIF, IJF, IMF, INF, IOF, IPF, IQF, IRF, ITF, IVF, IXF, IYF, IZF, JBF, JFF, JIF, JNF, JPF, JSF, JWF, JZF, KAF, KCF, KDF, KFF, KGF, KIF, KKF, KLF, KOF, KPF, KSF, KWF, LBF, LCF, LEF, LIF, LMF, LOF, LQF, LRF, LTF, LUF, LVF, LWF, LXF, MAF, MBF, MCF, MEF, MIF, MJF, MKF, MPF, MQF, MVF, MXF, MYF, NAF, NBF, NCF, NDF, NEF, NGF, NHF, NIF, NJF, NLF, NMF, NNF, NOF, NQF, NSF, NTF, NUF, NVF, NWF, NXF, NYF, NZF, OAF, OBF, OCF, ODF, OEF, OGF, OHF, OJF, OKF, OLF, OMF, OOF, OPF, OQF, ORF, OSF, OTF, OUF, OVF, OWF, OXF, OYF, OZF, PAF, PBF, PCF, PDF, PEF, PFF, PGF, PHF, PIF, PJF, PKF, PLF, PMF, PNF, RHF, RTF, SPF, T5F, TGF, TJF, TXF, UDF, XAF, XBF, XEF, XIF, XJF)
+
+
+
+
+```python
+api.Contracts.Futures.TXF
+```
+
+
+
+
+    TXF(TXF202003, TXF201906, TXF201907, TXF201908, TXF201909, TXF201912)
+
+
+
+
+```python
+api.Contracts.Futures.TXF.TXF201906
+```
+
+
+
+
+    Future(symbol='TXF201906', code='TXFF9', name='台指期貨', category='TXF', delivery_month='201906', underlying_kind='I', underlying_code='#001', unit=1.0)
+
+
+
+
+```python
+api.Contracts.Futures.TXF['TXFF9']
+```
+
+
+
+
+    Future(symbol='TXF201906', code='TXFF9', name='台指期貨', category='TXF', delivery_month='201906', underlying_kind='I', underlying_code='#001', unit=1.0)
+
+
+
+
+```python
+api.Contracts.Futures['TXFF9']
+```
+
+
+
+
+    Future(symbol='TXF201906', code='TXFF9', name='台指期貨', category='TXF', delivery_month='201906', underlying_kind='I', underlying_code='#001', unit=1.0)
+
+
+
+
+```python
+TXFR1 = api.Contracts.Futures.TXF.TXF201906
+```
+
+### Stocks
+
+
+```python
+api.Contracts.Stocks
+```
+
+
+
+
+    (OTC, TSE)
+
+
+
+
+```python
+api.Contracts.Stocks.TSE.TSE2330
+```
+
+
+
+
+    Stock(symbol='TSE2330', exchange='TSE', code='2330', name='台積電', category='24')
+
+
+
+
+```python
+api.Contracts.Stocks['2330']
+```
+
+
+
+
+    Stock(symbol='TSE2330', exchange='TSE', code='2330', name='台積電', category='24')
+
+
+
+
+```python
+contract_2330 = api.Contracts.Stocks['2330']
+```
+
+### Quote Api
+
+
+```python
+api.quote?
+```
+
+
+    Type:        Quote
+    String form: <shioaji.backend.solace.quote.Quote object at 0x7fe4bba6d828>
+    File:        shioaji/backend/solace/quote.py
+    Docstring:  
+    Quote Api
+    
+    Functions:
+        set_callback
+        set_event_callback
+        subscribe 
+
+
+
+### Set event and quote callback
+
+
+```python
+api.quote.set_callback?
+```
+
+
+    Signature: api.quote.set_callback(func)
+    Docstring:
+    set quote callback
+    
+    Args: 
+        func (:function): func(topic: str, quote_msg: dict) -> int
+            when receive quote will call this function to processed the msg
+    File:      shioaji/backend/solace/quote.py
+    Type:      method
+
+
+
+
+```python
+api.quote.set_event_callback?
+```
+
+
+    Signature: api.quote.set_event_callback(func)
+    Docstring:
+    set event callback
+    
+    Args:
+        func (:function): func(resp_code: int, event_code: int, event: str) -> None
+            when event happend will call this function to deal with event
+    File:      shioaji/backend/solace/quote.py
+    Type:      method
+
+
+
+### Prepare your callback, now just keep it simple
+
+
+```python
+@sj.on_quote
+def quote_callback(topic, quote_msg):
+    print(topic, quote_msg)
+
+@sj.on_event
+def event_callback(resp_code, event_code, event):
+    print("Respone Code: {} | Event Code: {} | Event: {}".format(resp_code, event_code, event))
+```
+
+
+```python
+api.quote.set_callback(quote_callback)
+api.quote.set_event_callback(event_callback)
+```
+
+### Subscribe quote with Contract
+
+
+```python
+api.quote.subscribe?
+```
+
+
+    Signature: api.quote.subscribe(contract, quote_type='tick')
+    Docstring:
+    subscribe the quote of contract 
+    
+    Args:
+        contract (:obj:Shioaji.Contract): the contract you want to subscribe
+        quote_type (str): {tick, bidask}
+    File:      shioaji/backend/solace/quote.py
+    Type:      method
+
+
+
+
+```python
+TSE2330 = api.Contracts.Stocks['2330']
+TXFR1 = api.Contracts.Futures['TXFF9']
+```
+
+
+```python
+api.quote.subscribe(TXFR1)
+api.quote.subscribe(TXFR1, quote_type='bidask')
+api.quote.subscribe(TSE2330)
+api.quote.subscribe(TSE2330, quote_type='bidask')
+```
+
+    Respone Code: 200 | Event Code: 16 | Event: Subscribe or Unsubscribe ok
+    Respone Code: 200 | Event Code: 16 | Event: Subscribe or Unsubscribe ok
+    Respone Code: 200 | Event Code: 16 | Event: Subscribe or Unsubscribe ok
+    MKT/redisrd/TSE/2330 {'Close': [239.5], 'Time': '11:11:42.624718', 'VolSum': [12206], 'Volume': [5]}
+    QUT/redisrd/TSE/2330 {'AskPrice': [240.0, 240.5, 241.0, 241.5, 242.0], 'AskVolume': [1808, 1789, 1645, 582, 1170], 'BidPrice': [239.5, 239.0, 238.5, 238.0, 237.5], 'BidVolume': [204, 765, 389, 475, 359], 'Date': '2019/03/18', 'Time': '11:11:42.624718'}
+    L/TFE/TXFC9 {'Amount': [10466.0], 'AmountSum': [631295113.0], 'AvgPrice': [10465.247302024103], 'Close': [10466.0], 'Code': 'TXFC9', 'Date': '2019/03/18', 'DiffPrice': [53.0], 'DiffRate': [0.508979160664554], 'DiffType': [2], 'High': [10474.0], 'Low': [10420.0], 'Open': 10437.0, 'TargetKindPrice': 10476.09, 'TickType': [2], 'Time': '11:11:44.457000', 'TradeAskVolSum': 29697, 'TradeBidVolSum': 27732, 'VolSum': [60323], 'Volume': [1]}
+    MKT/redisrd/TSE/2330 {'Close': [240.0], 'Time': '11:11:47.643968', 'VolSum': [12208], 'Volume': [2]}
+    QUT/redisrd/TSE/2330 {'AskPrice': [240.0, 240.5, 241.0, 241.5, 242.0], 'AskVolume': [1807, 1791, 1645, 582, 1170], 'BidPrice': [239.5, 239.0, 238.5, 238.0, 237.5], 'BidVolume': [207, 763, 389, 475, 359], 'Date': '2019/03/18', 'Time': '11:11:47.643968'}
 
 
 ### Making Order object to place order
@@ -189,62 +435,116 @@ api.Order?
 ```
 
 
-    Init signature: api.Order(action, price_type, order_type, price, quantity, *args, **kwargs)
-    Docstring:     
+    Init signature:
+    api.Order(
+        price,
+        quantity,
+        action,
+        price_type,
+        order_type,
+        order_cond='Cash',
+        octype='Auto',
+        *args,
+        **kwargs,
+    )
+    Docstring:     
     The basic order object to place order
+    All attributes can be found in shioaji.constant and shioaji.orderprops for nest struct
     
     Attributes:
-        product_id (str): the code of product that order to placing
-        action (srt): {B, S}, order action to buy or sell
-            - B: buy
-            - S: sell
-        price_type (str): {LMT, MKT, MKP}, pricing type of order
-            - LMT: limit
-            - MKT: market
-            - MKP: market range
-        order_type (str): {ROD, IOC, FOK}, the type of order
-            - ROD: Rest of Day
-            - IOC: Immediate-or-Cancel
-            - FOK: Fill-or-Kill
-        octype (str): {' ', '0', '1', '6'}, the type or order to open new position or close position 
-            - ' ': auto
-            - '0': new position
-            - '1': close position
-            - '6': day trade
         price (float or int): the price of order
         quantity (int): the quantity of order
+        action (str): order action to buy or sell
+        price_type (str): pricing type of order
+        order_type (str): the type of order
+        order_cond (str): order condition stock only
+        octype (str): the type or order to open new position or close position future only
         account (:obj:Account): which account to place this order
         ca (binary): the ca of this order
-    Init docstring:
-    the __init__ method of order
+    Init docstring:
+    the __init__ method of order      
     
     Args:
-        product_id (str, optional): the code of product that order to placing 
-                                    if not provide will gen from contract when placing order 
-        action (srt): {B, S}, order action to buy or sell
-            - B: buy
-            - S: sell
-        price_type (str): {LMT, MKT, MKP}, pricing type of order
-            - LMT: limit
-            - MKT: market
-            - MKP: market range
-        order_type (str): {ROD, IOC, FOK}, the type of order
-            - ROD: Rest of Day
-            - IOC: Immediate-or-Cancel
-            - FOK: Fill-or-Kill
-        octype (str, optional): {' ', '0', '1', '6'}, the type or order 
-                                to open new position or close position 
-                                if not provide will become auto mode 
-            - ' ': auto
-            - '0': new position
-            - '1': close position
-            - '6': day trade
-        price (float or int): the price of order
-        quantity (int): the quantity of order
-    File:          shioaji/order.py
-    Type:          type
+        price (float or int): 
+            the price of order
+        quantity (int): 
+            the quantity of order
+        action (str): {Buy, Sell} 
+            order action to buy or sell
+        price_type (str): 
+            order price type
+            Stock {LMT, Close, LimitUp, LimitDown}
+            Futures {LMT, MKT, MKP}
+        order_type (str): 
+            the type of order
+            Stock {Common, BlockTrade, Fixing, Odd}
+            Futures {ROD, IOC, FOK}
+        order_cond (str): {Cash, Netting, MarginTrading, ShortSelling}
+            (Stock Only) 
+            order condition
+        octype (str): {Auto, NewPosition, Cover, DayTrade}
+            (Futures Only)
+            the type of order to open new position or close position 
+        account (:obj:Account): which account to place this order
+    File:           shioaji/order.py
+    Type:           type
+    Subclasses:     
 
 
+
+### Constant that use in Order
+
+
+```python
+sj.constant??
+```
+
+
+    Type:        module
+    String form: <module 'shioaji.constant' from 'shioaji/constant.py'>
+    File:        shioaji/constant.py
+    Source:     
+    ACTION_BUY = 'Buy'
+    ACTION_SELL = 'Sell'
+    
+    STOCK_PRICE_TYPE_LIMITPRICE = 'LMT'
+    STOCK_PRICE_TYPE_CLOSE = 'Close'
+    STOCK_PRICE_TYPE_LIMITUP = 'LimitUp'
+    STOCK_PRICE_TYPE_LIMITDOWN = 'LimitDown'
+    
+    STOCK_ORDER_TYPE_COMMON = 'Common'  # 整股
+    STOCK_ORDER_TYPE_BLOCKTRADE = 'BlockTrade'  # 鉅額
+    STOCK_ORDER_TYPE_FIXING = 'Fixing'  # 定盤
+    STOCK_ORDER_TYPE_ODD = 'Odd'  # 零股
+    
+    STOCK_ORDER_COND_CASH = 'Cash'  # 現股
+    STOCK_ORDER_COND_NETTING = 'Netting'  # 餘額交割
+    STOCK_ORDER_COND_MARGINTRADING = 'MarginTrading'  # 融資
+    STOCK_ORDER_COND_SHORTSELLING = 'ShortSelling'  # 融券
+    
+    STOCK_FIRST_SELL_YES = 'true'
+    STOCK_FIRST_SELL_NO = 'false'
+    
+    FUTURES_PRICE_TYPE_LMT = 'LMT'
+    FUTURES_PRICE_TYPE_MKT = 'MKT'
+    FUTURES_PRICE_TYPE_MKP = 'MKP'
+    
+    FUTURES_ORDER_TYPE_ROD = 'ROD'
+    FUTURES_ORDER_TYPE_IOC = 'IOC'
+    FUTURES_ORDER_TYPE_FOK = 'FOK'
+    
+    FUTURES_OCTYPE_AUTO = 'Auto'
+    FUTURES_OCTYPE_NEWPOSITION = 'New'
+    FUTURES_OCTYPE_COVER = 'Cover'
+    FUTURES_OCTYPE_DAYTRADE = 'DayTrade'
+    
+    FUTURES_CALLPUT_FUT = 'F'
+    FUTURES_CALLPUT_CALL = 'C'
+    FUTURES_CALLPUT_PUT = 'P'
+
+
+
+### For Developing use
 
 #### using tab to direct get all the Order properties with autocomplete
 
@@ -252,66 +552,68 @@ api.Order?
 ```python
 api.OrderProps.
 ```
+
     shioaji.backend.http.order.Order_props
+
+
 ```python
 api.OrderProps.Future.order_type.IOC
 ```
 
     'IOC'
 
-#### using tab to direct get avaliable trading product with Contracts
 
 ```python
-api.Contracts
-```
-
-    Contracts(Futures=(BRF, CAF, CBF, CCF, CDF, CEF, CFF, CGF, CHF, CJ1, CJF, CKF, CLF, CM1, CMF, CNF, CQF, CRF, CSF, CUF, CWF, CXF, CYF, CZ1, CZF, DC1, DCF, DDF, DE1, DEF, DF1, DFF, DGF, DHF, DJF, DKF, DLF, DN1, DNF, DOF, DP1, DPF, DQF, DSF, DUF, DVF, DWF, DX1, DXF, DYF, DZ1, DZF, EEF, EGF, EHF, EMF, EPF, ERF, ESF, EXF, EY1, EYF, FF1, FFF, FGF, FKF, FQF, FRF, FTF, FVF, FWF, FXF, FYF, FZF, GAF, GBF, GCF, GDF, GHF, GIF, GJF, GLF, GMF, GNF, GOF, GPF, GRF, GTF, GUF, GWF, GXF, GZF, HAF, HBF, HCF, HHF, HIF, HLF, HMF, HOF, HS1, HSF, HY1, HYF, I5F, IA1, IAF, IHF, IIF, IJF, IMF, IOF, IPF, IQF, IRF, ITF, IVF, IXF, IYF, IZF, JBF, JDF, JFF, JGF, JIF, JNF, JPF, JSF, JWF, JZF, KAF, KCF, KDF, KFF, KG1, KGF, KIF, KKF, KLF, KOF, KPF, KSF, KWF, LBF, LCF, LIF, LMF, LO1, LOF, LQF, LRF, LTF, LUF, LV1, LVF, LWF, LX1, LXF, LZF, MAF, MBF, MCF, MEF, MIF, MJF, MKF, ML1, MPF, MQF, MVF, MXF, MYF, NAF, NBF, NCF, NDF, NEF, NGF, NHF, NI1, NIF, NJF, NLF, NMF, NNF, NOF, NQF, NSF, NTF, NUF, NVF, NWF, NXF, NYF, NZF, OAF, OBF, OCF, ODF, OEF, OFF, OGF, OHF, OJF, OKF, OLF, OMF, ONF, OOF, OPF, OQF, ORF, OSF, OTF, OUF, OVF, OWF, OXF, OYF, OZF, PAF, PBF, RHF, RTF, SPF, T5F, TGF, TJF, TXF, UDF, XAF, XBF, XEF, XIF, XJF), Options=(CAO, CBA, CBO, CCO, CDO, CEO, CFO, CGA, CGO, CHO, CJA, CJO, CKO, CLA, CLO, CMA, CMO, CNO, CQO, CRO, CSO, CXO, CZA, CZO, DCO, DEA, DEO, DFA, DFO, DGO, DHA, DHO, DJO, DKA, DKO, DLO, DNA, DNO, DOO, DPO, DQO, DSO, DUO, DVO, DWO, DXA, DXO, GIA, GIO, GTO, GXO, HCO, IJA, IJO, LOA, LOO, NYA, NYO, NZO, OAO, OBO, OCO, OJO, OKO, OOO, OZA, OZO, RHO, RTO, TEO, TFO, TGO, TXO, XIO))
-
-
-```python
-api.Contracts.Futures
-```
-
-    (BRF, CAF, CBF, CCF, CDF, CEF, CFF, CGF, CHF, CJ1, CJF, CKF, CLF, CM1, CMF, CNF, CQF, CRF, CSF, CUF, CWF, CXF, CYF, CZ1, CZF, DC1, DCF, DDF, DE1, DEF, DF1, DFF, DGF, DHF, DJF, DKF, DLF, DN1, DNF, DOF, DP1, DPF, DQF, DSF, DUF, DVF, DWF, DX1, DXF, DYF, DZ1, DZF, EEF, EGF, EHF, EMF, EPF, ERF, ESF, EXF, EY1, EYF, FF1, FFF, FGF, FKF, FQF, FRF, FTF, FVF, FWF, FXF, FYF, FZF, GAF, GBF, GCF, GDF, GHF, GIF, GJF, GLF, GMF, GNF, GOF, GPF, GRF, GTF, GUF, GWF, GXF, GZF, HAF, HBF, HCF, HHF, HIF, HLF, HMF, HOF, HS1, HSF, HY1, HYF, I5F, IA1, IAF, IHF, IIF, IJF, IMF, IOF, IPF, IQF, IRF, ITF, IVF, IXF, IYF, IZF, JBF, JDF, JFF, JGF, JIF, JNF, JPF, JSF, JWF, JZF, KAF, KCF, KDF, KFF, KG1, KGF, KIF, KKF, KLF, KOF, KPF, KSF, KWF, LBF, LCF, LIF, LMF, LO1, LOF, LQF, LRF, LTF, LUF, LV1, LVF, LWF, LX1, LXF, LZF, MAF, MBF, MCF, MEF, MIF, MJF, MKF, ML1, MPF, MQF, MVF, MXF, MYF, NAF, NBF, NCF, NDF, NEF, NGF, NHF, NI1, NIF, NJF, NLF, NMF, NNF, NOF, NQF, NSF, NTF, NUF, NVF, NWF, NXF, NYF, NZF, OAF, OBF, OCF, ODF, OEF, OFF, OGF, OHF, OJF, OKF, OLF, OMF, ONF, OOF, OPF, OQF, ORF, OSF, OTF, OUF, OVF, OWF, OXF, OYF, OZF, PAF, PBF, RHF, RTF, SPF, T5F, TGF, TJF, TXF, UDF, XAF, XBF, XEF, XIF, XJF)
-
-
-```python
-api.Contracts.Futures.TXF
-```
-
-    TXF(TXF201903, TXF201906, TXF201809, TXF201810, TXF201811, TXF201812)
-
-```python
-api.Contracts.Futures.TXF.TXF201903
-```
-    Future(symbol='TXF201903', code='TXFC9', name='台指期貨', category='TXF', delivery_month='201903', underlying_kind='I', underlying_code='#001', unit=1.0)
-
-```python
-api.Contracts.Futures.TXF['TXFC9']
-```
-    Future(symbol='TXF201903', code='TXFC9', name='台指期貨', category='TXF', delivery_month='201903', underlying_kind='I', underlying_code='#001', unit=1.0)
-
-```python
-TXFR3 = api.Contracts.Futures.TXF.TXF201903
-```
-
-```python
-sample_order = api.Order(product_id=TXFR3.code, 
-                         price=9600,
+sample_order = api.Order(price=9600,
+                         quantity=5,
                          action=api.OrderProps.Future.action.Buy,
                          price_type=api.OrderProps.Future.price_type.LMT,
                          order_type=api.OrderProps.Future.order_type.ROD,
-                         octype=api.OrderProps.Future.octype.auto,
-                         quantity=5,
+                         octype=api.OrderProps.Future.octype.Auto,
                          account=api.fut_account,
                         )
 sample_order
 ```
 
-    Order(product_id='TXFC9', action='B', price_type='LMT', order_type='ROD', price=9600, quantity=5, account=FutureAccount(person_id='SCCEIEFAJA', broker_id='F002000', account_id='9104000', username='莊*芬')
+    Order(action='Buy', price_type='LMT', order_type='ROD', price=9600, quantity=5, account=FutureAccount())
+
+
+
+### Directly use string to build Order according to shioaji.constant
+
+
+```python
+sample_order = api.Order(price=9600,
+                         quantity=5,
+                         action='Buy',
+                         price_type='LMT',
+                         order_type='ROD',
+                        )
+sample_order
+```
+
+    Order(action='Buy', price_type='LMT', order_type='ROD', price=9600, quantity=5)
+
+
+
+
+```python
+from shioaji.constant import *
+sample_order = api.Order(price=9600,
+                         quantity=5,
+                         action=ACTION_SELL,
+                         price_type=FUTURES_PRICE_TYPE_LMT,
+                         order_type=FUTURES_ORDER_TYPE_IOC,
+                        )
+sample_order
+```
+
+    Order(action='Sell', price_type='LMT', order_type='IOC', price=9600, quantity=5)
+
 
 
 ### just pass Order object to place_order fuction to place order then will get the Trade object return
+
 
 ```python
 trade = api.place_order(TXFR3, sample_order)
@@ -321,6 +623,9 @@ trade = api.place_order(TXFR3, sample_order)
 ```python
 trade
 ```
+
+
+
 
     Trade(contract=Future(symbol='TXF201903', code='TXFC9', name='台指期貨', category='TXF', delivery_month='201903', underlying_kind='I', underlying_code='#001', unit=1.0), order=Order(product_id='TXFC9', action='B', price_type='LMT', order_type='ROD', price=9600, quantity=5, account=FutureAccount(person_id='SCCEIEFAJA', broker_id='F002000', account_id='9104000', username='莊*芬')), status=OrderStatus(seqno='701124', order_id='7521840eb43914f94f98f025b1762e0b250ded21', status='PendingSubmit', order_datetime=datetime.datetime(2019, 1, 16, 12, 39, 28)))
 
@@ -353,132 +658,17 @@ trade = api.update_order(trade, price=9800, qty=1)
 ```python
 trade
 ```
-
     Trade(contract=Future(symbol='TXF201903', code='TXFC9', name='台指期貨', category='TXF', delivery_month='201903', underlying_kind='I', underlying_code='#001', unit=1.0), order=Order(product_id='TXFC9', action='B', price_type='LMT', order_type='ROD', price=9600, quantity=5, account=FutureAccount(person_id='SCCEIEFAJA', broker_id='F002000', account_id='9104000', username='莊*芬')), status=OrderStatus(seqno='701124', ordno='ky00P', order_id='7521840eb43914f94f98f025b1762e0b250ded21', status='Submitted', status_code='0000', msg='ky00P', modified_price=9800.0, remaining=5, order_datetime=datetime.datetime(2019, 1, 16, 12, 39, 28)))
 
 
 
-## Quote Api
+### Cancel order of the trade
 
 
 ```python
-api.quote?
+trade = api.cancel_order(trade)
+trade
 ```
-
-
-    Type:        Quote
-    String form: <shioaji.backend.solace.quote.Quote object at 0x7fe4bba6d828>
-    File:        shioaji/backend/solace/quote.py
-    Docstring:  
-    Quote Api
-    
-    Functions:
-        set_callback
-        set_event_callback
-        subscribe 
-
-
-
-### Set event and quote callback
-
-
-```python
-api.quote.set_callback?
-```
-
-
-    Signature: api.quote.set_callback(func)
-    Docstring:
-    set quote callback
-    
-    Args: 
-        func (:function): func(topic: str, quote_msg: dict) -> int
-            when receive quote will call this function to processed the msg
-    File:      shioaji/backend/solace/quote.py
-    Type:      method
-
-
-
-
-```python
-api.quote.set_event_callback?
-```
-
-
-    Signature: api.quote.set_event_callback(func)
-    Docstring:
-    set event callback
-    
-    Args:
-        func (:function): func(resp_code: int, event_code: int, event: str) -> None
-            when event happend will call this function to deal with event
-    File:      shioaji/backend/solace/quote.py
-    Type:      method
-
-
-
-### Prepare your callback, now just keep it simple
-
-
-```python
-@sj.on_quote
-def quote_callback(topic, quote_msg):
-    print(topic, quote_msg)
-
-@sj.on_event
-def event_callback(resp_code, event_code, event):
-    print("Respone Code: {} | Event Code: {} | Event: {}".format(resp_code, event_code, event))
-```
-
-
-```python
-api.quote.set_callback(quote_callback)
-api.quote.set_event_callback(event_callback)
-```
-
-### Subscribe quote of the contract
-
-
-```python
-api.quote.subscribe?
-```
-
-
-    Signature: api.quote.subscribe(contract, quote_type='tick')
-    Docstring:
-    subscribe the quote of contract 
-    
-    Args:
-        contract (:obj:Shioaji.Contract): the contract you want to subscribe
-        quote_type (str): {tick, bidask}
-    File:      shioaji/backend/solace/quote.py
-    Type:      method
-
-
-
-
-```python
-TXFR1 = api.Contracts.Futures.TXF.TXF201903
-TSE2330 = api.Contracts.Stocks.TSE.TSE2330
-```
-
-
-```python
-api.quote.subscribe(TXFR1)
-api.quote.subscribe(TXFR1, quote_type='bidask')
-api.quote.subscribe(TSE2330)
-api.quote.subscribe(TSE2330, quote_type='bidask')
-```
-
-    Respone Code: 200 | Event Code: 16 | Event: Subscribe or Unsubscribe ok
-    Respone Code: 200 | Event Code: 16 | Event: Subscribe or Unsubscribe ok
-    Respone Code: 200 | Event Code: 16 | Event: Subscribe or Unsubscribe ok
-    MKT/redisrd/TSE/2330 {'Close': [239.5], 'Time': '11:11:42.624718', 'VolSum': [12206], 'Volume': [5]}
-    QUT/redisrd/TSE/2330 {'AskPrice': [240.0, 240.5, 241.0, 241.5, 242.0], 'AskVolume': [1808, 1789, 1645, 582, 1170], 'BidPrice': [239.5, 239.0, 238.5, 238.0, 237.5], 'BidVolume': [204, 765, 389, 475, 359], 'Date': '2019/03/18', 'Time': '11:11:42.624718'}
-    L/TFE/TXFC9 {'Amount': [10466.0], 'AmountSum': [631295113.0], 'AvgPrice': [10465.247302024103], 'Close': [10466.0], 'Code': 'TXFC9', 'Date': '2019/03/18', 'DiffPrice': [53.0], 'DiffRate': [0.508979160664554], 'DiffType': [2], 'High': [10474.0], 'Low': [10420.0], 'Open': 10437.0, 'TargetKindPrice': 10476.09, 'TickType': [2], 'Time': '11:11:44.457000', 'TradeAskVolSum': 29697, 'TradeBidVolSum': 27732, 'VolSum': [60323], 'Volume': [1]}
-    MKT/redisrd/TSE/2330 {'Close': [240.0], 'Time': '11:11:47.643968', 'VolSum': [12208], 'Volume': [2]}
-    QUT/redisrd/TSE/2330 {'AskPrice': [240.0, 240.5, 241.0, 241.5, 242.0], 'AskVolume': [1807, 1791, 1645, 582, 1170], 'BidPrice': [239.5, 239.0, 238.5, 238.0, 237.5], 'BidVolume': [207, 763, 389, 475, 359], 'Date': '2019/03/18', 'Time': '11:11:47.643968'}
-
 
 ## Account & Portfolio
 ### Account Margin
