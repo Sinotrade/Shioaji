@@ -313,10 +313,10 @@ api.quote?
 ```
 
 
-    Type:        Quote
-    String form: <shioaji.backend.solace.quote.Quote object at 0x7fe4bba6d828>
-    File:        shioaji/backend/solace/quote.py
-    Docstring:  
+    Type:        Quote
+    String form: <shioaji.backend.solace.quote.Quote object at 0x7fe4bba6d828>
+    File:        shioaji/backend/solace/quote.py
+    Docstring:  
     Quote Api
     
     Functions:
@@ -334,15 +334,15 @@ api.quote.set_callback?
 ```
 
 
-    Signature: api.quote.set_callback(func)
-    Docstring:
+    Signature: api.quote.set_callback(func)
+    Docstring:
     set quote callback
     
     Args: 
         func (:function): func(topic: str, quote_msg: dict) -> int
             when receive quote will call this function to processed the msg
-    File:      shioaji/backend/solace/quote.py
-    Type:      method
+    File:      shioaji/backend/solace/quote.py
+    Type:      method
 
 
 
@@ -352,15 +352,15 @@ api.quote.set_event_callback?
 ```
 
 
-    Signature: api.quote.set_event_callback(func)
-    Docstring:
+    Signature: api.quote.set_event_callback(func)
+    Docstring:
     set event callback
     
     Args:
         func (:function): func(resp_code: int, event_code: int, event: str) -> None
             when event happend will call this function to deal with event
-    File:      shioaji/backend/solace/quote.py
-    Type:      method
+    File:      shioaji/backend/solace/quote.py
+    Type:      method
 
 
 
@@ -391,15 +391,15 @@ api.quote.subscribe?
 ```
 
 
-    Signature: api.quote.subscribe(contract, quote_type='tick')
-    Docstring:
+    Signature: api.quote.subscribe(contract, quote_type='tick')
+    Docstring:
     subscribe the quote of contract 
     
     Args:
         contract (:obj:Shioaji.Contract): the contract you want to subscribe
         quote_type (str): {tick, bidask}
-    File:      shioaji/backend/solace/quote.py
-    Type:      method
+    File:      shioaji/backend/solace/quote.py
+    Type:      method
 
 
 
@@ -435,19 +435,19 @@ api.Order?
 ```
 
 
-    Init signature:
-    api.Order(
-        price,
-        quantity,
-        action,
-        price_type,
-        order_type,
-        order_cond='Cash',
-        octype='Auto',
-        *args,
-        **kwargs,
-    )
-    Docstring:     
+    Init signature:
+    api.Order(
+        price,
+        quantity,
+        action,
+        price_type,
+        order_type,
+        order_cond='Cash',
+        octype='Auto',
+        *args,
+        **kwargs,
+    )
+    Docstring:     
     The basic order object to place order
     All attributes can be found in shioaji.constant and shioaji.orderprops for nest struct
     
@@ -461,7 +461,7 @@ api.Order?
         octype (str): the type or order to open new position or close position future only
         account (:obj:Account): which account to place this order
         ca (binary): the ca of this order
-    Init docstring:
+    Init docstring:
     the __init__ method of order      
     
     Args:
@@ -486,9 +486,9 @@ api.Order?
             (Futures Only)
             the type of order to open new position or close position 
         account (:obj:Account): which account to place this order
-    File:           shioaji/order.py
-    Type:           type
-    Subclasses:     
+    File:           shioaji/order.py
+    Type:           type
+    Subclasses:     
 
 
 
@@ -500,47 +500,47 @@ sj.constant??
 ```
 
 
-    Type:        module
-    String form: <module 'shioaji.constant' from 'shioaji/constant.py'>
-    File:        shioaji/constant.py
-    Source:     
-    ACTION_BUY = 'Buy'
-    ACTION_SELL = 'Sell'
-    
-    STOCK_PRICE_TYPE_LIMITPRICE = 'LMT'
-    STOCK_PRICE_TYPE_CLOSE = 'Close'
-    STOCK_PRICE_TYPE_LIMITUP = 'LimitUp'
-    STOCK_PRICE_TYPE_LIMITDOWN = 'LimitDown'
-    
-    STOCK_ORDER_TYPE_COMMON = 'Common'  # 整股
-    STOCK_ORDER_TYPE_BLOCKTRADE = 'BlockTrade'  # 鉅額
-    STOCK_ORDER_TYPE_FIXING = 'Fixing'  # 定盤
-    STOCK_ORDER_TYPE_ODD = 'Odd'  # 零股
-    
-    STOCK_ORDER_COND_CASH = 'Cash'  # 現股
-    STOCK_ORDER_COND_NETTING = 'Netting'  # 餘額交割
-    STOCK_ORDER_COND_MARGINTRADING = 'MarginTrading'  # 融資
-    STOCK_ORDER_COND_SHORTSELLING = 'ShortSelling'  # 融券
-    
-    STOCK_FIRST_SELL_YES = 'true'
-    STOCK_FIRST_SELL_NO = 'false'
-    
-    FUTURES_PRICE_TYPE_LMT = 'LMT'
-    FUTURES_PRICE_TYPE_MKT = 'MKT'
-    FUTURES_PRICE_TYPE_MKP = 'MKP'
-    
-    FUTURES_ORDER_TYPE_ROD = 'ROD'
-    FUTURES_ORDER_TYPE_IOC = 'IOC'
-    FUTURES_ORDER_TYPE_FOK = 'FOK'
-    
-    FUTURES_OCTYPE_AUTO = 'Auto'
-    FUTURES_OCTYPE_NEWPOSITION = 'New'
-    FUTURES_OCTYPE_COVER = 'Cover'
-    FUTURES_OCTYPE_DAYTRADE = 'DayTrade'
-    
-    FUTURES_CALLPUT_FUT = 'F'
-    FUTURES_CALLPUT_CALL = 'C'
-    FUTURES_CALLPUT_PUT = 'P'
+    Type:        module
+    String form: <module 'shioaji.constant' from 'shioaji/constant.py'>
+    File:        shioaji/constant.py
+    Source:     
+    ACTION_BUY = 'Buy'
+    ACTION_SELL = 'Sell'
+    
+    STOCK_PRICE_TYPE_LIMITPRICE = 'LMT'
+    STOCK_PRICE_TYPE_CLOSE = 'Close'
+    STOCK_PRICE_TYPE_LIMITUP = 'LimitUp'
+    STOCK_PRICE_TYPE_LIMITDOWN = 'LimitDown'
+    
+    STOCK_ORDER_TYPE_COMMON = 'Common'  # 整股
+    STOCK_ORDER_TYPE_BLOCKTRADE = 'BlockTrade'  # 鉅額
+    STOCK_ORDER_TYPE_FIXING = 'Fixing'  # 定盤
+    STOCK_ORDER_TYPE_ODD = 'Odd'  # 零股
+    
+    STOCK_ORDER_COND_CASH = 'Cash'  # 現股
+    STOCK_ORDER_COND_NETTING = 'Netting'  # 餘額交割
+    STOCK_ORDER_COND_MARGINTRADING = 'MarginTrading'  # 融資
+    STOCK_ORDER_COND_SHORTSELLING = 'ShortSelling'  # 融券
+    
+    STOCK_FIRST_SELL_YES = 'true'
+    STOCK_FIRST_SELL_NO = 'false'
+    
+    FUTURES_PRICE_TYPE_LMT = 'LMT'
+    FUTURES_PRICE_TYPE_MKT = 'MKT'
+    FUTURES_PRICE_TYPE_MKP = 'MKP'
+    
+    FUTURES_ORDER_TYPE_ROD = 'ROD'
+    FUTURES_ORDER_TYPE_IOC = 'IOC'
+    FUTURES_ORDER_TYPE_FOK = 'FOK'
+    
+    FUTURES_OCTYPE_AUTO = 'Auto'
+    FUTURES_OCTYPE_NEWPOSITION = 'New'
+    FUTURES_OCTYPE_COVER = 'Cover'
+    FUTURES_OCTYPE_DAYTRADE = 'DayTrade'
+    
+    FUTURES_CALLPUT_FUT = 'F'
+    FUTURES_CALLPUT_CALL = 'C'
+    FUTURES_CALLPUT_PUT = 'P'
 
 
 
