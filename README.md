@@ -69,7 +69,7 @@ api.quote.subscribe(api.Contracts.Futures["TXFC0"], quote_type="tick")
 Subscribe the real time market data. Simplely pass contract into quote `subscribe` function and give the quote type will receive the streaming data.
 
 
-## [Place Order](https://sinotrade.github.io/tutor/order/Stock_Trade_for_Trade/)
+## [Place Order](https://sinotrade.github.io/tutor/order/Stock/)
 
 ```python
 contract = api.Contracts.Stocks["2890"]
