@@ -5,7 +5,7 @@
 [![PyPI - Status](https://img.shields.io/pypi/v/shioaji.svg?style=for-the-badge)](https://pypi.org/project/shioaji)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/shioaji.svg?style=for-the-badge)]()
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/shioaji.svg?style=for-the-badge)](https://pypi.org/project/shioaji)
-[![Build - Status](https://img.shields.io/badge/build-passing-brightgreen.svg?style=for-the-badge)]()
+[![Build - Status](https://img.shields.io/docker/cloud/build/sinotrade/shioaji?style=for-the-badge)](https://hub.docker.com/r/sinotrade/shioaji/builds)
 
 [![Coverage](https://img.shields.io/badge/coverage%20-99%25-yellowgreen.svg?style=for-the-badge)]()
 [![Binder](https://img.shields.io/badge/launch-Tutorial-ff69b4.svg?style=for-the-badge)](https://mybinder.org/v2/gh/Sinotrade/Sinotrade.github.io/master?filepath=tutorial%2Fshioaji_tutorial.ipynb)
