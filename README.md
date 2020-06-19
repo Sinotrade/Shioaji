@@ -16,7 +16,6 @@
 Shioaji is sinopac provide the most pythonic api for trading the taiwan and global financial market.
 You can use your favorite Python packages such as numpy, scipy, pandas, pytorch or tensorflow to build your own trading model with intergrated the shioaji api on cross platform.
 
-We are in early-release alpha. Expect some adventures and rough edges.
 - [Installation](#installation)
     - [Binaries](#binaries)
     - [Docker Image](#docker-image)
@@ -113,9 +112,9 @@ More usage detail on document.
 - GitHub issues: bug reports, feature requests, install issues, RFCs, thoughts, etc.
 
 ## Releases and Contributing
-Shioaji current state is Pre-Alpha, we expect no obvious bugs. Please let us know if you encounter a bug by [filing an issue](https://github.com/Sinotrade/Shioaji/issues).
+Shioaji has a 14 day release cycle. See the release [change log](https://sinotrade.github.io/release/). Please let us know if you encounter a bug by [filing an issue](https://github.com/Sinotrade/Shioaji/issues).
 
 We appreciate all suggestions. If you have any idea want us to implement, please discuss with us in gitter.
 
 ## The Team
-Shioaji is currently maintained by [Sally](https://github.com/SsallyLin), [Yvictor](https://github.com/Yvictor), [Sam](https://github.com/linsamtw), [Sky Wu](https://github.com/strangenaiad) and [Po Chien Yang](https://github.com/ypochien) with major contributions.
+Shioaji is currently maintained by [Sally](https://github.com/SsallyLin), [Yvictor](https://github.com/Yvictor), [Sam](https://github.com/linsamtw), [CC.Chiao](https://github.com/luckchiao) and [Po Chien Yang](https://github.com/ypochien) with major contributions.
