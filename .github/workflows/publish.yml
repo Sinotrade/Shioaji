@@ -22,9 +22,6 @@ jobs:
           repository: 'Yvictor/shioaji'
           ref: ${{ env.CI_COMMIT_TAG }}
           token: ${{ secrets.SHIOAJI_GITHUB_TOKEN }}
-      - uses: actions/checkout@v2
-        with:
-          submodules: 'recursive'
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2
         with:
