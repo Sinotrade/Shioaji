@@ -11,6 +11,7 @@
 [![Binder](https://img.shields.io/badge/launch-Tutorial-ff69b4.svg?style=for-the-badge)](https://mybinder.org/v2/gh/Sinotrade/Sinotrade.github.io/master?filepath=tutorial%2Fshioaji_tutorial.ipynb)
 [![doc](https://img.shields.io/badge/docs%20-passing-orange.svg?style=for-the-badge)](https://sinotrade.github.io/)
 [![Gitter](https://img.shields.io/badge/chat-%20on%20gitter-46bc99.svg?style=for-the-badge)](https://gitter.im/Sinotrade/Shioaji?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+![GitHub Workflow Status (branch)](https://img.shields.io/github/workflow/status/Sinotrade/Shioaji/MacOS%20shioaji/0.3.0.dev3?label=MacOs%20Shioaji&logo=github&style=for-the-badge)
 
 
 Shioaji is sinopac provide the most pythonic api for trading the taiwan and global financial market.
