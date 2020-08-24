@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install pipenv wheel twine
-        run: pip install pipenv wheel twine
+        run: pip install pipenv==2020.6.2 wheel twine
       - name: Fixed pipenv python version 
         run: pipenv --python ${{ matrix.python-version }} 
       - name: py2pyx
