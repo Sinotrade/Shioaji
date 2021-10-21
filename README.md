@@ -35,11 +35,20 @@ pip install shioaji
 ### Docker Image
 simple run with interactive mode in docker 
 ```
-docker run -it sinotrade/shioaji:latest
+docker run -it ypochien/shioaji:latest
 ```
+or 
+```
+docker run -it ypochien/shioaji:release-{version} # docker run -it ypochien/shioaji:release-0.3.3.dev4
+```
+
 run with jupyter lab or notebook
 ```
-docker run -p 8888:8888 sinotrade/shioaji:jupyter
+docker run -p 8888:8888 ypochien/shioaji:jupyter-latest
+```
+or 
+```
+docker run -p 8888:8888 ypochien/shioaji:{version} # docker run -p 8888:8888 ypochien/shioaji:jupyter-0.3.3.dev4
 ```
 
 ## [Quickstarts](https://sinotrade.github.io/quickstart/)
