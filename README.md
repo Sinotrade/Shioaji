@@ -5,16 +5,13 @@
 [![PyPI - Status](https://img.shields.io/pypi/v/shioaji.svg?style=for-the-badge)](https://pypi.org/project/shioaji)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/shioaji.svg?style=for-the-badge)]()
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/shioaji.svg?style=for-the-badge)](https://pypi.org/project/shioaji)
-[![Build - Status](https://img.shields.io/docker/cloud/build/sinotrade/shioaji?style=for-the-badge)](https://hub.docker.com/r/sinotrade/shioaji/builds)
-
 [![Coverage](https://img.shields.io/badge/coverage%20-99%25-yellowgreen.svg?style=for-the-badge)]()
 [![Binder](https://img.shields.io/badge/launch-Tutorial-ff69b4.svg?style=for-the-badge)](https://mybinder.org/v2/gh/Sinotrade/Sinotrade.github.io/master?filepath=tutorial%2Fshioaji_tutorial.ipynb)
 [![doc](https://img.shields.io/badge/docs%20-passing-orange.svg?style=for-the-badge)](https://sinotrade.github.io/)
-[![Gitter](https://img.shields.io/badge/chat-%20on%20gitter-46bc99.svg?style=for-the-badge)](https://gitter.im/Sinotrade/Shioaji?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Telegram](https://img.shields.io/badge/chat-%20on%20telegram-blue.svg?style=for-the-badge)](https://t.me/joinchat/973EyAQlrfthZTk1)
 
+Shioaji is a trading API provided by Sinopac that offers a comprehensive and user-friendly platform for accessing the Taiwan financial markets. With Shioaji, you can trade a variety of financial instruments including stocks, futures, and options using your favorite Python packages such as numpy, scipy, pandas, pytorch, or tensorflow to build your own custom trading models. The platform is easy to use and intuitive, with advanced charting tools, real-time market data, and a customizable interface that allows you to tailor your trading experience to your specific needs. Shioaji is fast and efficient, with a high-performance core implemented in C++ and using FPGA event broker technology, and it is the first Python trading API in Taiwan that is compatible with Linux and Mac, making it a truly cross-platform solution. Whether you are a beginner looking to get started in the world of trading or an experienced trader looking for a more powerful platform, Shioaji has something to offer. [Sign up for a free account today and start trading with confidence.](https://sinotrade.github.io/tutor/prepare/open_account)
 
-Shioaji is sinopac provide the most pythonic api for trading the taiwan and global financial market.
-You can use your favorite Python packages such as numpy, scipy, pandas, pytorch or tensorflow to build your own trading model with intergrated the shioaji api on cross platform.
 
 - [Installation](#installation)
     - [Binaries](#binaries)
@@ -36,11 +33,10 @@ simple run with interactive mode in docker
 ```
 docker run -it sinotrade/shioaji:latest
 ```
-or 
+or
 ```
-docker run -it ypochien/shioaji:{version}
+docker run -it sinotrade/shioaji:{version}
 ```
-
 run with jupyter lab or notebook
 ```
 docker run -p 8888:8888 sinotrade/shioaji:jupyter
@@ -53,11 +49,11 @@ docker run -p 8888:8888 sinotrade/shioaji:jupyter
 import shioaji as sj
 
 api = sj.Shioaji()
-accounts = api.login("YOUR_PERSON_ID", "YOUR_PASSWORD")
+accounts = api.login("YOUR_TOKEN", "YOUR_SECRET_KEY")
 api.activate_ca(
     ca_path="/c/your/ca/path/Sinopac.pfx",
     ca_passwd="YOUR_CA_PASSWORD",
-    person_id="Person of this Ca",
+    person_id="person_id of this ca",
 )
 ```
 Just import our API library like other popular python library and new the instance to start using our API. Login your account and activate the certification then you can start placing order.
@@ -91,9 +87,9 @@ order = api.Order(
     price=9.6,
     quantity=1,
     action=sj.constant.Action.Buy,
-    price_type=sj.constant.TFTStockPriceType.LMT,
-    order_type=sj.constant.TFTOrderType.ROD,
-    order_lot=sj.constant.TFTStockOrderLot.Common,
+    price_type=sj.constant.StockPriceType.LMT,
+    order_type=sj.constant.OrderType.ROD,
+    order_lot=sj.constant.StockOrderLot.Common,
     account=api.stock_account,
 )
 trade = api.place_order(contract, order)
@@ -109,12 +105,8 @@ More usage detail on document.
 [![doc](https://img.shields.io/badge/docs%20-passing-orange.svg?style=for-the-badge)](https://sinotrade.github.io/)
 
 
-
-
 ## Communication
-[![Gitter](https://badges.gitter.im/Sinotrade/Shioaji.svg)](https://gitter.im/Sinotrade/Shioaji?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
-- Gitter: general chat, online discussions, collaboration etc.
-- GitHub issues: bug reports, feature requests, install issues, RFCs, thoughts, etc.
+[![Telegram](https://img.shields.io/badge/chat-%20on%20telegram-blue.svg?style=for-the-badge)](https://t.me/joinchat/973EyAQlrfthZTk1)
 
 ## Releases and Contributing
 Shioaji has a 14 day release cycle. See the release [change log](https://sinotrade.github.io/release/). Please let us know if you encounter a bug by [filing an issue](https://github.com/Sinotrade/Shioaji/issues).
@@ -122,4 +114,4 @@ Shioaji has a 14 day release cycle. See the release [change log](https://sinotra
 We appreciate all suggestions. If you have any idea want us to implement, please discuss with us in gitter.
 
 ## The Team
-Shioaji is currently maintained by [Sally](https://github.com/SsallyLin), [Yvictor](https://github.com/Yvictor), [Sam](https://github.com/linsamtw), [CC.Chiao](https://github.com/luckchiao) and [Po Chien Yang](https://github.com/ypochien) with major contributions.
+Shioaji is currently maintained by [Sally](https://github.com/SsallyLin), [Yvictor](https://github.com/Yvictor), [CC.Chiao](https://github.com/luckchiao) and [Po Chien Yang](https://github.com/ypochien) with major contributions.
