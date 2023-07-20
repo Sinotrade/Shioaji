@@ -1,6 +1,6 @@
 FROM jupyter/datascience-notebook:python-3.8.5
 
-RUN pip install shioaji==1.1.8
+RUN pip install shioaji==1.1.9
 WORKDIR /home/work
 RUN wget https://raw.githubusercontent.com/Sinotrade/Sinotrade.github.io/master/tutorial/shioaji_tutorial.ipynb
 EXPOSE 8888
