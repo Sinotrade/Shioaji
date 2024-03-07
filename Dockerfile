@@ -1,3 +1,3 @@
 FROM python:3.7-slim
 
-RUN pip install shioaji==1.2.2
+RUN pip install shioaji==1.2.3
