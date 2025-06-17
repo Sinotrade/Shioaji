@@ -28,19 +28,32 @@ simple using pip to install
 ```
 pip install shioaji
 ```
+update shioaji with 
+
+```
+pip install -U shioaji
+```
+
+### uv
+using uv to install
+```
+uv add shioaji 
+```
+install speed version
+```
+uv add shioaji --extra speed
+```
+
 ### Docker Image
 simple run with interactive mode in docker 
 ```
 docker run -it sinotrade/shioaji:latest
 ```
-or
-```
-docker run -it sinotrade/shioaji:{version}
-```
-run with jupyter lab or notebook
+run with jupyter lab or notebook 
 ```
 docker run -p 8888:8888 sinotrade/shioaji:jupyter
 ```
+
 
 ## [Quickstarts](https://sinotrade.github.io/quickstart/)
 ## Initialization
@@ -53,7 +66,6 @@ accounts = api.login("YOUR_TOKEN", "YOUR_SECRET_KEY")
 api.activate_ca(
     ca_path="/c/your/ca/path/Sinopac.pfx",
     ca_passwd="YOUR_CA_PASSWORD",
-    person_id="person_id of this ca",
 )
 ```
 Just import our API library like other popular python library and new the instance to start using our API. Login your account and activate the certification then you can start placing order.
