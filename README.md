@@ -34,29 +34,11 @@ claude plugin marketplace add Sinotrade/Shioaji
 claude plugin install shioaji
 ```
 
-#### Skills.sh (Universal Directory)
-[Skills.sh](https://skills.sh) is the open agent skills ecosystem directory supporting 18+ agents.
+#### Universal Installers (Cursor, Windsurf, Copilot, Codex, and more)
 ```bash
-npx skills add Sinotrade/Shioaji
-```
-
-#### SkillKit (Cursor, Windsurf, Copilot, and 32+ agents)
-[SkillKit](https://github.com/rohitg00/skillkit) translates skills across all major AI coding agents automatically.
-```bash
-npx skillkit install Sinotrade/Shioaji --agent cursor,windsurf,copilot
-```
-
-#### OpenSkills (Universal)
-[OpenSkills](https://github.com/numman-ali/openskills) brings skills to Claude Code, Cursor, Windsurf, Aider, Codex, and more.
-```bash
-npx openskills install Sinotrade/Shioaji
-npx openskills sync
-```
-
-#### OpenAI Codex CLI
-In a Codex session, use the skill-installer:
-```
-$skill-installer install shioaji from Sinotrade/Shioaji --path skills/shioaji
+npx skills add Sinotrade/Shioaji                # skills.sh - 18+ agents
+npx skillkit install Sinotrade/Shioaji          # skillkit - 32+ agents
+npx openskills install Sinotrade/Shioaji        # openskills - universal
 ```
 
 ## Installation
