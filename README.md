@@ -34,6 +34,12 @@ claude plugin marketplace add Sinotrade/Shioaji
 claude plugin install shioaji
 ```
 
+#### Skills.sh (Universal Directory)
+[Skills.sh](https://skills.sh) is the open agent skills ecosystem directory supporting 18+ agents.
+```bash
+npx skills add Sinotrade/Shioaji
+```
+
 #### SkillKit (Cursor, Windsurf, Copilot, and 32+ agents)
 [SkillKit](https://github.com/rohitg00/skillkit) translates skills across all major AI coding agents automatically.
 ```bash
