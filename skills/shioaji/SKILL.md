@@ -19,16 +19,16 @@ Shioaji 是永豐金證券提供的 Python 交易 API，支援台灣股票、期
 
 | Topic 主題 | File 檔案 | Description 說明 |
 |------------|-----------|------------------|
-| Preparation 準備 | [PREPARE.md](PREPARE.md) | Account setup, API keys, testing 開戶/金鑰申請/測試 |
-| Contracts 合約 | [CONTRACTS.md](CONTRACTS.md) | Stocks, Futures, Options contracts 股票/期貨/選擇權合約 |
-| Orders 下單 | [ORDERS.md](ORDERS.md) | Place, modify, cancel, combo orders 下單/改單/刪單/組合單 |
-| Reserve 預收 | [RESERVE.md](RESERVE.md) | Reserve orders for disposition stocks 處置股預收券款 |
-| Streaming 行情 | [STREAMING.md](STREAMING.md) | Real-time tick & bidask data 即時 Tick/BidAsk 資料 |
-| Market Data 市場資料 | [MARKET_DATA.md](MARKET_DATA.md) | Historical, snapshot, credit, scanners 歷史資料/快照/資券/掃描器 |
-| Accounting 帳務 | [ACCOUNTING.md](ACCOUNTING.md) | Balance, margin, P&L, trading limits 餘額/保證金/損益/額度 |
-| Watchlist 自選股 | [WATCHLIST.md](WATCHLIST.md) | Custom stock lists management 自選股清單管理 |
-| Advanced 進階 | [ADVANCED.md](ADVANCED.md) | Quote binding, non-blocking, stop orders 報價綁定/非阻塞/觸價 |
-| Troubleshooting 問題排解 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Common issues and solutions 常見問題與解決 |
+| Preparation 準備 | [PREPARE.md](references/PREPARE.md) | Account setup, API keys, testing 開戶/金鑰申請/測試 |
+| Contracts 合約 | [CONTRACTS.md](references/CONTRACTS.md) | Stocks, Futures, Options contracts 股票/期貨/選擇權合約 |
+| Orders 下單 | [ORDERS.md](references/ORDERS.md) | Place, modify, cancel, combo orders 下單/改單/刪單/組合單 |
+| Reserve 預收 | [RESERVE.md](references/RESERVE.md) | Reserve orders for disposition stocks 處置股預收券款 |
+| Streaming 行情 | [STREAMING.md](references/STREAMING.md) | Real-time tick & bidask data 即時 Tick/BidAsk 資料 |
+| Market Data 市場資料 | [MARKET_DATA.md](references/MARKET_DATA.md) | Historical, snapshot, credit, scanners 歷史資料/快照/資券/掃描器 |
+| Accounting 帳務 | [ACCOUNTING.md](references/ACCOUNTING.md) | Balance, margin, P&L, trading limits 餘額/保證金/損益/額度 |
+| Watchlist 自選股 | [WATCHLIST.md](references/WATCHLIST.md) | Custom stock lists management 自選股清單管理 |
+| Advanced 進階 | [ADVANCED.md](references/ADVANCED.md) | Quote binding, non-blocking, stop orders 報價綁定/非阻塞/觸價 |
+| Troubleshooting 問題排解 | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md) | Common issues and solutions 常見問題與解決 |
 
 ---
 
