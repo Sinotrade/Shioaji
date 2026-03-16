@@ -1,6 +1,7 @@
 {
   "name": "shioaji",
-  "version": "1.3.2",
+  "version": "1.3.3",
+  "shioaji_version": "1.3.2",
   "description": "Shioaji Taiwan financial trading API guide. Provides comprehensive documentation for stocks, futures, and options trading with real-time market data.",
   "author": {
     "name": "Sinotrade",
