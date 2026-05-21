@@ -2,6 +2,15 @@ name: docker autobuild
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to publish, for example v1.5.0'
+        required: true
+        default: 'v1.5.0'
+      publish:
+        description: 'Push Docker images'
+        required: true
+        default: 'false'
   push:
     tags:
       - '*'
@@ -18,6 +27,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Resolve image tags
+        id: image
+        run: |
+          VERSION="${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}"
+          case "$VERSION" in
+            v[0-9]*.[0-9]*.[0-9]*|[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "Invalid version: $VERSION" >&2; exit 1 ;;
+          esac
+          VERSION_NO_V="${VERSION#v}"
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ inputs.publish }}" = "true" ]; then
+            PUSH=true
+          else
+            PUSH=false
+          fi
+          {
+            echo "version=$VERSION"
+            echo "version_no_v=$VERSION_NO_V"
+            echo "push=$PUSH"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -30,26 +59,17 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: sinotrade/shioaji
-          tags: |
-            type=ref,event=tag
-            type=pep440,pattern={{version}}
-            type=raw,value=manual,enable=${{ github.event_name == 'workflow_dispatch' }}
-          flavor: |
-            latest=true
-
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
-          push: ${{ github.event_name == 'push' }}
+          push: ${{ steps.image.outputs.push }}
           platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            sinotrade/shioaji:${{ steps.image.outputs.version }}
+            sinotrade/shioaji:${{ steps.image.outputs.version_no_v }}
+            sinotrade/shioaji:latest
 
   server:
     name: Build server image
@@ -62,6 +82,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Resolve image tags
+        id: image
+        run: |
+          VERSION="${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}"
+          case "$VERSION" in
+            v[0-9]*.[0-9]*.[0-9]*|[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "Invalid version: $VERSION" >&2; exit 1 ;;
+          esac
+          VERSION_NO_V="${VERSION#v}"
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ inputs.publish }}" = "true" ]; then
+            PUSH=true
+          else
+            PUSH=false
+          fi
+          {
+            echo "version=$VERSION"
+            echo "version_no_v=$VERSION_NO_V"
+            echo "push=$PUSH"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -74,23 +114,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: sinotrade/shioaji-server
-          tags: |
-            type=ref,event=tag
-            type=pep440,pattern={{version}}
-            type=raw,value=manual,enable=${{ github.event_name == 'workflow_dispatch' }}
-          flavor: |
-            latest=true
-
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile-server
-          push: ${{ github.event_name == 'push' }}
+          push: ${{ steps.image.outputs.push }}
           platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            sinotrade/shioaji-server:${{ steps.image.outputs.version }}
+            sinotrade/shioaji-server:${{ steps.image.outputs.version_no_v }}
+            sinotrade/shioaji-server:latest
