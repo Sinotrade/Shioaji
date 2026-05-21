@@ -1,20 +1,74 @@
 # Market Data 市場資料
 
-This document covers historical data, snapshots, credit enquiries, short stock sources, scanners, and disposition/attention stocks.
-本文件說明歷史資料查詢、快照、資券餘額查詢、券源查詢、掃描器排行及處置/注意股。
+This document covers historical data, snapshots, daily quotes, credit enquiries, short stock sources, scanners, and disposition/attention stocks in rshioaji.
+本文件說明 rshioaji 中的歷史資料查詢、快照、每日行情、資券餘額查詢、券源查詢、掃描器排行及處置/注意股。
 
-## Table of Contents 目錄
+---
 
-- [Historical Ticks 歷史 Tick 資料](#historical-ticks-歷史-tick-資料)
-- [Historical KBars 歷史 K 棒](#historical-kbars-歷史-k-棒)
-- [Continuous Futures 連續期貨](#continuous-futures-連續期貨)
-- [Snapshot 即時快照](#snapshot-即時快照)
-- [Credit Enquiries 資券餘額查詢](#credit-enquiries-資券餘額查詢)
-- [Short Stock Sources 券源查詢](#short-stock-sources-券源查詢)
-- [Scanners 掃描器排行](#scanners-掃描器排行)
-- [Disposition Stocks 處置股](#disposition-stocks-處置股)
-- [Attention Stocks 注意股](#attention-stocks-注意股)
-- [Reference 參考資料](#reference-參考資料)
+## Snapshots 即時快照
+
+Get current snapshot for multiple contracts (max 500 per request).
+取得多個合約的當前快照（每次最多 500 個）。
+
+### Python
+
+```python
+import shioaji as sj
+
+api = sj.Shioaji()
+api.login(api_key="YOUR_KEY", secret_key="YOUR_SECRET")
+
+contracts = [
+    api.Contracts.Stocks["2330"],
+    api.Contracts.Stocks["2317"],
+]
+
+snapshots = api.snapshots(contracts)
+
+for snap in snapshots:
+    print(f"{snap.code}: {snap.close} ({snap.change_price})")
+```
+
+### HTTP: Get Snapshots
+
+```bash
+# POST /api/v1/data/snapshots
+curl -X POST http://localhost:8080/api/v1/data/snapshots \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contracts": [
+      {"security_type": "STK", "exchange": "TSE", "code": "2330"},
+      {"security_type": "STK", "exchange": "TSE", "code": "2317"}
+    ]
+  }'
+```
+
+### Snapshot Attributes 快照屬性
+
+```python
+snap.ts              # int: Timestamp 時間戳
+snap.code            # str: Stock code 股票代碼
+snap.exchange        # str: Exchange 交易所
+snap.open            # float: Open price 開盤價
+snap.high            # float: High price 最高價
+snap.low             # float: Low price 最低價
+snap.close           # float: Close price 收盤價
+snap.tick_type       # TickType: Buy/Sell 內外盤
+snap.change_price    # float: Price change 漲跌價
+snap.change_rate     # float: Change rate % 漲跌幅
+snap.change_type     # ChangeType: Up/Down/Unchanged/LimitUp/LimitDown
+snap.average_price   # float: Average price 均價
+snap.volume          # int: Last volume 最後成交量
+snap.total_volume    # int: Total volume 總成交量
+snap.amount          # int: Last amount 最後成交金額
+snap.total_amount    # int: Total amount 總成交金額
+snap.yesterday_volume # float: Yesterday volume 昨日成交量
+snap.buy_price       # float: Bid price 買價
+snap.buy_volume      # float: Bid volume 買量
+snap.sell_price      # float: Ask price 賣價
+snap.sell_volume     # int: Ask volume 賣量
+snap.volume_ratio    # float: Volume ratio 量比
+```
 
 ---
 
@@ -28,21 +82,19 @@ Query historical tick data by date, time range, or last count.
 ```python
 ticks = api.ticks(
     contract=api.Contracts.Stocks["2330"],
-    date="2023-01-16"
+    date="2023-01-16",
 )
 ```
 
 ### By Time Range 依時間區間
 
 ```python
-import shioaji as sj
-
 ticks = api.ticks(
     contract=api.Contracts.Stocks["2330"],
     date="2023-01-16",
     query_type=sj.constant.TicksQueryType.RangeTime,
     time_start="09:00:00",
-    time_end="09:20:01"
+    time_end="09:20:01",
 )
 ```
 
@@ -55,6 +107,40 @@ ticks = api.ticks(
     query_type=sj.constant.TicksQueryType.LastCount,
     last_cnt=100,
 )
+```
+
+### HTTP: Get Ticks
+
+```bash
+# POST /api/v1/data/ticks
+curl -X POST http://localhost:8080/api/v1/data/ticks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contract": {"security_type": "STK", "exchange": "TSE", "code": "2330"},
+    "date": "2023-01-16",
+    "query_type": "AllDay"
+  }'
+
+# With time range 附時間區間
+curl -X POST http://localhost:8080/api/v1/data/ticks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contract": {"security_type": "STK", "exchange": "TSE", "code": "2330"},
+    "date": "2023-01-16",
+    "query_type": "RangeTime",
+    "time_start": "09:00:00",
+    "time_end": "09:20:01"
+  }'
+
+# Last N ticks 最後 N 筆
+curl -X POST http://localhost:8080/api/v1/data/ticks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contract": {"security_type": "STK", "exchange": "TSE", "code": "2330"},
+    "date": "2023-01-16",
+    "query_type": "LastCount",
+    "last_cnt": 100
+  }'
 ```
 
 ### Ticks Attributes Tick 屬性
@@ -87,12 +173,27 @@ df = pl.DataFrame({**ticks}).with_columns(
 Query historical 1-minute K-bar data.
 查詢歷史 1 分鐘 K 棒資料。
 
+### Python
+
 ```python
 kbars = api.kbars(
     contract=api.Contracts.Stocks["2330"],
     start="2023-01-15",
     end="2023-01-16",
 )
+```
+
+### HTTP: Get KBars
+
+```bash
+# POST /api/v1/data/kbars
+curl -X POST http://localhost:8080/api/v1/data/kbars \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contract": {"security_type": "STK", "exchange": "TSE", "code": "2330"},
+    "start": "2023-01-15",
+    "end": "2023-01-16"
+  }'
 ```
 
 ### KBars Attributes K 棒屬性
@@ -118,6 +219,33 @@ df = pl.DataFrame({**kbars}).with_columns(
 
 ---
 
+## Daily Quotes 每日行情
+
+Get daily market quotes for all stocks.
+取得所有股票的每日行情資料。
+
+### Python
+
+```python
+import datetime
+
+daily = api.daily_quotes(date=datetime.date(2023, 1, 16))
+# `date=` accepts datetime.date or datetime.datetime (date portion).
+# Strings are NOT accepted at the Python boundary; convert with
+# datetime.date.fromisoformat("2023-01-16") if you have a string.
+```
+
+### HTTP: Get Daily Quotes
+
+```bash
+# POST /api/v1/data/daily_quotes
+curl -X POST http://localhost:8080/api/v1/data/daily_quotes \
+  -H "Content-Type: application/json" \
+  -d '{"date": "2023-01-16", "exclude": false}'
+```
+
+---
+
 ## Continuous Futures 連續期貨
 
 For historical data of expired futures, use continuous contracts `R1` (near-month) and `R2` (next-to-near-month).
@@ -127,7 +255,7 @@ For historical data of expired futures, use continuous contracts `R1` (near-mont
 # Continuous near-month futures 連續近月期貨
 ticks = api.ticks(
     contract=api.Contracts.Futures.TXF.TXFR1,
-    date="2023-01-16"
+    date="2023-01-16",
 )
 
 kbars = api.kbars(
@@ -147,62 +275,12 @@ kbars = api.kbars(
 
 ---
 
-## Snapshot 即時快照
-
-Get current snapshot for multiple contracts (max 500 per request).
-取得多個合約的當前快照（每次最多 500 個）。
-
-```python
-contracts = [
-    api.Contracts.Stocks["2330"],
-    api.Contracts.Stocks["2317"],
-]
-
-snapshots = api.snapshots(contracts)
-```
-
-### Snapshot Attributes 快照屬性
-
-```python
-snap.ts              # int: Timestamp 時間戳
-snap.code            # str: Stock code 股票代碼
-snap.exchange        # str: Exchange 交易所
-snap.open            # float: Open price 開盤價
-snap.high            # float: High price 最高價
-snap.low             # float: Low price 最低價
-snap.close           # float: Close price 收盤價
-snap.tick_type       # TickType: Buy/Sell 內外盤
-snap.change_price    # float: Price change 漲跌價
-snap.change_rate     # float: Change rate % 漲跌幅
-snap.change_type     # ChangeType: Up/Down/Unchanged/LimitUp/LimitDown
-snap.average_price   # float: Average price 均價
-snap.volume          # int: Last volume 最後成交量
-snap.total_volume    # int: Total volume 總成交量
-snap.amount          # int: Last amount 最後成交金額
-snap.total_amount    # int: Total amount 總成交金額
-snap.yesterday_volume # float: Yesterday volume 昨日成交量
-snap.buy_price       # float: Bid price 買價
-snap.buy_volume      # float: Bid volume 買量
-snap.sell_price      # float: Ask price 賣價
-snap.sell_volume     # int: Ask volume 賣量
-snap.volume_ratio    # float: Volume ratio 量比
-```
-
-### Convert to Polars 轉換為 Polars
-
-```python
-import polars as pl
-
-# Use BaseModel.dict() to convert 使用 BaseModel.dict() 轉換
-df = pl.DataFrame([s.dict() for s in snapshots])
-```
-
----
-
 ## Credit Enquiries 資券餘額查詢
 
 Query margin and short unit information for stocks.
 查詢股票的融資融券餘額資訊。
+
+### Python
 
 ```python
 contracts = [
@@ -211,6 +289,20 @@ contracts = [
 ]
 
 credit_enquires = api.credit_enquires(contracts)
+```
+
+### HTTP: Get Credit Enquiries
+
+```bash
+# POST /api/v1/data/credit_enquire
+curl -X POST http://localhost:8080/api/v1/data/credit_enquire \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contracts": [
+      {"security_type": "STK", "exchange": "TSE", "code": "2330"},
+      {"security_type": "STK", "exchange": "TSE", "code": "2890"}
+    ]
+  }'
 ```
 
 ### CreditEnquire Attributes 資券餘額屬性
@@ -223,21 +315,14 @@ enquire.margin_unit   # int: Margin units 融資餘額
 enquire.short_unit    # int: Short units 融券餘額
 ```
 
-### Convert to Polars 轉換為 Polars
-
-```python
-import polars as pl
-
-# Use BaseModel.dict() to convert 使用 BaseModel.dict() 轉換
-df = pl.DataFrame([c.dict() for c in credit_enquires])
-```
-
 ---
 
 ## Short Stock Sources 券源查詢
 
-Query available short stock sources (借券來源).
+Query available short stock sources.
 查詢可借券數量。
+
+### Python
 
 ```python
 contracts = [
@@ -248,23 +333,26 @@ contracts = [
 short_sources = api.short_stock_sources(contracts)
 ```
 
+### HTTP: Get Short Stock Sources
+
+```bash
+# POST /api/v1/data/short_stock_sources
+curl -X POST http://localhost:8080/api/v1/data/short_stock_sources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contracts": [
+      {"security_type": "STK", "exchange": "TSE", "code": "2330"},
+      {"security_type": "STK", "exchange": "TSE", "code": "2317"}
+    ]
+  }'
+```
+
 ### ShortStockSource Attributes 券源屬性
 
 ```python
 source.code               # str: Stock code 股票代碼
 source.short_stock_source # int: Available shares 可借券數量
 source.ts                 # int: Timestamp 時間戳
-```
-
-### Convert to Polars 轉換為 Polars
-
-```python
-import polars as pl
-
-# Use BaseModel.dict() to convert 使用 BaseModel.dict() 轉換
-df = pl.DataFrame([s.dict() for s in short_sources]).with_columns(
-    pl.col("ts").cast(pl.Datetime("ns"))
-)
 ```
 
 ---
@@ -277,8 +365,6 @@ Get market rankings by various criteria.
 ### Scanner Types 掃描器類型
 
 ```python
-import shioaji as sj
-
 sj.constant.ScannerType.ChangePercentRank  # 漲跌幅排行
 sj.constant.ScannerType.ChangePriceRank    # 漲跌價排行
 sj.constant.ScannerType.DayRangeRank       # 振幅排行
@@ -286,29 +372,36 @@ sj.constant.ScannerType.VolumeRank         # 成交量排行
 sj.constant.ScannerType.AmountRank         # 成交金額排行
 ```
 
-### Query Scanners 查詢排行
+### Python
 
 ```python
 # Top 10 gainers 漲幅前 10 名
 scanners = api.scanners(
     scanner_type=sj.constant.ScannerType.ChangePercentRank,
-    ascending=False,  # False = descending 由大到小
+    ascending=False,
     count=10,
 )
 
 # Top 10 losers 跌幅前 10 名
 scanners = api.scanners(
     scanner_type=sj.constant.ScannerType.ChangePercentRank,
-    ascending=True,  # True = ascending 由小到大
+    ascending=True,
     count=10,
 )
+```
 
-# Top volume 成交量排行
-scanners = api.scanners(
-    scanner_type=sj.constant.ScannerType.VolumeRank,
-    ascending=False,
-    count=10,
-)
+### HTTP: Get Scanners
+
+```bash
+# POST /api/v1/data/scanner
+curl -X POST http://localhost:8080/api/v1/data/scanner \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scanner_type": "ChangePercentRank",
+    "date": "2023-01-16",
+    "ascending": false,
+    "count": 10
+  }'
 ```
 
 ### Scanner Attributes 掃描器屬性
@@ -343,32 +436,24 @@ scan.ask_volumes     # int: Ask side volume 外盤成交量
 scan.tick_type       # int: 1=外盤, 2=內盤, 0=無法判定
 ```
 
-### Convert to Polars 轉換為 Polars
-
-```python
-import polars as pl
-
-scanners = api.scanners(
-    scanner_type=sj.constant.ScannerType.ChangePercentRank,
-    count=50,
-)
-
-# Use BaseModel.dict() to convert 使用 BaseModel.dict() 轉換
-df = pl.DataFrame([s.dict() for s in scanners])
-
-# Filter high volume ratio 篩選量比高的
-high_volume = df.filter(pl.col("volume_ratio") > 2)
-```
-
 ---
 
 ## Disposition Stocks 處置股
 
-Query stocks under trading restrictions (處置股).
+Query stocks under trading restrictions.
 查詢受交易限制的處置股清單。
+
+### Python
 
 ```python
 punish = api.punish()
+```
+
+### HTTP: Get Disposition Stocks
+
+```bash
+# GET /api/v1/data/regulatory_punish
+curl http://localhost:8080/api/v1/data/regulatory_punish
 ```
 
 ### Punish Attributes 處置股屬性
@@ -378,32 +463,31 @@ punish.code            # List[str]: Stock codes 股票代碼
 punish.start_date      # List[date]: Disposition start date 處置開始日
 punish.end_date        # List[date]: Disposition end date 處置結束日
 punish.updated_at      # List[datetime]: Updated time 更新時間
-punish.interval        # List[str]: Matching interval 撮合間隔 (e.g., "5分鐘")
+punish.interval        # List[str]: Matching interval 撮合間隔
 punish.unit_limit      # List[float]: Single order limit % 單筆限額
 punish.total_limit     # List[float]: Daily order limit % 每日限額
 punish.description     # List[str]: Description 說明
 punish.announced_date  # List[date]: Announced date 公告日
 ```
 
-### Convert to Polars 轉換為 Polars
-
-```python
-import polars as pl
-
-# Punish returns single object with list attributes
-# Punish 回傳單一物件，屬性為 list
-df = pl.DataFrame(punish.dict())
-```
-
 ---
 
 ## Attention Stocks 注意股
 
-Query stocks under attention (注意股).
+Query stocks under attention.
 查詢受注意的股票清單。
+
+### Python
 
 ```python
 notice = api.notice()
+```
+
+### HTTP: Get Attention Stocks
+
+```bash
+# GET /api/v1/data/regulatory_notice
+curl http://localhost:8080/api/v1/data/regulatory_notice
 ```
 
 ### Notice Attributes 注意股屬性
@@ -416,23 +500,29 @@ notice.reason          # List[str]: Attention reason 注意原因
 notice.announced_date  # List[date]: Announced date 公告日
 ```
 
-### Convert to Polars 轉換為 Polars
+---
+
+## Convert to Polars 轉換為 Polars
+
+All list-based response objects can be converted to Polars DataFrames:
+所有列表型回應物件都可轉換為 Polars DataFrame：
 
 ```python
 import polars as pl
 
-# Notice returns single object with list attributes
-# Notice 回傳單一物件，屬性為 list
+# Snapshots 快照
+df = pl.DataFrame([s.dict() for s in snapshots])
+
+# Credit enquiries 資券餘額
+df = pl.DataFrame([c.dict() for c in credit_enquires])
+
+# Scanners 掃描器
+df = pl.DataFrame([s.dict() for s in scanners])
+
+# Regulatory 監管
+df = pl.DataFrame(punish.dict())
 df = pl.DataFrame(notice.dict())
 ```
 
----
-
-## Reference 參考資料
-
-- Historical data 歷史資料: https://sinotrade.github.io/tutor/market_data/historical/
-- Snapshot 快照: https://sinotrade.github.io/tutor/market_data/snapshot/
-- Credit enquiries 資券餘額: https://sinotrade.github.io/tutor/market_data/credit_enquires/
-- Short stock sources 券源: https://sinotrade.github.io/tutor/market_data/short_stock_source/
-- Scanners 掃描器: https://sinotrade.github.io/tutor/market_data/scanners/
-- Disposition/Attention 處置/注意股: https://sinotrade.github.io/tutor/market_data/disposition_attention/
+For full HTTP endpoint inventory, see [HTTP_API.md](HTTP_API.md).
+完整的 HTTP 端點清單請參見 [HTTP_API.md](HTTP_API.md)。

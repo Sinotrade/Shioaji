@@ -1,7 +1,7 @@
 # Contracts 合約
 
-This document covers how to access and use contract objects in Shioaji.
-本文件說明如何在 Shioaji 中存取和使用合約物件。
+This document covers how to access and use contract objects in rshioaji.
+本文件說明如何在 rshioaji 中存取和使用合約物件。
 
 ---
 
@@ -18,6 +18,9 @@ api.login(api_key="YOUR_KEY", secret_key="YOUR_SECRET")
 
 # Contracts are now available 合約已可使用
 ```
+
+**Note 注意:** The import remains `import shioaji as sj` even though the underlying package is rshioaji.
+即使底層套件為 rshioaji，匯入仍為 `import shioaji as sj`。
 
 ---
 
@@ -61,6 +64,53 @@ contract.update_date    # Last update date 更新日期
 contract.day_trade      # Day trade allowed 可當沖: "Yes"/"No"
 ```
 
+### HTTP: Look Up a Contract 透過 HTTP 查詢合約
+
+```bash
+# GET /api/v1/data/contracts/<code>?security_type=STK
+curl "http://localhost:8080/api/v1/data/contracts/2330?security_type=STK"
+```
+
+Response:
+```json
+{
+  "code": "2330",
+  "symbol": "TSE2330",
+  "name": "台積電",
+  "exchange": "TSE",
+  "security_type": "STK",
+  "limit_up": 620.0,
+  "limit_down": 508.0,
+  "reference": 564.0,
+  "update_date": "2026-03-31",
+  "day_trade": "Yes"
+}
+```
+
+### HTTP: Query Contracts with Pagination 分頁查詢合約
+
+```bash
+# POST /api/v1/data/contracts
+curl -X POST http://localhost:8080/api/v1/data/contracts \
+  -H "Content-Type: application/json" \
+  -d '{"security_type": "STK", "page": 1, "page_size": 50}'
+```
+
+Response:
+```json
+{
+  "contracts": [ ... ],
+  "security_type": "STK",
+  "page": 1,
+  "page_size": 50,
+  "max_page": 40,
+  "total": 1987
+}
+```
+
+Use `"page": -1` to return all records (no pagination).
+使用 `"page": -1` 回傳所有記錄（不分頁）。
+
 ---
 
 ## Futures Contracts 期貨合約
@@ -71,13 +121,18 @@ contract.day_trade      # Day trade allowed 可當沖: "Yes"/"No"
 # By futures code 以期貨代碼
 tx = api.Contracts.Futures["TXF"]     # Taiwan Index Futures 台指期
 mtx = api.Contracts.Futures["MXF"]    # Mini Taiwan Index Futures 小台指
-txo = api.Contracts.Futures["TXO"]    # Taiwan Index Options 台指選
 
 # Current month contract 當月合約
 txf_current = api.Contracts.Futures["TXFC0"]  # C0 = current month 近月
 
 # Specific month 指定月份
 txf_202401 = api.Contracts.Futures["TXF202401"]
+```
+
+### HTTP: Look Up a Futures Contract
+
+```bash
+curl "http://localhost:8080/api/v1/data/contracts/TXFC0?security_type=FUT"
 ```
 
 ### Futures Contract Naming 期貨合約命名規則
@@ -122,6 +177,12 @@ txo_call = api.Contracts.Options["TXO202401C18000"]  # Call @ 18000
 txo_put = api.Contracts.Options["TXO202401P17000"]   # Put @ 17000
 ```
 
+### HTTP: Look Up an Options Contract
+
+```bash
+curl "http://localhost:8080/api/v1/data/contracts/TXO202401C18000?security_type=OPT"
+```
+
 ### Options Contract Naming 選擇權合約命名
 
 | Part 部分 | Description 說明 | Example 範例 |
@@ -163,6 +224,12 @@ tse_index = api.Contracts.Indexs["TSE001"]
 otc_index = api.Contracts.Indexs["OTC101"]
 ```
 
+### HTTP: Look Up an Index Contract
+
+```bash
+curl "http://localhost:8080/api/v1/data/contracts/TSE001?security_type=IND"
+```
+
 ---
 
 ## Fetching All Contracts 取得所有合約
@@ -193,50 +260,21 @@ all_futures = [c for c in api.Contracts.Futures]
 all_options = [c for c in api.Contracts.Options]
 ```
 
----
+### HTTP: Query by Security Type
 
-## Contract Snapshots 合約快照
+```bash
+# All futures 所有期貨
+curl -X POST http://localhost:8080/api/v1/data/contracts \
+  -H "Content-Type: application/json" \
+  -d '{"security_type": "FUT", "page": -1}'
 
-Get real-time snapshot for contracts:
-取得合約的即時快照：
-
-```python
-# Single contract 單一合約
-snapshot = api.snapshots([api.Contracts.Stocks["2330"]])
-
-# Multiple contracts (up to 500) 多個合約（最多 500 個）
-contracts = [
-    api.Contracts.Stocks["2330"],
-    api.Contracts.Stocks["2317"],
-    api.Contracts.Futures["TXFC0"],
-]
-snapshots = api.snapshots(contracts)
-
-for snap in snapshots:
-    print(f"{snap.code}: {snap.close} ({snap.change_price})")
+# All options 所有選擇權
+curl -X POST http://localhost:8080/api/v1/data/contracts \
+  -H "Content-Type: application/json" \
+  -d '{"security_type": "OPT", "page": 1, "page_size": 100}'
 ```
 
-### Snapshot Attributes 快照屬性
-
-```python
-snap.ts           # Timestamp 時間戳
-snap.code         # Contract code 合約代碼
-snap.exchange     # Exchange 交易所
-snap.open         # Open price 開盤價
-snap.high         # High price 最高價
-snap.low          # Low price 最低價
-snap.close        # Close/Last price 收盤/最新價
-snap.change_price # Price change 漲跌
-snap.change_rate  # Change rate % 漲跌幅
-snap.volume       # Volume 成交量
-snap.total_volume # Total volume 總成交量
-snap.amount       # Amount 成交金額
-snap.total_amount # Total amount 總成交金額
-snap.buy_price    # Best bid 最佳買價
-snap.buy_volume   # Bid volume 買量
-snap.sell_price   # Best ask 最佳賣價
-snap.sell_volume  # Ask volume 賣量
-```
+**Security type values 合約類型值:** `STK` (stocks), `FUT` (futures), `OPT` (options), `IND` (index).
 
 ---
 
@@ -248,4 +286,23 @@ Contracts can be updated manually if needed:
 ```python
 # Fetch latest contract info 取得最新合約資訊
 api.fetch_contracts(contract_download=True)
+
+# With callback to track progress 附回調追蹤進度
+api.fetch_contracts(contract_download=True, contracts_cb=lambda st: print(f"Loaded: {st}"))
 ```
+
+### Async 非同步
+
+```python
+api = sj.ShioajiAsync()
+await api.login(api_key="YOUR_KEY", secret_key="YOUR_SECRET")
+contracts = await api.fetch_contracts(contract_download=True)
+```
+
+---
+
+**Note 注意:** There is no CLI command for contract lookup. Use Python or HTTP API.
+目前沒有合約查詢的 CLI 命令，請使用 Python 或 HTTP API。
+
+For full HTTP endpoint inventory, see [HTTP_API.md](HTTP_API.md).
+完整的 HTTP 端點清單請參見 [HTTP_API.md](HTTP_API.md)。

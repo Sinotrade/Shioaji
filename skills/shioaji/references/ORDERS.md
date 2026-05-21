@@ -1,7 +1,7 @@
 # Orders 下單
 
-This document covers placing, modifying, and canceling orders in Shioaji.
-本文件說明如何在 Shioaji 中下單、改單和刪單。
+This document covers placing, modifying, and canceling orders in rshioaji.
+本文件說明如何在 rshioaji 中下單、改單和刪單。
 
 ## Table of Contents 目錄
 
@@ -13,7 +13,9 @@ This document covers placing, modifying, and canceling orders in Shioaji.
 - [Modify Orders 改單](#modify-orders-改單)
 - [Cancel Orders 刪單](#cancel-orders-刪單)
 - [Order Status 訂單狀態](#order-status-訂單狀態)
+- [Order Deal Records 委託成交紀錄](#order-deal-records-委託成交紀錄)
 - [Order Callbacks 訂單回報](#order-callbacks-訂單回報)
+- [Subscribe/Unsubscribe Trade 訂閱/取消訂閱交易回報](#subscribeunsubscribe-trade-訂閱取消訂閱交易回報)
 - [Best Practices 最佳實踐](#best-practices-最佳實踐)
 
 ---
@@ -58,6 +60,32 @@ order = api.Order(
 trade = api.place_order(contract, order)
 ```
 
+#### HTTP: Place Stock Order
+
+Omit `account` to use the default signed stock account, or supply
+`{broker_id, account_id}` to target a specific one. The server fills
+in the remaining account fields from the login session (1.5.12+,
+#234).
+
+```bash
+# POST /api/v1/order/place_order
+curl -X POST http://localhost:8080/api/v1/order/place_order \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contract": {"security_type": "STK", "exchange": "TSE", "code": "2330"},
+    "stock_order": {
+      "price": 580,
+      "quantity": 1,
+      "action": "Buy",
+      "price_type": "LMT",
+      "order_type": "ROD",
+      "order_lot": "Common",
+      "order_cond": "Cash",
+      "account": {"broker_id": "9A95", "account_id": "1234567"}
+    }
+  }'
+```
+
 ### Order Parameters 訂單參數
 
 | Parameter 參數 | Type 類型 | Description 說明 |
@@ -72,6 +100,9 @@ trade = api.place_order(contract, order)
 | `account` | Account | Trading account 交易帳戶 |
 | `custom_field` | str | Memo (max 6 chars) 備註（最多6字元）|
 
+> **TWSE accepts every `price_type` × `order_type` combination** — MKT/LMT/MKP each pair with ROD/IOC/FOK. This differs from TAIFEX; see [Futures Parameters](#futures-parameters-期貨參數).
+> **證交所所有 `price_type` × `order_type` 組合皆有效** — MKT/LMT/MKP 都可搭配 ROD/IOC/FOK；與期交所限制不同。
+
 ### Market Order 市價單
 
 ```python
@@ -80,7 +111,7 @@ order = api.Order(
     quantity=1,
     action=sj.constant.Action.Buy,
     price_type=sj.constant.StockPriceType.MKT,
-    order_type=sj.constant.OrderType.IOC,  # MKT requires IOC/FOK 市價須 IOC/FOK
+    order_type=sj.constant.OrderType.ROD,  # Stocks: MKT accepts ROD/IOC/FOK 股票市價可搭配 ROD/IOC/FOK
     account=api.stock_account,
 )
 ```
@@ -188,6 +219,28 @@ order = api.Order(
 trade = api.place_order(contract, order)
 ```
 
+#### HTTP: Place Futures Order
+
+Same partial-account selector applies: `{"broker_id":"F002", "account_id":"1234567"}` targets a specific futures account; omit for default.
+
+```bash
+# POST /api/v1/order/place_order
+curl -X POST http://localhost:8080/api/v1/order/place_order \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contract": {"security_type": "FUT", "exchange": "TAIFEX", "code": "TXFC0"},
+    "futures_order": {
+      "price": 18000,
+      "quantity": 1,
+      "action": "Buy",
+      "price_type": "LMT",
+      "order_type": "ROD",
+      "octype": "Auto",
+      "account": {"broker_id": "F002", "account_id": "1234567"}
+    }
+  }'
+```
+
 ### Futures Parameters 期貨參數
 
 | Parameter 參數 | Type 類型 | Description 說明 |
@@ -199,6 +252,9 @@ trade = api.place_order(contract, order)
 | `order_type` | OrderType | ROD/IOC/FOK 委託條件 |
 | `octype` | FuturesOCType | Auto/NewPosition/Cover 自動/新倉/平倉 |
 | `account` | Account | Futures account 期貨帳戶 |
+
+> **TAIFEX rejects `MKT` + `ROD`** — on futures/options, MKT must pair with IOC or FOK (server returns `op_code` 9938). LMT and MKP accept ROD/IOC/FOK.
+> **期交所拒絕 `MKT` + `ROD`** — 期貨/選擇權市價單必須搭配 IOC 或 FOK（伺服器回 `op_code` 9938 退單）；LMT、MKP 則三種委託條件皆可。
 
 ### Open/Close Type 開平倉類型
 
@@ -255,89 +311,186 @@ trade = api.place_order(contract, order)
 
 ## Combo Orders 組合單
 
-Combo orders allow trading multi-leg option strategies (spreads, straddles, strangles).
-組合單可交易多腳選擇權策略（價差、跨式、勒式等）。
+Combo orders allow trading multi-leg strategies: calendar spreads, option spreads, straddles, strangles.
+組合單可交易多腳策略（期貨日曆價差、選擇權價差、跨式、勒式等）。
 
-### Create Combo Contract 建立組合合約
+**Exactly 2 legs are required.** The client raises `ShioajiValueError` if the
+leg count is wrong (matches the sw backend hard requirement at
+`swrelaystation/api/v1/endpoints/order/place_comboorder.py:67-68`).
+
+### Create Combo Contract — field-by-field 建立組合合約
 
 ```python
-from shioaji.contracts import ComboContract, ComboBase
+import shioaji as sj
 
-# Bull Call Spread 買權多頭價差
-# Buy lower strike, Sell higher strike
-# 買進較低履約價，賣出較高履約價
-combo_contract = ComboContract(
+# Futures calendar spread — buy near-month, sell next-month
+combo_contract = sj.ComboContract(
     legs=[
-        ComboBase(
-            action=sj.constant.Action.Buy,
-            contract=api.Contracts.Options["TXO202401C18000"],
+        sj.ComboBase(
+            action=sj.Action.Buy,
+            security_type=sj.SecurityType.Future,
+            exchange=sj.Exchange.TAIFEX,
+            code="TXFG5",
+            symbol="TXFG5",
+            category="TXF",
+            delivery_month="202607",
         ),
-        ComboBase(
-            action=sj.constant.Action.Sell,
-            contract=api.Contracts.Options["TXO202401C18500"],
+        sj.ComboBase(
+            action=sj.Action.Sell,
+            security_type=sj.SecurityType.Future,
+            exchange=sj.Exchange.TAIFEX,
+            code="TXFH5",
+            symbol="TXFH5",
+            category="TXF",
+            delivery_month="202608",
         ),
     ]
 )
 ```
+
+### Create Combo Contract — from richer contract objects (compat helper)
+
+Canonical shioaji users can pass a full `Contract` / `Future` / `Option` /
+`Stock` / `Index` and let rshioaji extract the relevant fields:
+
+```python
+r1 = api.Contracts.Futures["TXFR1"]   # near-month alias
+r2 = api.Contracts.Futures["TXFR2"]   # next-month alias
+
+combo_contract = sj.ComboContract(legs=[
+    sj.ComboBase.from_contract(r1, action=sj.Action.Buy),
+    sj.ComboBase.from_contract(r2, action=sj.Action.Sell),
+])
+```
+
+`from_contract` copies `security_type/exchange/code/symbol/category/
+delivery_month/strike_price/option_right/target_code`. For bare
+`BaseContract` instances (only 4 fields) use the field-by-field constructor.
 
 ### Place Combo Order 下組合單
 
 ```python
-combo_order = api.ComboOrder(
-    price=50,  # Net price 淨價
+# Canonical shape: ComboOrder defaults action=Sell (see note below).
+# Legs built via ComboBase.from_contract(future_or_option) carry full
+# contract info — rshioaji auto-fills `combo_type` for you, so you can
+# omit it.
+order = sj.ComboOrder(
+    price=50,   # Net price 淨價
     quantity=1,
-    price_type=sj.constant.FuturesPriceType.LMT,
-    order_type=sj.constant.OrderType.ROD,
-    octype=sj.constant.FuturesOCType.Auto,
+    price_type=sj.FuturesPriceType.LMT,
+    order_type=sj.OrderType.ROD,
+    octype=sj.FuturesOCType.Auto,
     account=api.futopt_account,
 )
 
-trade = api.place_comboorder(combo_contract, combo_order)
+trade = api.place_comboorder(combo_contract, order)
 ```
 
-### Combo Order Parameters 組合單參數
+`place_comboorder` also accepts a plain `FuturesOrder` for backcompat —
+the same auto-fill path runs when the legs are full contracts.
 
-| Parameter 參數 | Type 類型 | Description 說明 |
-|----------------|-----------|------------------|
-| `price` | float | Net price of spread 價差淨價 |
-| `quantity` | int | Number of combos 組數 |
-| `price_type` | FuturesPriceType | LMT/MKT 限價/市價 |
-| `order_type` | OrderType | ROD/IOC/FOK 委託條件 |
-| `octype` | FuturesOCType | Auto/NewPosition/Cover 開平倉 |
+#### `combo_type` — when to fill it yourself 何時需要自己帶入
 
-### Strategy Examples 策略範例
+- **Full contracts** (`ComboBase.from_contract(future_or_option)` or
+  manually populating `category` / `delivery_month` / `strike_price` /
+  `option_right`): rshioaji auto-fills `combo_type` from the leg shape.
+  You can omit the argument.
+- **Bare `BaseContract` legs** (only `security_type` / `exchange` /
+  `code`): rshioaji can't infer the strategy. **You must pass
+  `combo_type=sj.ComboType.<variant>` yourself**, otherwise
+  `place_comboorder` raises `ShioajiValueError`.
+- **`WeeklyTimeSpread`**: always pass it explicitly — the auto-fill path
+  can't tell it apart from `TimeSpread` (they share `f_mttype` "2").
+- **Explicit always wins**: passing `combo_type=...` overrides the
+  auto-fill regardless of leg shape.
+
+| `sj.ComboType.*`     | f_mttype | Strategy                         |
+| -------------------- | :------: | -------------------------------- |
+| `PriceSpread`        | `1`      | 價格價差                          |
+| `TimeSpread`         | `2`      | 時間價差 (跨月價差)                 |
+| `Straddle`           | `3`      | 跨式                             |
+| `Strangle`           | `4`      | 勒式                             |
+| `ConversionReversal` | `5`      | 轉換 / 逆轉組合                    |
+| `WeeklyTimeSpread`   | `2`      | 週選跨月價差                       |
 
 ```python
-# Straddle 跨式 (Buy Call + Buy Put same strike)
-straddle = ComboContract(
-    legs=[
-        ComboBase(
-            action=sj.constant.Action.Buy,
-            contract=api.Contracts.Options["TXO202401C18000"],
-        ),
-        ComboBase(
-            action=sj.constant.Action.Buy,
-            contract=api.Contracts.Options["TXO202401P18000"],
-        ),
-    ]
-)
-
-# Strangle 勒式 (Buy OTM Call + Buy OTM Put)
-strangle = ComboContract(
-    legs=[
-        ComboBase(
-            action=sj.constant.Action.Buy,
-            contract=api.Contracts.Options["TXO202401C18500"],
-        ),
-        ComboBase(
-            action=sj.constant.Action.Buy,
-            contract=api.Contracts.Options["TXO202401P17500"],
-        ),
-    ]
+order = sj.ComboOrder(
+    price=50,
+    quantity=1,
+    price_type=sj.FuturesPriceType.LMT,
+    order_type=sj.OrderType.ROD,
+    combo_type=sj.ComboType.WeeklyTimeSpread,
 )
 ```
 
-### Combo Status 組合單狀態
+#### Note on combo-level `action`
+
+`ComboOrder.action` defaults to `Sell` to match canonical `shioaji.ComboOrder`
+(`shioaji/order.py:105-128`). **Per-leg `ComboBase.action` is what the
+exchange reads for combo direction** (mapped to STS `ord_bs` and `c_buysell`).
+The order-level `action` reaches the wire as `trade_type` (see
+`swrelaystation/backend/sts/protocol/futureoption/handler.py:219` and the
+binary struct at `tr.py:5-44`), but its semantic effect on TAIFEX matching
+for combo orders is empirically unverified — the sw author's comment
+`# trade_type如果sell會不會有影響` ("does Sell have any effect?") reflects
+this open question. The canonical default of `Sell` is used here to
+minimise divergence from `shioaji`; if you need a specific value, pass
+`action=...` explicitly.
+
+#### HTTP: Place Combo Order
+
+```bash
+# POST /api/v1/order/place_comboorder
+curl -X POST http://localhost:8080/api/v1/order/place_comboorder \
+  -H "Content-Type: application/json" \
+  -d '{
+    "combo_contract": {
+      "legs": [
+        {"action": "Buy",  "security_type": "FUT", "exchange": "TAIFEX", "code": "TXFG5", "symbol": "TXFG5", "category": "TXF", "delivery_month": "202607"},
+        {"action": "Sell", "security_type": "FUT", "exchange": "TAIFEX", "code": "TXFH5", "symbol": "TXFH5", "category": "TXF", "delivery_month": "202608"}
+      ]
+    },
+    "order": {
+      "action": "Sell",
+      "price": 50,
+      "quantity": 1,
+      "price_type": "LMT",
+      "order_type": "ROD",
+      "octype": "Auto",
+      "combo_type": "Straddle"
+    }
+  }'
+```
+
+`combo_type` is optional on the JSON body when each leg includes the
+full contract fields (`category`, `delivery_month`, and for options
+`strike_price` / `option_right`); rshioaji auto-fills it on the server
+side. Pass it explicitly when the legs are bare codes, or when you need
+`WeeklyTimeSpread`. Accepted values: `PriceSpread`, `TimeSpread`,
+`Straddle`, `Strangle`, `ConversionReversal`, `WeeklyTimeSpread`.
+
+Note on payload keys: the rshioaji Salvo HTTP server uses `combo_contract`
+(see `src/server/http/order.rs` `PlaceComboOrderRequest`). Internally,
+the Rust core payload sent to the sw relay uses `combocontract` (see
+`src/api/api_v1/order/combo_types.rs` `PlaceComboOrderIn`). Don't confuse
+the two — when POSTing to rshioaji's HTTP server, use `combo_contract`.
+
+### Cancel Combo Order 取消組合單
+
+```python
+api.cancel_comboorder(trade)
+```
+
+#### HTTP: Cancel Combo Order
+
+```bash
+# POST /api/v1/order/cancel_comboorder
+curl -X POST http://localhost:8080/api/v1/order/cancel_comboorder \
+  -H "Content-Type: application/json" \
+  -d '{"trade_id": "abc123"}'
+```
+
+### Combo Trades 組合單查詢
 
 ```python
 # Update combo status 更新組合單狀態
@@ -345,16 +498,15 @@ api.update_combostatus(api.futopt_account)
 
 # List all combo trades 列出所有組合單
 combo_trades = api.list_combotrades()
-
-for trade in combo_trades:
-    print(f"Order ID: {trade.order.id}")
-    print(f"Status: {trade.status.status}")
 ```
 
-### Cancel Combo Order 取消組合單
+#### HTTP: List Combo Trades
 
-```python
-api.cancel_comboorder(trade)
+```bash
+# POST /api/v1/order/combotrades
+curl -X POST http://localhost:8080/api/v1/order/combotrades \
+  -H "Content-Type: application/json" \
+  -d '{}'
 ```
 
 ---
@@ -367,6 +519,15 @@ api.cancel_comboorder(trade)
 api.update_order(trade=trade, price=585)
 ```
 
+#### HTTP: Update Price
+
+```bash
+# POST /api/v1/order/update_price
+curl -X POST http://localhost:8080/api/v1/order/update_price \
+  -H "Content-Type: application/json" \
+  -d '{"trade_id": "abc123", "price": 585}'
+```
+
 ### Reduce Quantity 減量
 
 Note: Can only reduce, not increase.
@@ -376,15 +537,30 @@ Note: Can only reduce, not increase.
 api.update_order(trade=trade, qty=1)
 ```
 
+#### HTTP: Update Quantity
+
+```bash
+# POST /api/v1/order/update_qty
+curl -X POST http://localhost:8080/api/v1/order/update_qty \
+  -H "Content-Type: application/json" \
+  -d '{"trade_id": "abc123", "quantity": 1}'
+```
+
 ---
 
 ## Cancel Orders 刪單
 
 ```python
 api.cancel_order(trade)
+```
 
-# Or cancel by trade object 或透過 trade 物件
-api.cancel_order(trade=trade)
+#### HTTP: Cancel Order
+
+```bash
+# POST /api/v1/order/cancel_order
+curl -X POST http://localhost:8080/api/v1/order/cancel_order \
+  -H "Content-Type: application/json" \
+  -d '{"trade_id": "abc123"}'
 ```
 
 ---
@@ -397,18 +573,30 @@ api.cancel_order(trade=trade)
 # Update all order status 更新所有訂單狀態
 api.update_status(api.stock_account)
 api.update_status(api.futopt_account)
+
+# Update specific trade only 僅更新特定訂單
+api.update_status(trade=trade)
 ```
 
 ### List Trades 列出交易
 
 ```python
-# List all trades 列出所有交易
+# List all trades from cache 從快取列出所有交易
 trades = api.list_trades()
 
 for trade in trades:
     print(f"Order: {trade.order.id}")
     print(f"Status: {trade.status.status}")
     print(f"Deal Quantity: {trade.status.deal_quantity}")
+```
+
+#### HTTP: Get Trades
+
+```bash
+# POST /api/v1/order/trades
+curl -X POST http://localhost:8080/api/v1/order/trades \
+  -H "Content-Type: application/json" \
+  -d '{}'
 ```
 
 ### Trade Status Values 交易狀態值
@@ -441,12 +629,38 @@ trade.status.cancel_quantity # Cancelled quantity 取消量
 
 ---
 
+## Order Deal Records 委託成交紀錄
+
+Retrieve today's order and deal records as a list of `(OrderState, dict)` tuples.
+取得今日委託及成交紀錄，回傳 `(OrderState, dict)` 元組列表。
+
+```python
+records = api.order_deal_records()
+
+for state, event in records:
+    print(f"State: {state}, Event: {event}")
+```
+
+#### HTTP: Order Deal Records
+
+```bash
+# POST /api/v1/order/order_deal_records
+curl -X POST http://localhost:8080/api/v1/order/order_deal_records \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+**Note 注意:** Not available in simulation mode. Returns empty list when `simulation=True`.
+模擬模式下不可用，`simulation=True` 時回傳空列表。
+
+---
+
 ## Order Callbacks 訂單回報
 
 Order and deal events are pushed automatically when orders are submitted or filled.
 委託及成交事件會在下單或成交時主動推送。
 
-### Set Order Callback 設定回報 Callback
+### set_order_callback 設定委託回報
 
 ```python
 def order_cb(stat, msg):
@@ -456,144 +670,68 @@ def order_cb(stat, msg):
 api.set_order_callback(order_cb)
 ```
 
+### clear_order_callback 清除委託回報
+
+```python
+api.clear_order_callback()
+```
+
+### set_event_callback 設定事件回報
+
+```python
+def event_cb(resp_code: int, event_code: int, info: str, event: str):
+    print(f"Event: {event_code} - {event}")
+
+api.set_event_callback(event_cb)
+```
+
+### clear_event_callback 清除事件回報
+
+```python
+api.clear_event_callback()
+```
+
+### Async Callbacks 非同步回報
+
+For `ShioajiAsync`, callbacks must be async functions:
+對於 `ShioajiAsync`，回調必須是非同步函式：
+
+```python
+api = sj.ShioajiAsync()
+await api.login(api_key="YOUR_KEY", secret_key="YOUR_SECRET")
+
+async def order_cb(stat, msg):
+    print(f"State: {stat}, Message: {msg}")
+
+api.set_order_callback(order_cb)
+
+async def event_cb(resp_code: int, event_code: int, info: str, event: str):
+    print(f"Event: {event_code} - {event}")
+
+api.set_event_callback(event_cb)
+```
+
+### Decorator Syntax 裝飾器語法
+
+```python
+@api.on_order
+def order_cb(stat, msg):
+    print(f"State: {stat}, Message: {msg}")
+
+@api.on_event
+def event_cb(resp_code: int, event_code: int, info: str, event: str):
+    print(f"Event: {event_code} - {event}")
+```
+
 ### OrderState Types 回報狀態類型
 
 ```python
 import shioaji as sj
 
-# Stock 股票
 sj.constant.OrderState.StockOrder  # 股票委託回報
 sj.constant.OrderState.StockDeal   # 股票成交回報
-
-# Futures/Options 期貨選擇權
 sj.constant.OrderState.FuturesOrder  # 期貨委託回報
 sj.constant.OrderState.FuturesDeal   # 期貨成交回報
-```
-
-### TypedDict Definitions 類型定義
-
-For better type hints, use these TypedDict definitions:
-使用以下 TypedDict 定義以獲得更好的型別提示：
-
-```python
-from typing import TypedDict, Literal
-
-class OperationDict(TypedDict):
-    op_type: Literal["New", "Cancel", "UpdatePrice", "UpdateQty"]
-    op_code: str  # "00" = success, others = fail
-    op_msg: str
-
-class AccountDict(TypedDict):
-    account_type: Literal["S", "F"]  # S=Stock, F=Futures
-    person_id: str
-    broker_id: str
-    account_id: str
-    signed: bool
-
-class StockOrderDict(TypedDict):
-    id: str
-    seqno: str
-    ordno: str
-    account: AccountDict
-    action: Literal["Buy", "Sell"]
-    price: float
-    quantity: int
-    order_type: Literal["ROD", "IOC", "FOK"]
-    price_type: Literal["LMT", "MKT", "MKP"]
-    order_cond: Literal["Cash", "MarginTrading", "ShortSelling"]
-    order_lot: Literal["Common", "Odd", "IntradayOdd", "Fixing"]
-    custom_field: str
-
-class OrderStatusDict(TypedDict):
-    id: str
-    exchange_ts: float
-    modified_price: float
-    cancel_quantity: int
-    order_quantity: int
-    web_id: str
-
-class StockContractDict(TypedDict):
-    security_type: Literal["STK"]
-    exchange: str
-    code: str
-    symbol: str
-    name: str
-    currency: str
-
-class StockOrderEvent(TypedDict):
-    operation: OperationDict
-    order: StockOrderDict
-    status: OrderStatusDict
-    contract: StockContractDict
-
-class StockDealEvent(TypedDict):
-    trade_id: str
-    seqno: str
-    ordno: str
-    exchange_seq: str
-    broker_id: str
-    account_id: str
-    action: Literal["Buy", "Sell"]
-    code: str
-    order_cond: Literal["Cash", "MarginTrading", "ShortSelling"]
-    order_lot: Literal["Common", "Odd", "IntradayOdd", "Fixing"]
-    price: float
-    quantity: int
-    web_id: str
-    custom_field: str
-    ts: float
-
-class FuturesOrderDict(TypedDict):
-    id: str
-    seqno: str
-    ordno: str
-    account: AccountDict
-    action: Literal["Buy", "Sell"]
-    price: float
-    quantity: int
-    order_type: Literal["ROD", "IOC", "FOK"]
-    price_type: Literal["LMT", "MKT", "MKP"]
-    market_type: Literal["Day", "Night"]
-    oc_type: Literal["New", "Cover", "Auto"]
-    subaccount: str
-    combo: bool
-
-class FuturesContractDict(TypedDict):
-    security_type: Literal["FUT", "OPT"]
-    code: str
-    full_code: str
-    exchange: str
-    delivery_month: str
-    delivery_date: str
-    strike_price: float
-    option_right: Literal["Future", "OptionCall", "OptionPut"]
-
-class FuturesOrderEvent(TypedDict):
-    operation: OperationDict
-    order: FuturesOrderDict
-    status: OrderStatusDict
-    contract: FuturesContractDict
-
-class FuturesDealEvent(TypedDict):
-    trade_id: str
-    seqno: str
-    ordno: str
-    exchange_seq: str
-    broker_id: str
-    account_id: str
-    action: Literal["Buy", "Sell"]
-    code: str
-    full_code: str
-    price: float
-    quantity: int
-    subaccount: str
-    security_type: Literal["FUT", "OPT"]
-    delivery_month: str
-    strike_price: float
-    option_right: Literal["Future", "OptionCall", "OptionPut"]
-    market_type: Literal["Day", "Night"]
-    combo: bool
-    ts: float
 ```
 
 ### Handle Different Events 處理不同事件
@@ -602,54 +740,77 @@ Split handlers by event type for clear type hints:
 依事件類型拆分 handler 以獲得明確的型別提示：
 
 ```python
-import shioaji as sj
 from shioaji.constant import OrderState
 
-def stock_order_handler(event: StockOrderEvent):
-    """Handle stock order event 處理股票委託回報"""
-    op = event["operation"]
-    order = event["order"]
-    if op["op_code"] == "00":
-        print(f"Stock order {op['op_type']} success: {order['id']}")
-    else:
-        print(f"Stock order failed: {op['op_msg']}")
-
-def stock_deal_handler(deal: StockDealEvent):
-    """Handle stock deal event 處理股票成交回報"""
-    print(f"Stock deal: {deal['code']} @ {deal['price']} x {deal['quantity']}")
-
-def futures_order_handler(event: FuturesOrderEvent):
-    """Handle futures order event 處理期貨委託回報"""
-    op = event["operation"]
-    order = event["order"]
-    contract = event["contract"]
-    if op["op_code"] == "00":
-        print(f"Futures order {op['op_type']}: {order['action']} {contract['code']}")
-    else:
-        print(f"Futures order failed: {op['op_msg']}")
-
-def futures_deal_handler(deal: FuturesDealEvent):
-    """Handle futures deal event 處理期貨成交回報"""
-    print(f"Futures deal: {deal['code']} @ {deal['price']} x {deal['quantity']}")
-
-def order_cb(stat: OrderState, msg: dict):
-    """Main callback dispatcher 主回調分發器"""
+def order_cb(stat, msg):
     if stat == OrderState.StockOrder:
-        stock_order_handler(msg)
+        op = msg["operation"]
+        if op["op_code"] == "00":
+            print(f"Stock order {op['op_type']} success: {msg['order']['id']}")
+        else:
+            print(f"Stock order failed: {op['op_msg']}")
     elif stat == OrderState.StockDeal:
-        stock_deal_handler(msg)
+        print(f"Stock deal: {msg['code']} @ {msg['price']} x {msg['quantity']}")
     elif stat == OrderState.FuturesOrder:
-        futures_order_handler(msg)
+        print(f"Futures order: {msg['order']['action']} {msg['contract']['code']}")
     elif stat == OrderState.FuturesDeal:
-        futures_deal_handler(msg)
+        print(f"Futures deal: {msg['code']} @ {msg['price']} x {msg['quantity']}")
 
 api.set_order_callback(order_cb)
 ```
 
-### Note 注意事項
-
-Deal events may arrive before order events due to exchange message priority.
+**Note 注意:** Deal events may arrive before order events due to exchange message priority.
 成交回報可能比委託回報更早到達，因為交易所訊息優先順序不同。
+
+### HTTP: Order Events via SSE
+
+Order events are available through SSE streaming. See [STREAMING.md](STREAMING.md) for SSE details.
+委託事件可透過 SSE 串流取得，詳見 [STREAMING.md](STREAMING.md)。
+
+---
+
+## Subscribe/Unsubscribe Trade 訂閱/取消訂閱交易回報
+
+Subscribe to trade events for a specific account. **Required** before consuming the order_event SSE stream in production — without it the relay does not forward FORDER/FDEAL/SORDER/SDEAL to the client. Same explicit-subscribe pattern as market-data subscription (#237).
+
+訂閱特定帳戶的交易事件，啟用即時委託/成交通知。正式環境下消費 `/stream/data/order_event` SSE 之前**必須**呼叫一次（每帳號一次），否則 relay 不會推送回報；pattern 與訂閱報價一致。
+
+### Python
+
+```python
+# Subscribe 訂閱
+result = api.subscribe_trade(api.stock_account)
+print(f"Subscribed: {result}")  # True if successful
+
+# Unsubscribe 取消訂閱
+result = api.unsubscribe_trade(api.stock_account)
+print(f"Unsubscribed: {result}")
+```
+
+#### Async 非同步
+
+```python
+result = await api.subscribe_trade(api.stock_account)
+result = await api.unsubscribe_trade(api.stock_account)
+```
+
+### HTTP (rshioaji server)
+
+```bash
+# Subscribe — required before opening /stream/data/order_event
+curl -X POST http://localhost:8080/api/v1/auth/subscribe_trade \
+  -H "Content-Type: application/json" \
+  -d '{"broker_id":"9A95","account_id":"1234567","account_type":"S"}'
+
+# Unsubscribe
+curl -X POST http://localhost:8080/api/v1/auth/unsubscribe_trade \
+  -H "Content-Type: application/json" \
+  -d '{"broker_id":"9A95","account_id":"1234567","account_type":"S"}'
+```
+
+Body shape: `{broker_id, account_id, account_type}` (`S` for stock, `F` for futures/options). Omit `broker_id`/`account_id` to subscribe the default account of `account_type`.
+
+Subscriptions survive the daily client swap via an in-memory registry, so callers only need to subscribe once per server boot per account. See [STREAMING.md](STREAMING.md) and [HTTP_API.md](HTTP_API.md#post-apiv1authsubscribe_trade) for full SSE/endpoint reference.
 
 ---
 
@@ -660,20 +821,21 @@ Deal events may arrive before order events due to exchange message priority.
 Prefer callbacks over `update_status()` to avoid rate limits.
 優先使用主動回報而非 `update_status()` 以避免觸發流量限制。
 
-```python
-def order_cb(stat: OrderState, msg: dict):
-    if stat == OrderState.StockOrder:
-        if msg["operation"]["op_code"] == "00":
-            print(f"Order accepted: {msg['order']['id']}")
-        else:
-            print(f"Order rejected: {msg['operation']['op_msg']}")
-    elif stat == OrderState.StockDeal:
-        print(f"Filled: {msg['code']} @ {msg['price']} x {msg['quantity']}")
+### 2. Non-blocking Orders 非阻塞下單
 
-api.set_order_callback(order_cb)
+Pass `timeout=0` for fire-and-forget order placement with optional callback:
+傳入 `timeout=0` 進行非阻塞下單，可附帶回調：
+
+```python
+def on_order_done(trade):
+    print(f"Order result: {trade.order.id} - {trade.status.status}")
+
+trade = api.place_order(contract, order, timeout=0, cb=on_order_done)
+# Returns immediately with placeholder trade
+# 立即回傳佔位 trade 物件
 ```
 
-### 2. Use update_status Only When Needed 僅在必要時使用 update_status
+### 3. Use update_status Only When Needed 僅在必要時使用 update_status
 
 Only use `update_status()` for:
 僅在以下情況使用 `update_status()`：
@@ -682,18 +844,17 @@ Only use `update_status()` for:
 - Query historical orders 查詢歷史訂單
 - When callback missed 回報遺漏時
 
-```python
-# Query specific trade only 僅查詢特定訂單
-api.update_status(trade=trade)
-
-# Or query all (use sparingly) 或查詢全部（謹慎使用）
-api.update_status(api.stock_account)
-```
-
-### 3. Handle Errors Gracefully 優雅處理錯誤
+### 4. Handle Errors Gracefully 優雅處理錯誤
 
 ```python
 try:
     trade = api.place_order(contract, order)
 except Exception as e:
     print(f"Order error: {e}")
+```
+
+For CLI order commands, see [CLI.md](CLI.md).
+CLI 下單命令請參見 [CLI.md](CLI.md)。
+
+For full HTTP endpoint inventory, see [HTTP_API.md](HTTP_API.md).
+完整的 HTTP 端點清單請參見 [HTTP_API.md](HTTP_API.md)。

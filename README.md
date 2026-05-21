@@ -6,19 +6,26 @@
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/shioaji.svg?style=for-the-badge)]()
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/shioaji.svg?style=for-the-badge)](https://pypi.org/project/shioaji)
 [![Coverage](https://img.shields.io/badge/coverage%20-99%25-yellowgreen.svg?style=for-the-badge)]()
-[![Binder](https://img.shields.io/badge/launch-Tutorial-ff69b4.svg?style=for-the-badge)](https://mybinder.org/v2/gh/Sinotrade/Sinotrade.github.io/master?filepath=tutorial%2Fshioaji_tutorial.ipynb)
 [![doc](https://img.shields.io/badge/docs%20-passing-orange.svg?style=for-the-badge)](https://sinotrade.github.io/)
 [![Telegram](https://img.shields.io/badge/chat-%20on%20telegram-blue.svg?style=for-the-badge)](https://t.me/joinchat/973EyAQlrfthZTk1)
+[![Discord](https://img.shields.io/badge/chat-%20on%20discord-5865F2.svg?style=for-the-badge)](https://discord.gg/5nzmWCTnG7)
 
-Shioaji is a trading API provided by Sinopac that offers a comprehensive and user-friendly platform for accessing the Taiwan financial markets. With Shioaji, you can trade a variety of financial instruments including stocks, futures, and options using your favorite Python packages such as numpy, scipy, pandas, pytorch, or tensorflow to build your own custom trading models. The platform is easy to use and intuitive, with advanced charting tools, real-time market data, and a customizable interface that allows you to tailor your trading experience to your specific needs. Shioaji is fast and efficient, with a high-performance core implemented in C++ and using FPGA event broker technology, and it is the first Python trading API in Taiwan that is compatible with Linux and Mac, making it a truly cross-platform solution. Whether you are a beginner looking to get started in the world of trading or an experienced trader looking for a more powerful platform, Shioaji has something to offer. [Sign up for a free account today and start trading with confidence.](https://sinotrade.github.io/tutor/prepare/open_account)
+[繁體中文](README.zh-TW.md)
 
-> ✨ **First Taiwan trading API with AI coding agent skill support** — [Claude Code & Codex CLI](#ai-coding-agent-skills)
+Shioaji is a trading API provided by Sinopac that offers a comprehensive and user-friendly platform for accessing the Taiwan financial markets. Shioaji is a **cross-language, cross-platform** universal trading platform — accessible through native Python bindings (`import shioaji as sj`) or any HTTP-capable language (JavaScript/TypeScript, Go, C/C++, C#, Rust, Java/Kotlin) for trading stocks, futures, options, and combo orders. On the Python side, Shioaji integrates seamlessly with familiar packages such as numpy, scipy, pandas, pytorch, and tensorflow for building custom trading models; on the HTTP side, a built-in OpenAPI interactive document, SSE real-time streaming, and a visual Dashboard provide live monitoring of server status, SSE connections, CA certificates, accounts, and API usage. Whether for traders new to the world of programmatic trading or experienced developers seeking a more powerful platform, Shioaji is built to deliver. [Sign up for a free account today and start trading with confidence.](https://sinotrade.github.io/tutor/prepare/open_account)
+
+> ✨ **The first Taiwan trading API with AI coding agent skill support** — [Claude Code & Codex CLI](#ai-coding-agent-skills)
 
 - [AI Coding Agent Skills](#ai-coding-agent-skills)
 - [Installation](#installation)
-    - [Binaries](#binaries)
-    - [Docker Image](#docker-image)
-- [Quickstarts](#quickstarts)
+    - [Python Package](#install-python)
+    - [CLI Tool](#install-cli)
+    - [Standalone Installer](#install-binary)
+- [Quickstart](#quickstart)
+    - [Python](#quickstart-python)
+    - [Cross-language](#quickstart-http)
+    - [CLI](#quickstart-cli)
+- [Conclusion](#conclusion)
 - [Communication](#communication)
 - [Releases and Contributing](#releases-and-contributing)
 - [The Team](#the-team)
@@ -34,7 +41,7 @@ claude plugin marketplace add Sinotrade/Shioaji
 claude plugin install shioaji
 ```
 
-#### Universal Installers (Cursor, Windsurf, Copilot, Codex, and more)
+#### Multi-platform Installers (Cursor, Windsurf, Copilot, Codex, and more)
 ```bash
 npx skills add Sinotrade/Shioaji                # skills.sh - 18+ agents
 npx skillkit install Sinotrade/Shioaji          # skillkit - 32+ agents
@@ -42,106 +49,195 @@ npx openskills install Sinotrade/Shioaji        # openskills - universal
 ```
 
 ## Installation
-### Binaries
-simple using pip to install
-```
+
+Expand the section that matches your installation preference.
+
+<a id="install-python"></a>
+<details>
+<summary><strong>Python Package</strong></summary>
+
+```bash
+# uv (recommended)
+uv add shioaji
+
+# pip
 pip install shioaji
 ```
-update shioaji with 
 
-```
-pip install -U shioaji
-```
+</details>
 
-### uv
-using uv to install
-```
-uv add shioaji 
-```
-install speed version
-```
-uv add shioaji --extra speed
+<a id="install-cli"></a>
+<details>
+<summary><strong>CLI Tool</strong></summary>
+
+```bash
+uv tool install shioaji
+shioaji --help
 ```
 
-### Docker Image
-simple run with interactive mode in docker
-```
-docker run -it sinotrade/shioaji:latest
-```
-run with jupyter lab or notebook
-```
-docker run -p 8888:8888 sinotrade/shioaji:jupyter
+</details>
+
+<a id="install-binary"></a>
+<details>
+<summary><strong>Standalone Installer</strong></summary>
+
+**Linux / macOS:**
+```bash
+# Stable
+curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh | sh
+
+# Pre-release
+curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh | CHANNEL=prerelease sh
+
+# Specific version
+curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh | VERSION=v1.5.0 sh
 ```
 
-## [Quickstarts](https://sinotrade.github.io/quickstart/)
-## Initialization
+**Windows (PowerShell):**
+```bash
+# Stable
+irm https://raw.githubusercontent.com/sinotrade/shioaji/master/install.ps1 | iex
+
+# Pre-release
+$env:CHANNEL="prerelease"; irm https://raw.githubusercontent.com/sinotrade/shioaji/master/install.ps1 | iex
+```
+
+</details>
+
+## [Quickstart](https://sinotrade.github.io/quickstart/)
+
+Expand the section that matches your preferred development language.
+
+<a id="quickstart-python"></a>
+<details>
+<summary><strong>Python</strong></summary>
+
+### Initialization (login + activate certificate)
 
 ```python
 import shioaji as sj
 
 api = sj.Shioaji()
-accounts = api.login("YOUR_TOKEN", "YOUR_SECRET_KEY")
+accounts = api.login(api_key="YOUR_KEY", secret_key="YOUR_SECRET")
 api.activate_ca(
     ca_path="/c/your/ca/path/Sinopac.pfx",
     ca_passwd="YOUR_CA_PASSWORD",
 )
 ```
-Just import our API library like other popular python library and new the instance to start using our API. Login your account and activate the certification then you can start placing order.
 
+Just import the API library like other popular Python packages and create the instance to start using it. After logging in, the API is ready for market data queries; once the certificate is activated, order placement is enabled.
 
-## [Streaming Market Data](https://sinotrade.github.io/tutor/market_data/streaming/)
+### Subscribe to Streaming Market Data
+
 ```python
-api.quote.subscribe(api.Contracts.Stocks["2330"], quote_type="tick")
-api.quote.subscribe(api.Contracts.Stocks["2330"], quote_type="bidask")
-api.quote.subscribe(api.Contracts.Futures["TXFC0"], quote_type="tick")
+api.subscribe(api.Contracts.Stocks["2330"], quote_type="tick")
+api.subscribe(api.Contracts.Stocks["2330"], quote_type="bid_ask")
+api.subscribe(api.Contracts.Futures["TXFC0"], quote_type="tick")
 ```
 
-Subscribe the real time market data. Simplely pass contract into quote `subscribe` function and give the quote type will receive the streaming data.
+Subscribe to real-time market data. Pass a contract into the `subscribe` function and specify a `quote_type` to begin receiving streaming data.
 
-
-## [Place Order](https://sinotrade.github.io/tutor/order/Stock/)
+### Place Order
 
 ```python
 contract = api.Contracts.Stocks["2890"]
-order = api.Order(
+order = sj.StockOrder(
     price=9.6,
     quantity=1,
-    action="Buy",
-    price_type="LMT",
-    order_type="ROD",
-    order_lot="Common",
-    account=api.stock_account,
-)
-# or
-order = api.Order(
-    price=9.6,
-    quantity=1,
-    action=sj.constant.Action.Buy,
-    price_type=sj.constant.StockPriceType.LMT,
-    order_type=sj.constant.OrderType.ROD,
-    order_lot=sj.constant.StockOrderLot.Common,
+    action=sj.Action.Buy,
+    price_type=sj.StockPriceType.LMT,
+    order_type=sj.OrderType.ROD,
+    order_lot=sj.StockOrderLot.Common,
     account=api.stock_account,
 )
 trade = api.place_order(contract, order)
 ```
 
-Like the above subscribing market data using the contract, then need to define the order. Pass them into `place_order` function, then it will return the trade that describe the status of your order.
+As with subscribing to market data using a contract, an order must first be defined and then passed alongside the contract into the `place_order` function. The function returns a `trade` object representing the order's status.
+
+</details>
+
+<a id="quickstart-http"></a>
+<details>
+<summary><strong>Cross-language</strong></summary>
+
+### Start the Server
+
+```bash
+shioaji server start
+```
+
+Once the server is running, all trading capabilities are exposed as RESTful endpoints accessible from any HTTP-capable language (JavaScript, Go, C#, Java, Rust, C/C++, etc.).
+
+Verify that the server has started successfully:
+
+```bash
+curl http://localhost:8080/api/v1/health
+```
+
+### Getting Started
+
+Once the server is running, the following entry points are available:
+
+| Purpose | URL |
+|---------|-----|
+| Dashboard (live monitoring & management) | `http://localhost:8080/` |
+| OpenAPI document (browse API, run tests in-browser) | `http://localhost:8080/docs` |
+| Custom apps (entry point for self-uploaded web apps) | `http://localhost:8080/apps/<name>/` |
+
+
+Open `/docs` to browse all endpoints, inspect request/response schemas, generate code samples in multiple languages, and test directly from the browser.
+
+### Custom Web Apps
+
+Custom web apps can be uploaded from the Dashboard's **Custom Apps** card and run alongside the Dashboard; once uploaded, an app is served at `http://localhost:8080/apps/<name>/`.
+
+- **Supported formats**: a single HTML file, or a build output folder from frontend frameworks such as Vite / React / Vue (containing `index.html`).
+- **Upload steps**: log in to the Dashboard → click **Custom Apps** → **Upload** → select the file or folder → set the application name `<name>`.
+- **Project template**: [`@sinotrade/create-shioaji-app`](https://www.npmjs.com/package/@sinotrade/create-shioaji-app) — scaffolds a Shioaji frontend project with one command.
+
+</details>
+
+<a id="quickstart-cli"></a>
+<details>
+<summary><strong>CLI</strong></summary>
+
+The `shioaji` CLI provides direct server management, market data queries, and order placement.
+
+```bash
+shioaji --help        # list all commands
+shioaji tree --all    # show full command tree (with parameters and descriptions)
+```
+
+**Server Management**
+
+| Purpose | Command |
+|---------|---------|
+| Start HTTP server (simulation mode) | `shioaji server start` |
+| Start HTTP server (production mode) | `shioaji server start --production` |
+| Check mode and authentication status | `shioaji server check` |
+| Show daemon status | `shioaji server status` |
+| Stop daemon | `shioaji server stop` |
+
+</details>
 
 ## Conclusion
-This quickstart demonstrates how easy to use our package for native Python users. Unlike many other trading API is hard for Python developer. We focus on making more pythonic trading API for our users. 
 
-More usage detail on document.
+This quickstart shows the multiple ways to access Shioaji — from native Python, HTTP API, and CLI to custom web apps. The focus is on building an easy-to-use, cross-language trading API that lets any developer trade Taiwan's financial markets with confidence.
+
+For more usage details, see
 
 [![doc](https://img.shields.io/badge/docs%20-passing-orange.svg?style=for-the-badge)](https://sinotrade.github.io/)
 
 
 ## Communication
 [![Telegram](https://img.shields.io/badge/chat-%20on%20telegram-blue.svg?style=for-the-badge)](https://t.me/joinchat/973EyAQlrfthZTk1)
+[![Discord](https://img.shields.io/badge/chat-%20on%20discord-5865F2.svg?style=for-the-badge)](https://discord.gg/5nzmWCTnG7)
 
 ## Releases and Contributing
 Shioaji has a 14 day release cycle. See the release [change log](https://sinotrade.github.io/release/). Please let us know if you encounter a bug by [filing an issue](https://github.com/Sinotrade/Shioaji/issues).
 
-We appreciate all suggestions. If you have any idea want us to implement, please discuss with us in gitter.
+We appreciate all suggestions. If you have any idea you'd like to see implemented, feel free to discuss with us on Telegram or Discord.
 
 ## The Team
-Shioaji is currently maintained by [Sally](https://github.com/SsallyLin), [Yvictor](https://github.com/Yvictor), [CC.Chiao](https://github.com/luckchiao) and [Po Chien Yang](https://github.com/ypochien) with major contributions.
+Shioaji is currently maintained by [Sally](https://github.com/SsallyLin), [Yvictor](https://github.com/Yvictor), [Zecheng](https://github.com/zechengwang724) and [Po Chien Yang](https://github.com/ypochien) with major contributions.

@@ -1,3 +1,3 @@
-FROM python:3.10-slim
+FROM python:3.13-slim
 
-RUN pip install shioaji==1.3.3
+RUN pip install --no-cache-dir shioaji==v1.5.0

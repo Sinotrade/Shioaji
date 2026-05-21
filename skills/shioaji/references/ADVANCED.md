@@ -1,7 +1,9 @@
 # Advanced Features 進階功能
 
-This document covers non-blocking mode, stop orders, historical data, and scanners.
-本文件說明非阻塞模式、觸價委託、歷史數據和掃描器。
+This document covers non-blocking mode, stop orders, historical data patterns, and best practices.
+rshioaji provides both Python callbacks and HTTP API + SSE streaming as alternative approaches.
+本文件說明非阻塞模式、觸價委託、歷史數據模式和最佳實踐。
+rshioaji 同時提供 Python 回調和 HTTP API + SSE 串流作為替代方案。
 
 ## Table of Contents 目錄
 
@@ -13,6 +15,7 @@ This document covers non-blocking mode, stop orders, historical data, and scanne
 - [Snapshots 快照](#snapshots-快照)
 - [Scanners 掃描器](#scanners-掃描器)
 - [Rate Limits 速率限制](#rate-limits-速率限制)
+- [HTTP API and SSE Alternatives HTTP API 與 SSE 替代方案](#http-api-and-sse-alternatives-http-api-與-sse-替代方案)
 - [Best Practices 最佳實踐](#best-practices-最佳實踐)
 - [Reference 參考資料](#reference-參考資料)
 
@@ -33,6 +36,11 @@ Non-blocking mode allows functions to return immediately without waiting for exc
 ### Basic Usage 基本用法
 
 ```python
+import shioaji as sj
+
+api = sj.Shioaji()
+api.login(api_key="YOUR_KEY", secret_key="YOUR_SECRET")
+
 # Set timeout=0 for non-blocking 設定 timeout=0 為非阻塞
 trade = api.place_order(contract, order, timeout=0)
 # Returns immediately with Inactive status
@@ -319,6 +327,8 @@ api.quote.subscribe(contract, quote_type=sj.constant.QuoteType.Tick)
 ### Ticks 逐筆成交
 
 ```python
+import shioaji as sj
+
 # Full day ticks 全天 Ticks
 ticks = api.ticks(
     contract=api.Contracts.Stocks["2330"],
@@ -559,7 +569,7 @@ scan.change_price    # Decimal: Price change 漲跌價
 scan.change_rate     # Decimal: Change rate % 漲跌幅
 scan.bid_orders      # int: Buy-side orders 內盤成交單量
 scan.ask_orders      # int: Sell-side orders 外盤成交單量
-snap.yesterday_volume # int: Yesterday volume 昨日成交量
+scan.yesterday_volume # int: Yesterday volume 昨日成交量
 ```
 
 ### Convert to Polars 轉換為 Polars
@@ -588,6 +598,52 @@ df = pl.DataFrame([
 | Quote query 行情查詢 | 50 / 5 sec |
 | Accounting 帳務 | 25 / 5 sec |
 | Orders 委託 | 250 / 10 sec |
+
+---
+
+## HTTP API and SSE Alternatives HTTP API 與 SSE 替代方案
+
+rshioaji provides HTTP API and SSE streaming as alternatives to Python callbacks. These approaches enable multi-language integration and decoupled architectures.
+rshioaji 提供 HTTP API 和 SSE 串流作為 Python 回調的替代方案，可實現多語言整合和解耦架構。
+
+### SSE Streaming Instead of Quote Callbacks 以 SSE 串流取代報價回調
+
+Instead of using Python quote callbacks and `bind=True`, you can consume real-time data via SSE from any language:
+除了使用 Python 報價回調和 `bind=True`，你可以從任何語言透過 SSE 消費即時數據：
+
+```bash
+# Subscribe first 先訂閱
+curl -X POST http://localhost:8080/api/v1/stream/subscribe \
+  -H "Content-Type: application/json" \
+  -d '{"security_type":"STK","exchange":"TSE","code":"2330","quote_type":"Tick"}'
+
+# Listen to SSE stream 監聽 SSE 串流
+curl -N http://localhost:8080/api/v1/stream/data
+```
+
+### HTTP API Instead of Non-blocking Mode 以 HTTP API 取代非阻塞模式
+
+HTTP requests are inherently asynchronous from the caller's perspective. The HTTP server handles blocking/non-blocking internally:
+HTTP 請求從呼叫端角度本身就是非同步的。HTTP 伺服器內部處理阻塞/非阻塞：
+
+```bash
+# Place order via HTTP (server handles timeout internally)
+# 透過 HTTP 下單（伺服器內部處理逾時）
+curl -X POST http://localhost:8080/api/v1/order/place \
+  -H "Content-Type: application/json" \
+  -d '{"contract":{...},"order":{...}}'
+```
+
+### When to Use Each Approach 何時使用各方案
+
+| Approach 方案 | Best For 適用場景 |
+|---------------|-------------------|
+| Python callbacks 回調 | Single-process Python trading systems 單行程 Python 交易系統 |
+| HTTP API | Multi-language clients, microservices 多語言客戶端、微服務 |
+| SSE streaming | Real-time dashboards, external consumers 即時儀表板、外部消費者 |
+| CLI | Quick queries, scripting, automation 快速查詢、腳本、自動化 |
+
+See [HTTP_API.md](HTTP_API.md) and [STREAMING.md](STREAMING.md) for full endpoint references.
 
 ---
 
@@ -649,6 +705,21 @@ def analyze_kbars(symbols: list) -> pl.DataFrame:
         pl.col("close").pct_change().over("code").alias("return"),
         pl.col("close").rolling_mean(20).over("code").alias("sma20"),
     ])
+```
+
+### 4. Use SSE for Cross-language Streaming 跨語言串流使用 SSE
+
+When building trading systems in languages other than Python, use the HTTP server with SSE streaming instead of Python callbacks:
+在非 Python 語言建構交易系統時，使用 HTTP 伺服器搭配 SSE 串流取代 Python 回調：
+
+```javascript
+// JavaScript example — consume SSE stream
+// JavaScript 範例 — 消費 SSE 串流
+const es = new EventSource("http://localhost:8080/api/v1/stream/data");
+es.addEventListener("tick", (event) => {
+    const tick = JSON.parse(event.data);
+    console.log(`${tick.code}: ${tick.close} x ${tick.volume}`);
+});
 ```
 
 ---
