@@ -90,7 +90,7 @@ curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh
 curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh | CHANNEL=prerelease sh
 
 # Specific version
-curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh | VERSION=v1.5.0 sh
+curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh | VERSION=v1.5.1 sh
 ```
 
 **Windows (PowerShell):**

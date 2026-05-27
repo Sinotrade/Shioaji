@@ -56,7 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.sh 
 curl -fsSL https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.sh | CHANNEL=prerelease sh
 
 # Specific version
-curl -fsSL https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.sh | VERSION=v1.5.0 sh
+curl -fsSL https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.sh | VERSION=v1.5.1 sh
 ```
 
 **Windows (PowerShell):**
@@ -69,7 +69,7 @@ irm https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.ps1 | iex
 $env:CHANNEL="prerelease"; irm https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.ps1 | iex
 
 # Specific version
-$env:VERSION="v1.5.0"; irm https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.ps1 | iex
+$env:VERSION="v1.5.1"; irm https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.ps1 | iex
 ```
 
 > **Note**: installer URLs will change from `sinotrade/rshioaji` to `sinotrade/shioaji` when the production version ships.
