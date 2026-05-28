@@ -1,9 +1,14 @@
 # Watchlist 自選股清單
 
-This document covers watchlist CRUD operations in rshioaji.
-本文件說明 rshioaji 中自選股清單的增刪改查功能。
+This document covers watchlist CRUD operations in Shioaji.
+本文件說明 Shioaji 中自選股清單的增刪改查功能。
 
-See [HTTP_API.md](HTTP_API.md) for full endpoint details.
+See [HTTP_API.md](HTTP_API.md) for full endpoint details. This file owns `Watchlist` / `Vec<Watchlist>` response shapes.
+
+Watchlist is supplemental HTTP functionality, not part of the main tutorial flow.
+
+Python methods return `Watchlist` objects or `list[Watchlist]` with Python contract objects. HTTP clients receive JSON `Watchlist` / `Vec<Watchlist>` shapes; fetch `/openapi.json` only when exact installed-server fields are required.
+Python method 回傳的是包含 Python contract 物件的 `Watchlist` 或 `list[Watchlist]`。HTTP client 收到的是 JSON `Watchlist` / `Vec<Watchlist>` shape；只有需要確認安裝版本精確欄位時才查 `/openapi.json`。
 
 **Note:** CLI watchlist commands are NOT implemented. Use Python or HTTP API.
 **注意：** CLI 自選股命令尚未實作。請使用 Python 或 HTTP API。
@@ -11,6 +16,7 @@ See [HTTP_API.md](HTTP_API.md) for full endpoint details.
 ## Table of Contents 目錄
 
 - [Overview 概覽](#overview-概覽)
+- [Watchlist Response and Decision Summary 自選股回應與決策摘要](#watchlist-response-and-decision-summary-自選股回應與決策摘要)
 - [Fetch All Watchlists 取得所有清單](#fetch-all-watchlists-取得所有清單)
 - [Get Watchlist by ID 依 ID 取得清單](#get-watchlist-by-id-依-id-取得清單)
 - [Create Watchlist 建立清單](#create-watchlist-建立清單)
@@ -20,6 +26,7 @@ See [HTTP_API.md](HTTP_API.md) for full endpoint details.
 - [Remove Contracts 移除合約](#remove-contracts-移除合約)
 - [Watchlist Attributes 自選股屬性](#watchlist-attributes-自選股屬性)
 - [HTTP Endpoint Summary HTTP 端點一覽](#http-endpoint-summary-http-端點一覽)
+- [Apps Supplemental Endpoints 自訂應用補充端點](#apps-supplemental-endpoints-自訂應用補充端點)
 
 ---
 
@@ -34,6 +41,23 @@ See [HTTP_API.md](HTTP_API.md) for full endpoint details.
 | `sync_watchlist(group_id, contracts)` | Replace all contracts 覆蓋所有合約 | `PUT /api/v1/watchlist/{id}` |
 | `watchlist_add_contract(group_id, contracts)` | Add contracts 新增合約 | `POST /api/v1/watchlist/{id}/contracts` |
 | `watchlist_delete_contract(group_id, contracts)` | Remove contracts 移除合約 | `DELETE /api/v1/watchlist/{id}/contracts` |
+
+---
+
+## Watchlist Response and Decision Summary 自選股回應與決策摘要
+
+Watchlist is supplemental. Prefer normal market-data/order references for trading workflows; use this file when the user explicitly asks to manage saved watchlists or uploaded apps.
+Watchlist 屬於補充功能。交易流程優先看行情/下單 reference；只有使用者明確要管理自選股或上傳應用時才用本檔。
+
+| Operation | Python return | HTTP response | CLI output | Agent decision |
+|-----------|---------------|---------------|------------|----------------|
+| List watchlists | `api.fetch_watchlists()` -> `list[Watchlist]` | `GET /api/v1/watchlist` -> `Vec<Watchlist>` | No watchlist CLI command | Empty list means no saved watchlists; do not treat it as auth failure unless other protected endpoints also fail. |
+| Get watchlist | `api.get_watchlist(group_id)` -> `Watchlist` | `GET /api/v1/watchlist/{id}` -> `Watchlist` | No watchlist CLI command | 404/error means the id does not exist or is not visible to this account; do not invent a fallback id. |
+| Create watchlist | `api.create_watchlist(name, contracts=None)` -> `Watchlist` | `POST /api/v1/watchlist` -> `Watchlist` | No watchlist CLI command | Response contains the created `id`, `name`, and normalized `contracts`; store/use the returned `id`, not the submitted name. |
+| Delete watchlist | `api.delete_watchlist(group_id)` -> deleted `Watchlist` | `DELETE /api/v1/watchlist/{id}` -> deleted `Watchlist` | No watchlist CLI command | Successful response is the deleted list object. If follow-up list still shows it, refresh before retrying destructive operations. |
+| Sync contracts | `api.sync_watchlist(group_id, contracts)` -> `Watchlist` | `PUT /api/v1/watchlist/{id}` -> `Watchlist` | No watchlist CLI command | This replaces all contracts. Use only when the user intends overwrite; for append/remove use add/delete contract endpoints. |
+| Add contracts | `api.watchlist_add_contract(group_id, contracts)` -> `Watchlist` | `POST /api/v1/watchlist/{id}/contracts` -> `Watchlist` | No watchlist CLI command | Response is the updated list. Check returned `contracts` to confirm which contracts were accepted/normalized. |
+| Remove contracts | `api.watchlist_delete_contract(group_id, contracts)` -> `Watchlist` | `DELETE /api/v1/watchlist/{id}/contracts` -> `Watchlist` | No watchlist CLI command | Response is the updated list. If the contract is still present, check code/security_type/exchange normalization before retrying. |
 
 ---
 
@@ -298,7 +322,7 @@ watchlist.contracts   # list: List of BaseContract objects 合約列表
 ### Contract in Watchlist 清單中的合約
 
 ```python
-contract.security_type  # SecurityType: STK/FUT/OPT/IDX 商品類型
+contract.security_type  # SecurityType: STK/FUT/OPT/IND 商品類型
 contract.exchange       # Exchange: TSE/OTC/TAIFEX 交易所
 contract.code           # str: Contract code 合約代碼
 ```
@@ -320,10 +344,18 @@ All watchlist endpoints are under `/api/v1/watchlist`:
 | `POST` | `/watchlist/{id}/contracts` | Add contracts 新增合約 |
 | `DELETE` | `/watchlist/{id}/contracts` | Remove contracts 移除合約 |
 
-See [HTTP_API.md](HTTP_API.md) for full endpoint details.
+See [HTTP_API.md](HTTP_API.md) for full endpoint details. Agent decision guidance is in the sections above.
 
 ---
 
-## Reference 參考資料
+## Apps Supplemental Endpoints 自訂應用補充端點
 
-- Original shioaji docs 原版文檔: https://sinotrade.github.io/
+Apps are HTTP-only supplemental endpoints for uploaded web app files. They are not Python trading APIs and have no primary CLI commands.
+Apps 是 HTTP-only 的補充端點，用於上傳網頁應用檔案；不是 Python 交易 API，也沒有主要 CLI command。
+
+| Operation | Python return | HTTP response | CLI output | Agent decision |
+|-----------|---------------|---------------|------------|----------------|
+| List apps | No Python API | `GET /api/v1/apps` -> `{ apps: Vec<String> }` | No primary CLI command | Empty `apps` means no uploaded apps. This does not affect trading API health. |
+| Upload app | No Python API | `POST /api/v1/apps/{name}` multipart field `files` -> `{ name: String, files: Vec<String> }` | No primary CLI command | Use multipart field name `files`; total upload limit is 50 MB; chunked uploads are rejected because `Content-Length` is required. |
+| Delete app | No Python API | `DELETE /api/v1/apps/{name}` -> `{ deleted: String }` | No primary CLI command | Response confirms the app name removed. 404/error means not found or invalid name/path. |
+| Serve app | No Python API | `GET /apps/{path}` serves uploaded files, outside `/api/v1` | No primary CLI command | Public serving route. Do not send bearer auth assumptions into static app fetches; path traversal is rejected. |

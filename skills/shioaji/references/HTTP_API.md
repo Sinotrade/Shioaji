@@ -1,12 +1,13 @@
 # Shioaji HTTP API Reference / Shioaji HTTP API 參考
 
-> **Shioaji is no longer Python-only.** The Rust reimplementation exposes a full HTTP API server,
-> enabling any language, tool, or platform to trade Taiwan markets. The same binary that powers
-> the CLI also serves a RESTful API with real-time SSE streaming, OpenAPI documentation, a
-> built-in dashboard, and support for custom embedded applications.
+> **Shioaji is no longer Python-only.** The Shioaji CLI can start an HTTP API server,
+> enabling any language, tool, or platform to trade Taiwan markets through REST endpoints,
+> real-time SSE streaming, OpenAPI documentation, a built-in dashboard, and custom apps.
 
-> Canonical inventory of every HTTP endpoint, generated from source.
-> Source of truth: `src/server/http/mod.rs`, `src/server/http/*.rs`
+> Endpoint inventory for the Shioaji HTTP server.
+> For exact schemas on an installed server, fetch `GET /openapi.json`.
+
+Use this file for endpoint routing, request examples, server behavior, OpenAPI discovery, dashboard, watchlist, and app-hosting details. For response decisions, use the matching functional reference; fetch `/openapi.json` from the running server when exact installed-server schemas are required.
 
 ---
 
@@ -44,12 +45,12 @@
 
 ## Overview / 概覽
 
-The Shioaji HTTP API is served by the same `shioaji` binary via `shioaji server start`. It is built on the Salvo web framework and provides:
+The Shioaji HTTP API is served by `shioaji server start` and provides:
 
 - RESTful JSON endpoints for all trading operations
 - Server-Sent Events (SSE) for real-time market data and order events
 - OpenAPI 3.0 specification with Scalar documentation UI
-- Built-in React dashboard (embedded at build time)
+- Built-in dashboard
 - Custom app hosting (upload your own web apps)
 - CORS support, gzip compression, request logging, panic recovery
 
@@ -258,9 +259,17 @@ Returns health status. Public, no auth required.
 {
   "status": "healthy",
   "version": "0.6.0",
-  "timestamp": "2024-01-15T08:30:00Z"
+  "timestamp": "2024-01-15T08:30:00Z",
+  "token_expires_in_seconds": 86000,
+  "token_stale": false,
+  "contract_count": 55352,
+  "next_maintenance": "2026-05-28T00:24:17+00:00",
+  "ca_expires_in_days": 109,
+  "ca_expired": false
 }
 ```
+
+For health/auth readiness decisions, see [PREPARE.md](PREPARE.md).
 
 #### GET `/api/v1/info`
 
@@ -276,19 +285,24 @@ Returns API server information including simulation mode.
 }
 ```
 
+For simulation/production branching, see [PREPARE.md](PREPARE.md).
+
 ### Auth Endpoints
 
 #### GET `/api/v1/auth/accounts`
 
 List all trading accounts associated with the session.
+For account selection decisions, see [PREPARE.md](PREPARE.md).
 
 #### GET `/api/v1/auth/usage`
 
 Get API usage statistics (connections, data transfer, limits).
+For usage/quota decisions, see [PREPARE.md](PREPARE.md) and [MARKET_DATA.md](MARKET_DATA.md).
 
 #### GET `/api/v1/auth/ca_expiretime?person_id=<PERSON_ID>`
 
 Get CA certificate expiry time for a person. The `person_id` query parameter is required.
+For CA/order-readiness decisions, see [PREPARE.md](PREPARE.md) and [ORDERS.md](ORDERS.md).
 
 #### POST `/api/v1/auth/subscribe_trade`
 
@@ -317,15 +331,17 @@ Response (200):
 }
 ```
 
-The server records the subscription in an in-memory registry; the daily client swap replays it automatically, so callers only need to subscribe once per server boot per account.
+The server keeps the subscription active across its daily client refresh, so callers only need to subscribe once per server boot per account.
 
-**Simulation:** the sw relay's `/auth/subscribe_trade` rejects simulation tokens (paper order events are delivered through a separate path). The server short-circuits this call client-side and returns a no-op success (`200`); nothing is added to the replay registry. Calling it is harmless but never required in simulation.
+**Simulation:** paper order events are delivered through a separate path. The server returns a no-op success (`200`) for `subscribe_trade`. Calling it is harmless but never required in simulation.
+
+For trade-event subscription decisions, see [PREPARE.md](PREPARE.md), [ORDERS.md](ORDERS.md), and [STREAMING.md](STREAMING.md).
 
 #### POST `/api/v1/auth/unsubscribe_trade`
 
-Inverse of `subscribe_trade`. Removes the account from the registry only after the relay confirms unsubscribe. Same request shape; response has `"subscribe_trade": false`.
+Inverse of `subscribe_trade`. Stops order/deal events for the account when unsubscribe succeeds. Same request shape; response has `"subscribe_trade": false`.
 
-**Simulation:** returns `400 Bad Request` with a `ValueError`-style detail — simulation has no relay subscription to cancel. Don't call this in simulation.
+**Simulation:** can return `400 Bad Request` because there is no production trade-event subscription to cancel. Don't call this in simulation.
 
 ### Data Endpoints
 
@@ -398,14 +414,14 @@ Get scanner ranking data.
 
 ```json
 {
-  "scanner_type": "change-percent-rank",
+  "scanner_type": "ChangePercentRank",
   "date": "2024-01-15",
   "ascending": false,
   "count": 200
 }
 ```
 
-Scanner types: `change-percent-rank`, `change-price-rank`, `day-range-rank`, `volume-rank`, `amount-rank`, `tick-count-rank`.
+Scanner types: `ChangePercentRank`, `ChangePriceRank`, `DayRangeRank`, `VolumeRank`, `AmountRank`, `TickCountRank`.
 
 #### GET `/api/v1/data/regulatory_punish`
 
@@ -468,7 +484,7 @@ Stock order:
 Futures order:
 ```json
 {
-  "contract": { "security_type": "FUT", "exchange": "TAIFEX", "code": "TXFR1" },
+  "contract": { "security_type": "FUT", "exchange": "TAIFEX", "code": "TXFF6" },
   "futures_order": {
     "action": "Buy",
     "price": 17000.0,
@@ -505,17 +521,25 @@ login session. Available since 1.5.12 (#234).
 { "trade_id": "abc123" }
 ```
 
+`trade_id` is `Trade.order.id` from a `Trade` returned by the same server process. Internally the server looks up that id in its trade cache to recover the original contract, order, account, and CA before sending cancel/update upstream. If the caller only knows `ordno`/`seqno`, or the order was not placed through this server process, call `POST /api/v1/order/trades` first; it runs `update_status(account)`, refreshes the cache, and returns `Vec<Trade>`. Select the intended trade, then send `trade.order.id`.
+
+The returned `Trade` is not always the final cancelled state. Watch official `order_deal_event` via `/api/v1/stream/data/order_event`, or call `/api/v1/order/trades` again for reconciliation.
+
 #### POST `/api/v1/order/update_price`
 
 ```json
 { "trade_id": "abc123", "price": 605.0 }
 ```
 
+Uses the same cache-backed `trade_id = Trade.order.id` rule as `cancel_order`. Call `/order/trades` first when the target trade may not already be cached by this server process.
+
 #### POST `/api/v1/order/update_qty`
 
 ```json
 { "trade_id": "abc123", "quantity": 2 }
 ```
+
+Uses the same cache-backed `trade_id = Trade.order.id` rule as `cancel_order`: use `Trade.order.id` from `/order/trades` or a fresh place-order response. Quantity updates can reduce quantity only.
 
 #### POST `/api/v1/order/trades`
 
@@ -718,6 +742,8 @@ Subscription request:
 
 `quote_type`: `"Tick"`, `"BidAsk"`, `"Quote"`.
 
+For HTTP subscriptions to futures continuous-month aliases such as `TXFR1`/`TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into the subscribe body. Regular futures codes do not need this. If `target_code` is missing for `TXFR1`/`TXFR2`, the server can return `200` while the SSE stream only emits heartbeats.
+
 **Intraday odd lot 盤中零股**: set `"intraday_odd": true` (works for both `"Tick"` and `"BidAsk"`; stocks only). Regular and odd-lot subscriptions are independent — you can subscribe to both for the same stock and tell them apart on the SSE side via the `intraday_odd` flag carried on each event payload:
 
 ```json
@@ -864,9 +890,9 @@ Serve uploaded app files. This is a public route (no auth required), served from
 
 ## OpenAPI Documentation / OpenAPI 文件
 
-The server auto-generates an OpenAPI 3.0 specification from endpoint annotations. **This is the authoritative source for the latest API format and payload schemas** — when in doubt, fetch `/openapi.json` from a running server to see exact field names, types, required/optional status, and enum values.
+The server exposes an OpenAPI 3.0 specification. When in doubt, fetch `/openapi.json` from the running server to confirm exact field names, types, required/optional status, and enum values.
 
-伺服器自動產生 OpenAPI 3.0 規格。**這是最權威的最新 API 格式與 payload schema 來源** — 有疑問時，從運行中的伺服器取得 `/openapi.json` 即可查看確切的欄位名稱、型別、必填/選填狀態及列舉值。
+伺服器提供 OpenAPI 3.0 規格。有疑問時，從運行中的伺服器取得 `/openapi.json`，即可確認欄位名稱、型別、必填/選填狀態及列舉值。
 
 | Path | Description |
 |------|-------------|
@@ -911,16 +937,16 @@ curl -s http://localhost:8080/openapi.json | jq '.components.schemas["PlaceOrder
 curl -s http://localhost:8080/openapi.json | jq '.components.schemas["Action"]'
 ```
 
-#### Why use OpenAPI instead of this doc / 為什麼用 OpenAPI 而非本文件
+#### When to use OpenAPI / 何時使用 OpenAPI
 
-This reference documents the endpoint inventory and general usage patterns. But the OpenAPI spec is **generated from the actual Rust code** at runtime, so it is always up to date with:
+This reference documents endpoint inventory and general usage patterns. Use `/openapi.json` when exact installed-server details matter:
 - Exact field names and casing (e.g., `security_type` vs `securityType`)
 - Required vs optional fields
 - Enum variants (all valid values for Action, OrderType, PriceType, etc.)
 - Nested object structures and array types
 - Default values
 
-When building a client in any language, **always fetch `/openapi.json` first** to confirm the exact payload format before writing code. The language reference guides (JAVASCRIPT.md, GO.md, etc.) show the general pattern and include OpenAPI client generation commands specific to each language. `/openapi.json` is the single source of truth for the current server version.
+The language reference guides (JAVASCRIPT.md, GO.md, etc.) show the general pattern and include OpenAPI client generation commands specific to each language. `/openapi.json` describes the currently running server version.
 
 The OpenAPI spec includes:
 - All endpoint definitions with request/response schemas
@@ -932,14 +958,14 @@ The OpenAPI spec includes:
 
 ## Dashboard / 儀表板
 
-A React-based dashboard is embedded into the binary at build time from `dashboard/dist/`.
+The server includes a built-in web dashboard.
 
 | Path | Description |
 |------|-------------|
 | `/` | Dashboard index (single-page app) |
 | `/{**path}` | Static assets (JS, CSS, images) with `index.html` fallback for SPA routing |
 
-The dashboard is served via `static_embed` with `RustEmbed`, meaning it requires no external files at runtime.
+The dashboard requires no external web files at runtime.
 
 ---
 

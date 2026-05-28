@@ -1,8 +1,12 @@
-# Java/Kotlin HTTP Client Guide / Java/Kotlin HTTP 客戶端指南
+# Java/Kotlin HTTP/SSE Client Patterns
 
-This guide covers consuming the Shioaji HTTP API from Java and Kotlin. Java uses `java.net.http.HttpClient` (Java 11+); Kotlin adds coroutines for async patterns. SSE streaming uses OkHttp's EventSource.
+Transport guide for building Java/Kotlin applications that call the Shioaji HTTP API and consume SSE streams.
 
-本指南介紹如何從 Java 和 Kotlin 呼叫 Shioaji HTTP API。Java 使用 `java.net.http.HttpClient`（Java 11+）；Kotlin 搭配 coroutines 實現非同步模式。SSE 串流使用 OkHttp EventSource。
+本文件說明 Java/Kotlin 如何送 HTTP request、處理 JSON response、消費 SSE 串流。它不是 endpoint payload 或 response schema catalog。
+
+This is a transport/client-pattern guide: how to send HTTP requests, parse responses, handle errors, and consume SSE in Java/Kotlin. It is not an endpoint payload or response schema catalog. Use the matching functional reference for workflow, payload rules, response shapes, and branching decisions. Use [HTTP_API.md](HTTP_API.md) for endpoint inventory. Fetch `/openapi.json` for production clients.
+
+This language guide is transport-only. Do not restate or override shared HTTP rules here: order update/cancel `trade_id`, `order_deal_event` over SSE, simulation vs production, and SSE payload field types are governed by [HTTP_API.md](HTTP_API.md) and the matching functional reference.
 
 ---
 
@@ -28,11 +32,12 @@ Start the Shioaji HTTP server first:
 先啟動 Shioaji HTTP 伺服器：
 
 ```bash
-uv tool install rshioaji
-# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.sh | sh
-export SJ_API_KEY=YOUR_KEY SJ_SEC_KEY=YOUR_SECRET
+uv tool install shioaji
+# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | sh
 shioaji server start   # simulation mode by default
 ```
+
+Before starting the server, configure `.env` in the server working directory or export equivalent variables: `SJ_API_KEY`, `SJ_SEC_KEY`, `SJ_CA_PATH`, `SJ_CA_PASSWD`, and `SJ_PRODUCTION`. Use `SJ_PRODUCTION=false` while testing language clients unless the user explicitly needs production mode. See [PREPARE.md](PREPARE.md) for full setup, certificate, and `.env` details.
 
 The server runs at `http://localhost:8080` with all endpoints under `/api/v1/`.
 
@@ -146,7 +151,7 @@ my-trading-app/
 │   │   ├── ContractRef.java
 │   │   ├── OrderSpec.java
 │   │   ├── PlaceOrderRequest.java
-│   │   ├── OrderResponse.java
+│   │   ├── Trade.java
 │   │   ├── Snapshot.java
 │   │   └── SubscribeRequest.java
 │   ├── streaming/
@@ -168,14 +173,16 @@ my-trading-app/
 package com.example.models;
 
 public class ContractRef {
-    public String security_type;  // "STK", "FUT", "OPT"
+    public String security_type;  // "STK", "FUT", "OPT", or "IND"
     public String exchange;       // "TSE", "OTC", "TAIFEX"
     public String code;           // e.g. "2330"
+    public String target_code;    // only needed for resolved aliases such as TXFR1/TXFR2
 
     public ContractRef(String securityType, String exchange, String code) {
         this.security_type = securityType;
         this.exchange = exchange;
         this.code = code;
+        this.target_code = null;
     }
 }
 ```
@@ -197,11 +204,11 @@ public class Account {
 package com.example.models;
 
 public class Snapshot {
+    public String datetime;
     public String code;
     public double close;
     public long volume;
     public long total_volume;
-    public long ts;
 }
 ```
 
@@ -235,23 +242,28 @@ package com.example.models;
 
 public class PlaceOrderRequest {
     public ContractRef contract;
-    public OrderSpec order;
+    public OrderSpec stock_order;
+    public OrderSpec futures_order;
 
-    public PlaceOrderRequest(ContractRef contract, OrderSpec order) {
+    public PlaceOrderRequest(ContractRef contract, OrderSpec stockOrder) {
         this.contract = contract;
-        this.order = order;
+        this.stock_order = stockOrder;
+        this.futures_order = null;
     }
 }
 ```
 
-**OrderResponse.java**:
+**Trade.java**:
 
 ```java
 package com.example.models;
 
-public class OrderResponse {
-    public String order_id;
-    public String status;
+import java.util.Map;
+
+public class Trade {
+    public ContractRef contract;
+    public Map<String, Object> order;
+    public Map<String, Object> status;
 }
 ```
 
@@ -264,6 +276,7 @@ public class SubscribeRequest {
     public String security_type;
     public String exchange;
     public String code;
+    public String target_code;
     public String quote_type;  // "Tick", "BidAsk", "Quote"
 
     public SubscribeRequest(String securityType, String exchange,
@@ -271,8 +284,21 @@ public class SubscribeRequest {
         this.security_type = securityType;
         this.exchange = exchange;
         this.code = code;
+        this.target_code = null;
         this.quote_type = quoteType;
     }
+}
+```
+
+**SubscriptionResponse.java**:
+
+```java
+package com.example.models;
+
+public class SubscriptionResponse {
+    public boolean success;
+    public String message;
+    public SubscribeRequest subscription;
 }
 ```
 
@@ -343,7 +369,7 @@ public class ShioajiClient {
     }
 
     /** POST /api/v1/order/place_order */
-    public OrderResponse placeOrder(PlaceOrderRequest orderRequest)
+    public Trade placeOrder(PlaceOrderRequest orderRequest)
             throws IOException, InterruptedException {
         String body = gson.toJson(orderRequest);
 
@@ -356,11 +382,11 @@ public class ShioajiClient {
         HttpResponse<String> response = client.send(request,
             HttpResponse.BodyHandlers.ofString());
 
-        return gson.fromJson(response.body(), OrderResponse.class);
+        return gson.fromJson(response.body(), Trade.class);
     }
 
     /** POST /api/v1/stream/subscribe */
-    public void subscribe(SubscribeRequest subscribeRequest)
+    public SubscriptionResponse subscribe(SubscribeRequest subscribeRequest)
             throws IOException, InterruptedException {
         String body = gson.toJson(subscribeRequest);
 
@@ -370,7 +396,8 @@ public class ShioajiClient {
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build();
 
-        client.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        return gson.fromJson(response.body(), SubscriptionResponse.class);
     }
 
     public String getBaseUrl() {
@@ -406,13 +433,15 @@ for (Snapshot snap : snapshots) {
 
 ### Place Order / 下單
 
-```java
-OrderResponse response = client.placeOrder(new PlaceOrderRequest(
-    new ContractRef("STK", "TSE", "2330"),
-    new OrderSpec("Buy", 580.0, 1, "LMT", "ROD")
-));
+Keep order examples disabled in runnable code. Confirm account, production/simulation mode, payload rules, response status, and `order_deal_event` handling in [ORDERS.md](ORDERS.md) before enabling.
 
-System.out.printf("Order ID: %s, Status: %s%n", response.order_id, response.status);
+```java
+// Trade response = client.placeOrder(new PlaceOrderRequest(
+//     new ContractRef("STK", "TSE", "2330"),
+//     new OrderSpec("Buy", 580.0, 1, "LMT", "ROD")
+// ));
+//
+// System.out.printf("Trade status: %s%n", response.status);
 ```
 
 ## 6. SSE Streaming (Java) / SSE 即時串流 (Java)
@@ -463,14 +492,14 @@ public class SseClient {
             @Override
             public void onEvent(EventSource es, String id, String type, String data) {
                 if ("tick_stk".equals(type)) {
-                    // Note: price fields (close, open, high, low, diff_price) are JSON strings (Decimal precision)
-                    // Volume fields (volume, vol_sum) are JSON numbers
+                    // Note: price fields (close, open, high, low, price_chg) are JSON strings (Decimal precision)
+                    // Volume fields (volume, total_volume) are JSON numbers
                     JsonObject tick = gson.fromJson(data, JsonObject.class);
                     handler.onTick(
                         tick.get("code").getAsString(),
                         new java.math.BigDecimal(tick.get("close").getAsString()),
                         tick.get("volume").getAsLong(),
-                        tick.get("vol_sum").getAsLong()
+                        tick.get("total_volume").getAsLong()
                     );
                 }
             }
@@ -517,6 +546,10 @@ Workflow:
 2. **Connect** -- `GET /api/v1/stream/data/tick_stk` (or other stream endpoint)
 3. **Unsubscribe** -- `POST /api/v1/stream/unsubscribe` when done
 
+For futures continuous-month aliases such as `TXFR1` / `TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into `SubscribeRequest`. Regular futures codes do not need `target_code`.
+
+Order events use a separate account subscription in production. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` once per account; simulation does not require it.
+
 ## 7. Kotlin Variant / Kotlin 版本
 
 Kotlin uses coroutines for a more idiomatic async approach. The HTTP client wraps Java's `HttpClient` with suspending functions, and SSE streaming uses Kotlin Flows.
@@ -542,17 +575,18 @@ import java.net.http.HttpResponse
 data class ContractRef(
     val security_type: String,
     val exchange: String,
-    val code: String
+    val code: String,
+    val target_code: String? = null
 )
 
 data class Account(val account_id: String, val signed: Boolean)
 
 data class Snapshot(
+    val datetime: String,
     val code: String,
     val close: Double,
     val volume: Long,
-    val total_volume: Long,
-    val ts: Long
+    val total_volume: Long
 )
 
 data class OrderSpec(
@@ -563,14 +597,29 @@ data class OrderSpec(
     val order_type: String
 )
 
-data class PlaceOrderRequest(val contract: ContractRef, val order: OrderSpec)
-data class OrderResponse(val order_id: String, val status: String)
+data class PlaceOrderRequest(
+    val contract: ContractRef,
+    val stock_order: OrderSpec? = null,
+    val futures_order: OrderSpec? = null
+)
+data class Trade(
+    val contract: ContractRef,
+    val order: Map<String, Any?>,
+    val status: Map<String, Any?>
+)
 
 data class SubscribeRequest(
     val security_type: String,
     val exchange: String,
     val code: String,
-    val quote_type: String
+    val quote_type: String,
+    val target_code: String? = null
+)
+
+data class SubscriptionResponse(
+    val success: Boolean,
+    val message: String,
+    val subscription: SubscribeRequest?
 )
 
 class ShioajiClient(private val baseUrl: String = "http://localhost:8080") {
@@ -601,7 +650,7 @@ class ShioajiClient(private val baseUrl: String = "http://localhost:8080") {
         }
 
     /** POST /api/v1/order/place_order */
-    suspend fun placeOrder(orderRequest: PlaceOrderRequest): OrderResponse =
+    suspend fun placeOrder(orderRequest: PlaceOrderRequest): Trade =
         withContext(Dispatchers.IO) {
             val body = gson.toJson(orderRequest)
             val request = HttpRequest.newBuilder()
@@ -610,11 +659,11 @@ class ShioajiClient(private val baseUrl: String = "http://localhost:8080") {
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build()
             val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-            gson.fromJson(response.body(), OrderResponse::class.java)
+            gson.fromJson(response.body(), Trade::class.java)
         }
 
     /** POST /api/v1/stream/subscribe */
-    suspend fun subscribe(subscribeRequest: SubscribeRequest) =
+    suspend fun subscribe(subscribeRequest: SubscribeRequest): SubscriptionResponse =
         withContext(Dispatchers.IO) {
             val body = gson.toJson(subscribeRequest)
             val request = HttpRequest.newBuilder()
@@ -622,7 +671,8 @@ class ShioajiClient(private val baseUrl: String = "http://localhost:8080") {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build()
-            client.send(request, HttpResponse.BodyHandlers.ofString())
+            val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+            gson.fromJson(response.body(), SubscriptionResponse::class.java)
         }
 }
 ```
@@ -650,9 +700,12 @@ import java.util.concurrent.TimeUnit
 // Note: SSE price fields are JSON strings (Decimal precision), not numbers
 data class TickData(
     val code: String,
+    val date: String,
+    val time: String,
     val close: java.math.BigDecimal,
     val volume: Long,
-    val volSum: Long
+    @com.google.gson.annotations.SerializedName("total_volume")
+    val totalVolume: Long
 )
 
 fun tickStkFlow(baseUrl: String = "http://localhost:8080"): Flow<TickData> = callbackFlow {
@@ -672,9 +725,11 @@ fun tickStkFlow(baseUrl: String = "http://localhost:8080"): Flow<TickData> = cal
                 val json = gson.fromJson(data, JsonObject::class.java)
                 val tick = TickData(
                     code = json.get("code").asString,
+                    date = json.get("date").asString,
+                    time = json.get("time").asString,
                     close = json.get("close").asString.toBigDecimal(),
                     volume = json.get("volume").asLong,
-                    volSum = json.get("vol_sum").asLong
+                    totalVolume = json.get("total_volume").asLong
                 )
                 trySend(tick)
             }
@@ -749,13 +804,14 @@ public class App {
                 snap.code, snap.close, snap.total_volume);
         }
 
-        // 3. Place a limit order / 下限價單
-        System.out.println("\n=== Place Order ===");
-        OrderResponse orderResp = client.placeOrder(new PlaceOrderRequest(
-            new ContractRef("STK", "TSE", "2330"),
-            new OrderSpec("Buy", 580.0, 1, "LMT", "ROD")
-        ));
-        System.out.printf("  Order: %s status=%s%n", orderResp.order_id, orderResp.status);
+        // 3. Optional order example / 可選下單範例
+        // Keep disabled in runnable examples; confirm mode/account/order details first.
+        // See ORDERS.md before enabling.
+        // Trade orderResp = client.placeOrder(new PlaceOrderRequest(
+        //     new ContractRef("STK", "TSE", "2330"),
+        //     new OrderSpec("Buy", 580.0, 1, "LMT", "ROD")
+        // ));
+        // System.out.printf("  Trade status: %s%n", orderResp.status);
 
         // 4. Subscribe and stream ticks / 訂閱並串流逐筆成交
         System.out.println("\n=== Subscribing to 2330 ticks ===");
@@ -763,8 +819,8 @@ public class App {
 
         System.out.println("Streaming tick data (Ctrl+C to stop)...\n");
         SseClient sse = new SseClient(client.getBaseUrl());
-        sse.streamTickStk((code, close, volume, ts) -> {
-            System.out.printf("[%d] %s close=%.2f vol=%d%n", ts, code, close, volume);
+        sse.streamTickStk((code, close, volume, totalVolume) -> {
+            System.out.printf("%s close=%.2f vol=%d total=%d%n", code, close, volume, totalVolume);
         });
     }
 }
@@ -809,19 +865,20 @@ fun main() = runBlocking {
         println("  ${it.code} close=${it.close} volume=${it.total_volume}")
     }
 
-    // 3. Place a limit order / 下限價單
-    println("\n=== Place Order ===")
-    val orderResp = client.placeOrder(PlaceOrderRequest(
-        contract = ContractRef("STK", "TSE", "2330"),
-        order = OrderSpec(
-            action = "Buy",
-            price = 580.0,
-            quantity = 1,
-            price_type = "LMT",
-            order_type = "ROD"
-        )
-    ))
-    println("  Order: ${orderResp.order_id} status=${orderResp.status}")
+    // 3. Optional order example / 可選下單範例
+    // Keep disabled in runnable examples; confirm mode/account/order details first.
+    // See ORDERS.md before enabling.
+    // val orderResp = client.placeOrder(PlaceOrderRequest(
+    //     contract = ContractRef("STK", "TSE", "2330"),
+    //     stock_order = OrderSpec(
+    //         action = "Buy",
+    //         price = 580.0,
+    //         quantity = 1,
+    //         price_type = "LMT",
+    //         order_type = "ROD"
+    //     )
+    // ))
+    // println("  Trade status: ${orderResp.status}")
 
     // 4. Subscribe and stream ticks / 訂閱並串流逐筆成交
     println("\n=== Subscribing to 2330 ticks ===")
@@ -829,7 +886,7 @@ fun main() = runBlocking {
 
     println("Streaming tick data (Ctrl+C to stop)...\n")
     tickStkFlow().collect { tick ->
-        println("[${tick.ts}] ${tick.code} close=${tick.close} vol=${tick.volume}")
+        println("[${tick.date} ${tick.time}] ${tick.code} close=${tick.close} vol=${tick.volume}")
     }
 }
 ```

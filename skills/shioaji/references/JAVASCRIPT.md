@@ -1,7 +1,9 @@
-# JavaScript / TypeScript -- Shioaji HTTP API 完整指南 | Complete Guide
+# JavaScript / TypeScript -- HTTP/SSE Client Patterns
 
 > Shioaji HTTP API Server 讓 JavaScript/TypeScript 開發者可以使用永豐金證券的交易功能。
 > The Shioaji HTTP API Server lets JavaScript/TypeScript developers access SinoPac's trading capabilities.
+>
+> This is a transport/client-pattern guide: how to send HTTP requests, parse responses, handle errors, and consume SSE in JavaScript/TypeScript. It is not an endpoint payload or response schema catalog.
 
 ---
 
@@ -28,19 +30,25 @@
 ## 1. 伺服器啟動 | Server Startup
 
 ```bash
-# 安裝 rshioaji | Install rshioaji
-uv tool install rshioaji
-# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.sh | sh
+# 安裝 shioaji | Install shioaji
+uv tool install shioaji
+# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | sh
 
 # 啟動伺服器（預設為模擬模式）| Start server (simulation mode by default)
 shioaji server start
 ```
+
+Before starting the server, configure `.env` in the server working directory or export equivalent variables: `SJ_API_KEY`, `SJ_SEC_KEY`, `SJ_CA_PATH`, `SJ_CA_PASSWD`, and `SJ_PRODUCTION`. Use `SJ_PRODUCTION=false` while testing language clients unless the user explicitly needs production mode. See [PREPARE.md](PREPARE.md) for full setup, certificate, and `.env` details.
 
 伺服器預設在 `http://localhost:8080` 啟動。
 The server starts at `http://localhost:8080` by default.
 
 - **Localhost 模式**: 不需要認證 | No authentication required
 - **公開綁定模式**: 需要 `Authorization: Bearer SJ_API_KEY:SJ_SEC_KEY` | Auth required when binding to non-localhost
+
+Use the matching functional reference for workflow, payload rules, response shapes, and branching decisions. Use [HTTP_API.md](HTTP_API.md) for endpoint inventory. The hand-written interfaces below are starter transport types; fetch `/openapi.json` for production clients.
+
+This language guide is transport-only. Do not restate or override shared HTTP rules here: order update/cancel `trade_id`, `order_deal_event` over SSE, simulation vs production, and SSE payload field types are governed by [HTTP_API.md](HTTP_API.md) and the matching functional reference.
 
 ---
 
@@ -112,18 +120,53 @@ export interface ContractRequest {
   target_code?: string;
 }
 
+/** Server health | 伺服器健康狀態 */
+export interface HealthResponse {
+  status: string;
+  version: string;
+  timestamp: string;
+  token_expires_in_seconds?: number;
+  token_stale?: boolean;
+  contract_count?: number;
+  ca_expires_in_days?: number;
+  ca_expired?: boolean;
+}
+
+/** Server info | 伺服器資訊 */
+export interface ApiInfoResponse {
+  name: string;
+  version: string;
+  description: string;
+  protocols: string[];
+  simulation: boolean;
+}
+
+/** Contract lookup response | 商品查詢回應 */
+export interface ContractRecord extends ContractRequest {
+  symbol?: string;
+  name?: string;
+  category?: string;
+  currency?: string;
+  delivery_month?: string;
+  delivery_date?: string;
+  strike_price?: number;
+  option_right?: string;
+  target_code?: string;
+}
+
 /** 帳戶 | Account */
 export interface Account {
-  account_type: string;
+  account_type: "S" | "F" | "H" | string;
   person_id: string;
   broker_id: string;
   account_id: string;
   signed: boolean;
+  username?: string;
 }
 
 /** 快照 | Snapshot */
 export interface Snapshot {
-  ts: number;
+  datetime: string;
   code: string;
   exchange: string;
   open: number;
@@ -175,14 +218,22 @@ export interface PlaceOrderRequest {
 
 /** 交易結果 | Trade result */
 export interface Trade {
-  id: string;
-  seqno: string;
-  ordno: string;
-  action: string;
-  price: number;
-  quantity: number;
-  order_type: string;
-  price_type: string;
+  contract: ContractRequest;
+  order: Record<string, unknown>;
+  status: {
+    id: string;
+    status: "PendingSubmit" | "Submitted" | "Filled" | "PartFilled" | "Failed" | "Cancelled" | string;
+    status_code?: string;
+    web_id?: string;
+    order_ts?: number;
+    msg?: string;
+    modified_ts?: number;
+    modified_price?: number;
+    order_quantity?: number;
+    deal_quantity?: number;
+    cancel_quantity?: number;
+    deals?: Array<Record<string, unknown>>;
+  };
 }
 
 /** 訂閱請求 | Subscription request */
@@ -200,6 +251,20 @@ export interface SubscriptionResponse {
   success: boolean;
   message: string;
   subscription?: SubscriptionRequest;
+}
+
+/** HTTP error response | HTTP 錯誤回應 */
+export interface ErrorResponse {
+  code: number;
+  message: string;
+  details?: string;
+}
+
+/** Subscribe trade response | 訂閱委託/成交回報 */
+export interface SubscribeTradeOut {
+  account: Account;
+  subscribe_trade: boolean;
+  ts: number;
 }
 
 // ============================================================================
@@ -238,13 +303,17 @@ export class ShioajiClient {
     const res = await fetch(url, {
       method,
       headers: this.headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
 
     if (!res.ok) {
-      const error = await res.json().catch(() => ({ message: res.statusText }));
+      const error = (await res
+        .json()
+        .catch(() => ({ code: res.status, message: res.statusText }))) as ErrorResponse;
       throw new Error(
-        `API Error ${res.status}: ${error.message || res.statusText}`
+        `API Error ${res.status}: ${error.message || res.statusText}${
+          error.details ? ` (${error.details})` : ""
+        }`
       );
     }
 
@@ -255,14 +324,45 @@ export class ShioajiClient {
   // 認證 | Auth
   // ------------------------------------------------------------------
 
+  /** 健康檢查 | Health check */
+  async health(): Promise<HealthResponse> {
+    return this.request<HealthResponse>("GET", "/health");
+  }
+
+  /** 伺服器資訊 | Server info */
+  async info(): Promise<ApiInfoResponse> {
+    return this.request<ApiInfoResponse>("GET", "/info");
+  }
+
   /** 查詢帳戶 | List accounts */
   async listAccounts(): Promise<Account[]> {
     return this.request<Account[]>("GET", "/auth/accounts");
   }
 
+  /** 訂閱委託/成交回報 | Subscribe order/deal events */
+  async subscribeTrade(account: Partial<Account>): Promise<SubscribeTradeOut> {
+    return this.request<SubscribeTradeOut>("POST", "/auth/subscribe_trade", account);
+  }
+
+  /** 取消訂閱委託/成交回報 | Unsubscribe order/deal events */
+  async unsubscribeTrade(account: Partial<Account>): Promise<SubscribeTradeOut> {
+    return this.request<SubscribeTradeOut>("POST", "/auth/unsubscribe_trade", account);
+  }
+
   // ------------------------------------------------------------------
   // 行情資料 | Market Data
   // ------------------------------------------------------------------
+
+  /** 查詢單一商品 | Lookup one contract */
+  async getContract(
+    code: string,
+    securityType: ContractRequest["security_type"]
+  ): Promise<ContractRecord> {
+    return this.request<ContractRecord>(
+      "GET",
+      `/data/contracts/${encodeURIComponent(code)}?security_type=${encodeURIComponent(securityType)}`
+    );
+  }
 
   /** 取得快照 | Get snapshots */
   async snapshots(contracts: ContractRequest[]): Promise<Snapshot[]> {
@@ -299,6 +399,16 @@ export class ShioajiClient {
       trade_id: tradeId,
       quantity,
     });
+  }
+
+  /** 更新並查詢委託狀態 | Update and list trades */
+  async trades(account: Partial<Account> = {}): Promise<Trade[]> {
+    return this.request<Trade[]>("POST", "/order/trades", account);
+  }
+
+  /** 查詢歷史委託/成交事件 | Historical order/deal records */
+  async orderDealRecords(account: Partial<Account> = {}): Promise<unknown[]> {
+    return this.request<unknown[]>("POST", "/order/order_deal_records", account);
   }
 
   // ------------------------------------------------------------------
@@ -369,35 +479,37 @@ const snapshots = await resp.json();
 
 ### 5.3 下單 | Place Order
 
+Keep order examples disabled in runnable code. Confirm account, production/simulation mode, payload rules, response status, and `order_deal_event` handling in [ORDERS.md](ORDERS.md) before enabling.
+
 **股票限價買 | Stock limit buy:**
 
 ```typescript
-const trade = await client.placeOrder({
-  contract: { security_type: "STK", exchange: "TSE", code: "2330" },
-  stock_order: {
-    action: "Buy",
-    price: 600.0,
-    quantity: 1,
-    price_type: "LMT",
-    order_type: "ROD",
-  },
-});
-console.log("成交回報 | Trade:", trade);
+// const trade = await client.placeOrder({
+//   contract: { security_type: "STK", exchange: "TSE", code: "2330" },
+//   stock_order: {
+//     action: "Buy",
+//     price: 600.0,
+//     quantity: 1,
+//     price_type: "LMT",
+//     order_type: "ROD",
+//   },
+// });
+// console.log("Place-order Trade response:", trade);
 ```
 
 **期貨市價賣 | Futures market sell:**
 
 ```typescript
-const trade = await client.placeOrder({
-  contract: { security_type: "FUT", exchange: "TAIFEX", code: "TXFC5" },
-  futures_order: {
-    action: "Sell",
-    price: 0,
-    quantity: 1,
-    price_type: "MKT",
-    order_type: "IOC",
-  },
-});
+// const trade = await client.placeOrder({
+//   contract: { security_type: "FUT", exchange: "TAIFEX", code: "TXFC5" },
+//   futures_order: {
+//     action: "Sell",
+//     price: 0,
+//     quantity: 1,
+//     price_type: "MKT",
+//     order_type: "IOC",
+//   },
+// });
 ```
 
 ---
@@ -421,6 +533,10 @@ await client.subscribe({
   quote_type: "Tick",
 });
 ```
+
+For futures continuous-month aliases such as `TXFR1` / `TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into the subscribe request. Regular futures codes do not need `target_code`.
+
+Order events use a separate account subscription in production. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` once per account; simulation does not require it.
 
 ### 6.2 接收資料 | Receive Data
 
@@ -447,7 +563,7 @@ es.addEventListener("error", (e) => {
 **Node.js（需要 eventsource 套件）| Node.js (requires eventsource package):**
 
 ```typescript
-import EventSource from "eventsource";
+import { EventSource } from "eventsource";
 
 // 非 localhost 帶認證 | With auth for non-localhost
 const url = "http://localhost:8080/api/v1/stream/data/tick_stk";
@@ -457,7 +573,7 @@ const es = new EventSource(url, {
   },
 });
 
-es.addEventListener("tick_stk", (e: MessageEvent) => {
+es.addEventListener("tick_stk", (e) => {
   const tick = JSON.parse(e.data);
   console.log(`${tick.code} @ ${tick.close} x ${tick.volume}`);
 });
@@ -497,7 +613,7 @@ function createReconnectingStream(
   function connect() {
     es = new EventSource(url);
 
-    es.addEventListener(eventName, (e: MessageEvent) => {
+    es.addEventListener(eventName, (e) => {
       retries = 0; // 成功收到資料重置計數 | Reset on successful data
       onData(JSON.parse(e.data));
     });
@@ -585,7 +701,7 @@ const { data } = await client.POST("/data/snapshots", {
 
 ```typescript
 import { ShioajiClient } from "./client/shioaji-client";
-import EventSource from "eventsource";
+import { EventSource } from "eventsource";
 
 async function main() {
   // ================================================================
@@ -594,15 +710,27 @@ async function main() {
   const client = new ShioajiClient("http://localhost:8080");
 
   // ================================================================
-  // 1. 查詢帳戶 | List accounts
+  // 1. 檢查伺服器 | Check server
+  // ================================================================
+  const health = await client.health();
+  const info = await client.info();
+  console.log("=== Server ===");
+  console.log(`${health.status} ${health.version}, simulation=${info.simulation}`);
+
+  // ================================================================
+  // 2. 查詢帳戶 | List accounts
   // ================================================================
   const accounts = await client.listAccounts();
   console.log("=== 帳戶 | Accounts ===");
   console.log(JSON.stringify(accounts, null, 2));
 
   // ================================================================
-  // 2. 取得快照 | Get snapshots
+  // 3. 查詢商品並取得快照 | Lookup contract and get snapshots
   // ================================================================
+  const contract2330 = await client.getContract("2330", "STK");
+  console.log("\n=== 商品 | Contract 2330 ===");
+  console.log(JSON.stringify(contract2330, null, 2));
+
   const snapshots = await client.snapshots([
     { security_type: "STK", exchange: "TSE", code: "2330" },
   ]);
@@ -612,7 +740,7 @@ async function main() {
   }
 
   // ================================================================
-  // 3. 訂閱即時行情 | Subscribe to real-time data
+  // 4. 訂閱即時行情 | Subscribe to real-time data
   // ================================================================
   const subResult = await client.subscribe({
     security_type: "STK",
@@ -622,22 +750,27 @@ async function main() {
   });
   console.log("\n=== 訂閱結果 | Subscription ===");
   console.log(subResult.message);
+  if (!subResult.success) {
+    throw new Error(`Subscription failed: ${subResult.message}`);
+  }
 
   // ================================================================
-  // 4. 接收 SSE 串流 | Receive SSE stream
+  // 5. 接收 SSE 串流 | Receive SSE stream
   // ================================================================
   const es = new EventSource(
     "http://localhost:8080/api/v1/stream/data/tick_stk"
   );
 
-  es.addEventListener("tick_stk", (e: MessageEvent) => {
+  es.addEventListener("tick_stk", (e) => {
     const tick = JSON.parse(e.data);
+    // SSE price/amount fields may be strings; convert before arithmetic.
+    const close = Number(tick.close);
     console.log(
-      `[TICK] ${tick.code} price=${tick.close} vol=${tick.volume} ts=${tick.ts}`
+      `[TICK] ${tick.date} ${tick.time} ${tick.code} price=${close} vol=${tick.volume}`
     );
   });
 
-  es.addEventListener("heartbeat", (e: MessageEvent) => {
+  es.addEventListener("heartbeat", (e) => {
     const hb = JSON.parse(e.data);
     console.log(`[HEARTBEAT] ${hb.timestamp}`);
   });
@@ -647,7 +780,7 @@ async function main() {
   };
 
   // ================================================================
-  // 5. 下單範例（取消註解以執行）| Order example (uncomment to run)
+  // 6. 下單範例（取消註解以執行）| Order example (uncomment to run)
   // ================================================================
   // const trade = await client.placeOrder({
   //   contract: { security_type: "STK", exchange: "TSE", code: "2330" },

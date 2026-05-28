@@ -1,8 +1,8 @@
-# C/C++ Project Guide / C/C++ 專案指南
+# C/C++ HTTP/SSE Client Patterns
 
-Complete guide for building trading applications with Shioaji HTTP API in C/C++.
+Transport guide for building C/C++ applications that call the Shioaji HTTP API and consume SSE streams.
 
-使用 Shioaji HTTP API 建立 C/C++ 交易應用程式的完整指南。
+本文件說明 C/C++ 如何送 HTTP request、處理 JSON response、消費 SSE 串流。它不是 endpoint payload 或 response schema catalog。
 
 ---
 
@@ -18,8 +18,9 @@ Complete guide for building trading applications with Shioaji HTTP API in C/C++.
    - [Snapshots / 快照報價](#snapshots--快照報價)
    - [Place Order / 下單](#place-order--下單)
 7. [SSE Streaming / SSE 即時串流](#sse-streaming--sse-即時串流)
-8. [OpenAPI Client Generation / OpenAPI 客戶端生成](#openapi-client-generation--openapi-客戶端生成)
-9. [Complete Example / 完整範例](#complete-example--完整範例)
+8. [Complete Example / 完整範例](#complete-example--完整範例)
+9. [Endpoint Inventory / 端點清單](#endpoint-inventory--端點清單)
+10. [OpenAPI Client Generation / OpenAPI 客戶端生成](#openapi-client-generation--openapi-客戶端生成)
 
 ---
 
@@ -30,19 +31,16 @@ Start the Shioaji HTTP server before running any C/C++ client code:
 在執行 C/C++ 用戶端之前，先啟動 Shioaji HTTP 伺服器：
 
 ```bash
-uv tool install rshioaji
-# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.sh | sh
+uv tool install shioaji
+# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | sh
 shioaji server start          # simulation mode by default
 ```
 
-For remote/production servers, set your API credentials:
+Before starting the server, configure `.env` in the server working directory or export equivalent variables: `SJ_API_KEY`, `SJ_SEC_KEY`, `SJ_CA_PATH`, `SJ_CA_PASSWD`, and `SJ_PRODUCTION`. Use `SJ_PRODUCTION=false` while testing language clients unless the user explicitly needs production mode. See [PREPARE.md](PREPARE.md) for full setup, certificate, and `.env` details.
 
-遠端或正式環境需設定 API 憑證：
+Use the matching functional reference for workflow, payload rules, response shapes, and branching decisions. Use [HTTP_API.md](HTTP_API.md) for endpoint inventory. The hand-written DTOs below are starter transport types; fetch `/openapi.json` for production clients.
 
-```bash
-export SJ_API_KEY=YOUR_API_KEY
-export SJ_SEC_KEY=YOUR_SECRET_KEY
-```
+This language guide is transport-only. Do not restate or override shared HTTP rules here: order update/cancel `trade_id`, `order_deal_event` over SSE, simulation vs production, and SSE payload field types are governed by [HTTP_API.md](HTTP_API.md) and the matching functional reference.
 
 ---
 
@@ -158,6 +156,7 @@ struct Contract {
     std::string security_type;  // "STK", "FUT", "OPT", "IND"
     std::string exchange;       // "TSE", "OTC", "TAIFEX"
     std::string code;
+    std::optional<std::string> target_code;
 };
 
 void to_json(nlohmann::json& j, const Contract& c) {
@@ -166,9 +165,11 @@ void to_json(nlohmann::json& j, const Contract& c) {
         {"exchange", c.exchange},
         {"code", c.code}
     };
+    if (c.target_code) j["target_code"] = *c.target_code;
 }
 
 struct Snapshot {
+    std::string datetime;  // HTTP Snapshot uses datetime; Python api.snapshots() exposes ts.
     double close;
     int64_t total_volume;
     std::string code;
@@ -177,6 +178,7 @@ struct Snapshot {
 };
 
 void from_json(const nlohmann::json& j, Snapshot& s) {
+    j.at("datetime").get_to(s.datetime);
     j.at("close").get_to(s.close);
     j.at("total_volume").get_to(s.total_volume);
     j.at("code").get_to(s.code);
@@ -457,25 +459,27 @@ for (const auto& snap : snapshots) {
 
 ### Place Order / 下單
 
+Keep order examples disabled in runnable code. Confirm account, production/simulation mode, payload rules, response status, and `order_deal_event` handling in [ORDERS.md](ORDERS.md) before enabling.
+
 ```cpp
 // POST /api/v1/order/place_order
-nlohmann::json order_body = {
-    {"contract", {
-        {"security_type", "STK"},
-        {"exchange", "TSE"},
-        {"code", "2330"}
-    }},
-    {"stock_order", {
-        {"action", "Buy"},
-        {"price", 580.0},
-        {"quantity", 1},
-        {"price_type", "LMT"},
-        {"order_type", "ROD"}
-    }}
-};
-
-auto result = client.post("/api/v1/order/place_order", order_body);
-std::cout << "Order result: " << result.dump(2) << "\n";
+// nlohmann::json order_body = {
+//     {"contract", {
+//         {"security_type", "STK"},
+//         {"exchange", "TSE"},
+//         {"code", "2330"}
+//     }},
+//     {"stock_order", {
+//         {"action", "Buy"},
+//         {"price", 580.0},
+//         {"quantity", 1},
+//         {"price_type", "LMT"},
+//         {"order_type", "ROD"}
+//     }}
+// };
+//
+// auto result = client.post("/api/v1/order/place_order", order_body);
+// std::cout << "Order result: " << result.dump(2) << "\n";
 ```
 
 ---
@@ -566,6 +570,10 @@ void TickStream::stop() {
 
 }  // namespace shioaji
 ```
+
+For futures continuous-month aliases such as `TXFR1` / `TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into the subscribe request. Regular futures codes do not need `target_code`.
+
+Order events use a separate account subscription in production. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` once per account; simulation does not require it.
 
 ### SSE Endpoints / SSE 端點
 
@@ -773,22 +781,9 @@ auto client = shioaji::ShioajiClient(
 
 ---
 
-## API Endpoint Reference / API 端點參考
+## Endpoint Inventory / 端點清單
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/auth/accounts` | List accounts / 查詢帳號 |
-| POST | `/api/v1/data/snapshots` | Market snapshots / 快照報價 |
-| POST | `/api/v1/data/ticks` | Historical ticks / 歷史逐筆 |
-| POST | `/api/v1/data/kbars` | K-bar data / K 線資料 |
-| POST | `/api/v1/order/place_order` | Place order / 下單 |
-| POST | `/api/v1/order/cancel_order` | Cancel order / 刪單 |
-| POST | `/api/v1/order/update_status` | Update order status / 更新委託狀態 |
-| GET | `/api/v1/portfolio/account_balance` | Account balance / 帳戶餘額 |
-| POST | `/api/v1/stream/subscribe` | Subscribe to stream / 訂閱串流 |
-| GET | `/api/v1/stream/data/tick_stk` | SSE tick stream / 逐筆串流 |
-
-For the full endpoint list, see [HTTP_API.md](HTTP_API.md).
+Do not maintain endpoint lists in this language guide. Use [HTTP_API.md](HTTP_API.md) for the endpoint inventory, the matching functional reference for response decisions, and `/openapi.json` before typing installed-server response fields.
 
 ---
 
@@ -825,4 +820,4 @@ curl -s http://localhost:8080/openapi.json | jq '.paths["/api/v1/order/place_ord
 curl -s http://localhost:8080/openapi.json | jq '.components.schemas | keys[]'
 ```
 
-> **Tip**: The OpenAPI spec is generated from the actual Rust code at runtime. Always fetch `/openapi.json` to confirm exact field names, types, and enum values for the server version you're running.
+> **Tip**: `/openapi.json` describes the currently running server version. Fetch it when exact field names, types, and enum values matter.

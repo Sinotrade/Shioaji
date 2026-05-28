@@ -1,13 +1,14 @@
 # Preparation 準備工作
 
-This document covers installation, environment configuration, authentication, and common setup for the RShioaji (Rust-based Shioaji) trading API.
-本文件說明 RShioaji（Rust 版 Shioaji）的安裝、環境設定、認證和常用設定。
+This document covers installation, environment configuration, authentication, and common setup for the Shioaji trading API.
+本文件說明 Shioaji 的安裝、環境設定、認證和常用設定。
 
 ## Table of Contents 目錄
 
 - [Installation 安裝](#installation-安裝)
 - [Environment Variables 環境變數](#environment-variables-環境變數)
 - [Login 登入](#login-登入)
+- [Server Health and Auth Responses 伺服器狀態與認證回應](#server-health-and-auth-responses-伺服器狀態與認證回應)
 - [Python Sync vs Async 同步與異步](#python-sync-vs-async-同步與異步)
 - [Account Setup 帳戶設定](#account-setup-帳戶設定)
 - [Common Constants 常用常數](#common-constants-常用常數)
@@ -18,30 +19,28 @@ This document covers installation, environment configuration, authentication, an
 
 ## Installation 安裝
 
-RShioaji can be installed as a Python package or as a standalone CLI binary.
-RShioaji 可作為 Python 套件或獨立 CLI 二進制檔安裝。
+Shioaji can be installed as a Python package or as a standalone CLI binary.
+Shioaji 可作為 Python 套件或獨立 CLI 二進制檔安裝。
 
 ### Python Package 套件安裝
 
 ```bash
 # uv (recommended 推薦)
-uv add rshioaji
+uv add shioaji
 
 # pip (alternative)
-pip install rshioaji
+pip install shioaji
 ```
 
 ### CLI Tool Install CLI 工具安裝
 
 ```bash
 # uv tool (recommended 推薦) — persistent install, puts `shioaji` on PATH
-uv tool install rshioaji
-shioaji server
+uv tool install shioaji
+shioaji server start
 
 # uvx — one-shot, no persistent install 一次性執行
-uvx --from rshioaji shioaji server
-# NOTE: when rshioaji ships as production `shioaji` package, this becomes:
-# uvx shioaji server
+uvx --from shioaji shioaji server start
 ```
 
 ### Standalone Binary 獨立二進制檔
@@ -50,29 +49,27 @@ uvx --from rshioaji shioaji server
 
 ```bash
 # Stable
-curl -fsSL https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | sh
 
 # Pre-release
-curl -fsSL https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.sh | CHANNEL=prerelease sh
+curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | CHANNEL=prerelease sh
 
 # Specific version
-curl -fsSL https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.sh | VERSION=v1.5.1 sh
+curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | VERSION=v1.5.1 sh
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
 # Stable
-irm https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/sinotrade/shioaji/main/install.ps1 | iex
 
 # Pre-release
-$env:CHANNEL="prerelease"; irm https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.ps1 | iex
+$env:CHANNEL="prerelease"; irm https://raw.githubusercontent.com/sinotrade/shioaji/main/install.ps1 | iex
 
 # Specific version
-$env:VERSION="v1.5.1"; irm https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.ps1 | iex
+$env:VERSION="v1.5.1"; irm https://raw.githubusercontent.com/sinotrade/shioaji/main/install.ps1 | iex
 ```
-
-> **Note**: installer URLs will change from `sinotrade/rshioaji` to `sinotrade/shioaji` when the production version ships.
 
 ### Verify Installation 驗證安裝
 
@@ -87,8 +84,8 @@ print(f"Shioaji version: {sj.__version__}")
 
 ## Environment Variables 環境變數
 
-All environment variables recognized by RShioaji. These can be set in a `.env` file (auto-loaded by CLI) or exported in the shell.
-RShioaji 支援的所有環境變數。可以在 `.env` 檔案（CLI 自動載入）或 shell 中設定。
+All environment variables recognized by Shioaji. These can be set in a `.env` file (auto-loaded by CLI) or exported in the shell.
+Shioaji 支援的所有環境變數。可以在 `.env` 檔案（CLI 自動載入）或 shell 中設定。
 
 ### Authentication 認證
 
@@ -160,8 +157,8 @@ SJ_PRODUCTION=false
 
 ### Python: `api.login()` method
 
-The Python binding authenticates via `api.login(api_key=..., secret_key=...)`. This performs token-based login internally.
-Python 透過 `api.login(api_key=..., secret_key=...)` 進行認證。內部使用 token-based 登入。
+The Python binding authenticates via `api.login(api_key=..., secret_key=...)`. This uses token-based login.
+Python 透過 `api.login(api_key=..., secret_key=...)` 進行認證，使用 token-based 登入。
 
 ```python
 import shioaji as sj
@@ -181,7 +178,7 @@ api.login(
     secret_key: str,
     fetch_contract: bool = True,       # Auto-fetch contracts after login
     contracts_timeout: int = 0,        # 0 = async (background), >0 = blocking (ms)
-    contracts_cb: Callable = None,     # Callback after contracts loaded
+    contracts_cb: Callable = None,     # () once after all contracts, or (SecurityType) per type
     subscribe_trade: bool = True,      # Auto-subscribe to trade events
     receive_window: int = 30000,       # Token receive window (ms)
 ) -> List[Account]
@@ -200,6 +197,13 @@ await api.login(
 
 Note: `contracts_timeout` and `contracts_cb` are only available in the sync client. The async client always loads contracts non-blocking.
 
+`contracts_cb` accepts either:
+
+- `callback()` -- called once after all contract types finish loading.
+- `callback(security_type)` -- called after each contract type finishes loading. The argument is a `SecurityType` enum such as `SecurityType.Stock`, `SecurityType.Future`, `SecurityType.Option`, or `SecurityType.Index`.
+
+Callbacks with more than one parameter raise `ShioajiTypeError`.
+
 ### CLI / Server: Environment Variables
 
 The CLI and HTTP server read credentials from `SJ_API_KEY` and `SJ_SEC_KEY` environment variables. Authentication happens automatically on startup.
@@ -208,10 +212,10 @@ CLI 和 HTTP 伺服器從 `SJ_API_KEY` 和 `SJ_SEC_KEY` 環境變數讀取憑證
 ```bash
 # Start server (reads SJ_API_KEY and SJ_SEC_KEY from env or .env)
 # 啟動伺服器（從環境變數或 .env 讀取 SJ_API_KEY 和 SJ_SEC_KEY）
-shioaji server
+shioaji server start
 
 # Or inline
-SJ_API_KEY=xxx SJ_SEC_KEY=yyy shioaji server
+SJ_API_KEY=xxx SJ_SEC_KEY=yyy shioaji server start
 ```
 
 ### Token Reuse 令牌重用
@@ -221,10 +225,38 @@ After login, the token is cached to `SJ_HOME_PATH` (default `~/.shioaji`). Subse
 
 ---
 
+## Server Health and Auth Responses 伺服器狀態與認證回應
+
+Use this section before deciding whether the server is ready, whether login/account setup succeeded, or whether production order prerequisites are satisfied. For exact installed-server HTTP fields, fetch `GET /openapi.json`; for CLI output parsing, use JSON output when available.
+
+### Health / Info
+
+| Check | Response shape | Agent decision |
+|---|---|---|
+| `GET /api/v1/health` / `shioaji server check` | `HealthResponse { status, version, timestamp, token_expires_in_seconds?, token_stale?, contract_count?, last_maintenance?, next_maintenance?, last_maintenance_error?, ca_expires_in_days?, ca_expired? }` | If unavailable, start the server or diagnose bind/daemon issues. If `token_stale=true`, re-login/restart before trading. If `contract_count` is low or zero, wait for contracts or check contract download. If `ca_expired=true`, renew/replace CA before production orders. |
+| `GET /api/v1/info` | `ApiInfoResponse { name, version, description, protocols, simulation }` | Use `simulation` to decide whether to warn before real trading. Never assume production from server availability alone. |
+
+### Accounts / Usage / CA
+
+| Check | Response shape | Agent decision |
+|---|---|---|
+| Python `api.list_accounts()` / `GET /api/v1/auth/accounts` | Python `List[Account]` / HTTP `Vec<Account>` | Empty list means login/account setup failed or no usable account was returned. Choose stock/futures account by `account_type` (`S` for stock, `F` for futures/options). |
+| `GET /api/v1/auth/usage` | `UsageOut` | Use this before changing market-data query parameters when historical data returns empty. If traffic quota is exhausted or near exhausted, treat empty `ticks`/`snapshots`/`kbars` as a quota issue first. |
+| `GET /api/v1/auth/ca_expiretime?person_id=...` | `CaExpireResponse { person_id, expire_time }` | Missing or expired CA blocks production orders. Simulation does not require CA signing. |
+
+### Trade Event Subscription
+
+| Check | Response shape | Agent decision |
+|---|---|---|
+| Python `api.subscribe_trade(account)` / `POST /api/v1/auth/subscribe_trade` | `SubscribeTradeOut { account, subscribe_trade, ts }` | Required before consuming HTTP `/api/v1/stream/data/order_event` in production. If `subscribe_trade=false` or the call errors, do not assume order/deal events are active. In simulation, HTTP subscribe is a no-op success and is not required. |
+| Python `api.unsubscribe_trade(account)` / `POST /api/v1/auth/unsubscribe_trade` | `SubscribeTradeOut { account, subscribe_trade, ts }` | Treat `subscribe_trade=false` as unsubscribed. In simulation, HTTP unsubscribe can return validation error because there is no production trade-event subscription to cancel. |
+
+---
+
 ## Python Sync vs Async 同步與異步
 
-RShioaji provides two Python client classes:
-RShioaji 提供兩個 Python 客戶端類別：
+Shioaji provides two Python client classes:
+Shioaji 提供兩個 Python 客戶端類別：
 
 ### `Shioaji` (Sync 同步)
 
@@ -235,7 +267,11 @@ Standard synchronous client. Methods block until complete.
 import shioaji as sj
 
 api = sj.Shioaji(simulation=True)
-accounts = api.login(api_key="xxx", secret_key="yyy")
+accounts = api.login(
+    api_key="xxx",
+    secret_key="yyy",
+    contracts_timeout=10000,  # Wait before using api.Contracts immediately
+)
 
 # All methods are blocking 所有方法都是阻塞的
 snapshots = api.snapshots([api.Contracts.Stocks["2330"]])
@@ -253,6 +289,7 @@ import asyncio
 async def main():
     api = sj.ShioajiAsync(simulation=True)
     accounts = await api.login(api_key="xxx", secret_key="yyy")
+    await api.fetch_contracts(contract_download=True)
 
     # All I/O methods are async 所有 I/O 方法都是異步的
     snapshots = await api.snapshots([api.Contracts.Stocks["2330"]])
@@ -273,7 +310,7 @@ asyncio.run(main())
 | Callbacks 回呼 | Regular functions 一般函式 | `async def` coroutines 協程 |
 | Login extra params 登入額外參數 | `contracts_timeout`, `contracts_cb` | (none) |
 | Data reception 資料接收 | Callback or Receiver | Callback or Receiver |
-| Internal 內部 | `runtime.block_on()` | `future_into_py()` |
+| Runtime model 執行模式 | Blocking wrapper | Awaitable wrapper |
 
 ---
 
@@ -306,6 +343,25 @@ accounts = api.list_accounts()
 api.set_default_account(accounts[1])
 ```
 
+### API Usage 統計用量
+
+Use `api.usage()` to inspect upstream API usage counters. The CLI equivalent is `shioaji auth usage`; HTTP uses `GET /api/v1/auth/usage`.
+使用 `api.usage()` 查看上游 API 用量統計。CLI 對應 `shioaji auth usage`；HTTP 對應 `GET /api/v1/auth/usage`。
+
+```python
+usage = api.usage()
+print(usage.connections)
+print(usage.bytes)
+print(usage.limit_bytes)
+print(usage.remaining_bytes)
+
+# Non-blocking sync style 非阻塞同步寫法
+api.usage(timeout=0, cb=lambda usage: print(usage.remaining_bytes))
+
+# Async client 非同步 client
+usage = await async_api.usage()
+```
+
 ### Account Fields 帳戶欄位
 
 - `account_type` -- `"S"` (Stock) or `"F"` (Futures/Options)
@@ -327,10 +383,10 @@ Import enums from the `shioaji` module. These are used for orders, contracts, an
 ```python
 from shioaji import SecurityType
 
-SecurityType.IND   # Index 指數
-SecurityType.STK   # Stock 股票
-SecurityType.FUT   # Futures 期貨
-SecurityType.OPT   # Option 選擇權
+SecurityType.Index   # Index 指數, HTTP value: "IND"
+SecurityType.Stock   # Stock 股票, HTTP value: "STK"
+SecurityType.Future  # Futures 期貨, HTTP value: "FUT"
+SecurityType.Option  # Option 選擇權, HTTP value: "OPT"
 ```
 
 ### Exchange 交易所
@@ -432,8 +488,8 @@ QuoteType.Quote    # Quote data (legacy) 報價資料
 
 ## Simulation vs Production Mode 模擬與正式模式
 
-By default, RShioaji runs in **simulation mode** (paper trading). This is safe for testing and development.
-預設 RShioaji 使用**模擬模式**（模擬交易）。適合測試和開發。
+By default, Shioaji runs in **simulation mode** (paper trading). This is safe for testing and development.
+預設 Shioaji 使用**模擬模式**（模擬交易）。適合測試和開發。
 
 ### Setting the Mode 設定模式
 
@@ -450,14 +506,14 @@ api = sj.Shioaji(simulation=False)
 **CLI / Server:**
 ```bash
 # Simulation (default) 模擬模式（預設）
-shioaji server
+shioaji server start
 
 # Production 正式模式
-shioaji server --production
-shioaji server --prod
+shioaji server start --production
+shioaji server start --prod
 
 # Or via env var 或透過環境變數
-SJ_PRODUCTION=true shioaji server
+SJ_PRODUCTION=true shioaji server start
 ```
 
 ### Features with Simulation Guards 模擬模式限制

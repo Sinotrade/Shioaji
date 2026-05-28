@@ -1,7 +1,7 @@
 # Shioaji CLI Command Reference / Shioaji CLI 指令參考
 
-> Canonical inventory of every `shioaji` CLI command, generated from source.
-> Source of truth: `src/cli/mod.rs`, `src/cli/commands/`, `src/cli/utils/`, `src/cli/output.rs`
+> Command inventory for the packaged `shioaji` CLI.
+> When an exact flag or option must be confirmed on an installed version, use `shioaji --help` or the command's `--help`.
 
 ---
 
@@ -58,6 +58,7 @@ The `shioaji` binary is a single CLI that doubles as:
 - **A daemon server** (`shioaji server start`) that hosts the HTTP API.
 
 All data-path commands (`auth`, `data`, `order`, `portfolio`) communicate with the daemon via HTTP (preferring UDS on Unix). If no daemon is running, the CLI auto-starts one (`ensure_daemon`).
+Use the matching functional reference when an agent needs to reason about the response objects behind CLI output; `toon` is the default output format.
 
 Binary name: `shioaji`
 
@@ -135,7 +136,7 @@ shioaji data ticks --code 2330 -f toon
 ```
 shioaji
 ├── server
-│   ├── start       [--production]
+│   ├── start       [--production] [--no-open]
 │   ├── check
 │   ├── status
 │   └── stop
@@ -212,6 +213,7 @@ shioaji server [--production] [SUBCOMMAND]
 ```
 
 If no subcommand is given, defaults to `start`.
+Use `--no-open` on either `shioaji server` or `shioaji server start` when the server should not auto-open the dashboard/API docs in a browser.
 
 ### server start
 
@@ -221,11 +223,13 @@ Start the API server (daemon). Authenticates with SJ_API_KEY/SJ_SEC_KEY and begi
 shioaji server start
 shioaji server start --production
 shioaji server start --prod        # visible alias
+shioaji server start --no-open     # do not auto-open browser
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--production` / `--prod` | Run in production mode (default: simulation). Also settable via `SJ_PRODUCTION` env var |
+| `--no-open` | Do not auto-open the dashboard/API docs browser window |
 
 ### server check
 
@@ -360,6 +364,8 @@ shioaji data stream --code 2330 --intraday-odd
 
 The CLI resolves the contract code, subscribes to the appropriate SSE endpoint, streams data lines to stdout, and unsubscribes on exit.
 
+For continuous-month futures such as `TXFR1` / `TXFR2`, the CLI resolves the contract first and forwards the contract `target_code` when subscribing. CLI users should pass `--code TXFR1 --security-type FUT`; HTTP clients must include `target_code` themselves when the resolved contract requires it.
+
 ### data snapshots
 
 Get snapshots for multiple contracts.
@@ -387,20 +393,26 @@ shioaji order <SUBCOMMAND>
 
 Place a stock or futures order. The CLI resolves the contract, then dispatches to the appropriate order type (stock or futures) based on security type.
 
-`--account` is optional. Omit it to use the default signed account of the matching type (stock account for STK contracts, futures account for FUT/OPT). Pass `BROKER_ID-ACCOUNT_ID` to target a specific account; the server fills in the remaining fields (`person_id`, `signed`, `username`) from the login session (1.5.12+, [#234](https://github.com/Yvictor/rshioaji/issues/234)).
+For continuous-month futures such as `TXFR1` / `TXFR2`, the CLI preserves the resolved contract `target_code` before placing the order. CLI users do not pass `target_code` manually; direct HTTP clients should include it for those futures aliases.
+
+`--account` is optional. Omit it to use the default signed account of the matching type (stock account for STK contracts, futures account for FUT/OPT). Pass `BROKER_ID-ACCOUNT_ID` to target a specific account; the server fills in the remaining fields (`person_id`, `signed`, `username`) from the login session in supported 1.5.x versions.
 
 ```bash
+## Order examples are disabled by default.
+## Confirm simulation/production mode, account, payload, response status,
+## and order-event handling in ORDERS.md before enabling.
+
 # Buy 1 lot of TSMC at limit price 600 (default stock account)
-shioaji order place --code 2330 --action Buy --price 600 --quantity 1
+# shioaji order place --code 2330 --action Buy --price 600 --quantity 1
 
 # Market sell order for futures
-shioaji order place --code TXFR1 --action Sell --quantity 1 --price-type mkt --security-type FUT
+# shioaji order place --code TXFR1 --action Sell --quantity 1 --price-type mkt --security-type FUT
 
 # Place without waiting for order event confirmation
-shioaji order place --code 2330 --action Buy --price 600 --quantity 1 --no-wait
+# shioaji order place --code 2330 --action Buy --price 600 --quantity 1 --no-wait
 
 # Target a specific account
-shioaji order place --code 2330 --action Buy --price 600 --quantity 1 --account 9A95-1234567
+# shioaji order place --code 2330 --action Buy --price 600 --quantity 1 --account 9A95-1234567
 ```
 
 | Flag | Default | Description |

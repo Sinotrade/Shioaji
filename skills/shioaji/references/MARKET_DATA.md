@@ -1,9 +1,27 @@
 # Market Data 市場資料
 
-This document covers historical data, snapshots, daily quotes, credit enquiries, short stock sources, scanners, and disposition/attention stocks in rshioaji.
-本文件說明 rshioaji 中的歷史資料查詢、快照、每日行情、資券餘額查詢、券源查詢、掃描器排行及處置/注意股。
+This document covers historical data, snapshots, daily quotes, credit enquiries, short stock sources, scanners, and disposition/attention stocks in Shioaji.
+本文件說明 Shioaji 中的歷史資料查詢、快照、每日行情、資券餘額查詢、券源查詢、掃描器排行及處置/注意股。
+
+Use [MIGRATION.md](MIGRATION.md) when old code imports enums from submodules. This file owns `Snapshot`, `Ticks`, `KBars`, scanner, and regulatory response handling. Python examples below use Python wrapper objects; HTTP/CLI clients must use the HTTP/CLI response notes in this file and fetch `/openapi.json` only when exact installed-server fields are required.
 
 ---
+
+## Market Data Response and Decision Summary 行情回應與決策摘要
+
+Use this table before writing parsers or deciding why a market-data response is empty. Do not infer HTTP/CLI fields from Python wrapper attributes.
+
+| Operation | Python return | HTTP response | CLI output | Agent decision |
+|---|---|---|---|---|
+| Snapshots | `List[Snapshot]`; Python objects expose `ts` | `Vec<Snapshot>` JSON with `datetime` | `shioaji data snapshots --format json` follows HTTP JSON; default output may be formatted | Empty array means no snapshots returned. Do not use Python `ts` in JS/Go/Rust/C#/C++/Java clients. |
+| Historical ticks | `Ticks` with `ts`, `close`, `volume`, bid/ask vectors | `Ticks` JSON with `datetime` vector | JSON follows HTTP `Ticks`; non-JSON formats may transpose to rows | Empty response: check `GET /api/v1/auth/usage` first for traffic quota, then date range, contract, trading day, and query parameters. |
+| Historical K-bars | `KBars` with `ts`, `Open`, `High`, `Low`, `Close`, `Volume`, `Amount` vectors | `KBars` JSON with `datetime`, `Open`, `High`, `Low`, `Close`, `Volume`, `Amount` vectors | JSON follows HTTP `KBars`; non-JSON formats may transpose to rows | Date/time arrays are column-oriented, not row objects. Empty response follows the same quota/date/contract checks as ticks. |
+| Daily quotes | `DailyQuotes`; Python date values are `datetime.date` | `DailyQuotes` JSON | CLI output may be JSON or formatted | Python `date=` accepts `datetime.date` / `datetime.datetime`, not strings. Empty fields usually mean no data for the date/exclude combination. |
+| Credit enquiry | `List[CreditEnquire]` | `Vec<CreditEnquire>` JSON | CLI output may be JSON or formatted | Empty array can mean no credit data for the contracts. |
+| Short stock sources | `List[ShortStockSource]`; Python object exposes `ts` | `Vec<ShortStockSource>` JSON with server date/time fields | CLI output may be JSON or formatted | Empty array can be normal if no source exists. Do not use Python `ts` in HTTP typed clients. |
+| Scanner | `List[ScannerItem]`; Python object exposes `ts` | `Vec<ScannerItem>` JSON with `datetime` | `shioaji data scanner --format json` follows scanner JSON; default output may be formatted | Ranking response; `count` limits size. Do not use Python `ts` in HTTP typed clients. |
+| Regulatory punish | `PunishResp`; Python may expose `date` / `datetime` values | `PunishResp` JSON | CLI output, if available, may be formatted | Use for disposition stocks; do not assume Python date objects in HTTP JSON. |
+| Regulatory notice | `NoticeResp`; Python may expose `date` / `datetime` values | `NoticeResp` JSON | CLI output, if available, may be formatted | Use for attention stocks; do not assume Python date objects in HTTP JSON. |
 
 ## Snapshots 即時快照
 
@@ -16,7 +34,11 @@ Get current snapshot for multiple contracts (max 500 per request).
 import shioaji as sj
 
 api = sj.Shioaji()
-api.login(api_key="YOUR_KEY", secret_key="YOUR_SECRET")
+api.login(
+    api_key="YOUR_KEY",
+    secret_key="YOUR_SECRET",
+    contracts_timeout=10000,  # Wait before using api.Contracts immediately
+)
 
 contracts = [
     api.Contracts.Stocks["2330"],
@@ -43,7 +65,10 @@ curl -X POST http://localhost:8080/api/v1/data/snapshots \
   }'
 ```
 
-### Snapshot Attributes 快照屬性
+### Python Snapshot Attributes Python 快照屬性
+
+Python `api.snapshots()` exposes `ts` as a timestamp field. HTTP `POST /api/v1/data/snapshots` returns `datetime` as an ISO-like datetime string instead; JavaScript, Go, Rust, and other HTTP clients should decode `datetime`, not `ts`.
+Python `api.snapshots()` 會暴露 `ts` 時間戳欄位；HTTP `POST /api/v1/data/snapshots` 則回傳 `datetime` 字串。JavaScript、Go、Rust 等 HTTP client 不要期待 `ts` 欄位。
 
 ```python
 snap.ts              # int: Timestamp 時間戳
@@ -70,12 +95,36 @@ snap.sell_volume     # int: Ask volume 賣量
 snap.volume_ratio    # float: Volume ratio 量比
 ```
 
+### HTTP Snapshot Response HTTP 快照回應
+
+HTTP clients receive JSON from the server schema. The time field is `datetime`.
+HTTP client 收到的是 server JSON schema，時間欄位是 `datetime`。
+
+```json
+[
+  {
+    "datetime": "2026-05-27T14:30:00",
+    "code": "2330",
+    "exchange": "TSE",
+    "open": 2310,
+    "high": 2330,
+    "low": 2290,
+    "close": 2300,
+    "volume": 154,
+    "total_volume": 31818
+  }
+]
+```
+
 ---
 
 ## Historical Ticks 歷史 Tick 資料
 
 Query historical tick data by date, time range, or last count.
 依日期、時間區間或筆數查詢歷史逐筆資料。
+
+The examples below assume `api.Contracts` is ready. If the script logs in and immediately queries data, use `contracts_timeout` during login or check contract loading first.
+以下範例假設 `api.Contracts` 已載入完成。若程式登入後立刻查資料，請在 login 使用 `contracts_timeout`，或先確認商品檔已完成載入。
 
 ### By Date 依日期
 
@@ -92,7 +141,7 @@ ticks = api.ticks(
 ticks = api.ticks(
     contract=api.Contracts.Stocks["2330"],
     date="2023-01-16",
-    query_type=sj.constant.TicksQueryType.RangeTime,
+    query_type=sj.TicksQueryType.RangeTime,
     time_start="09:00:00",
     time_end="09:20:01",
 )
@@ -104,7 +153,7 @@ ticks = api.ticks(
 ticks = api.ticks(
     contract=api.Contracts.Stocks["2330"],
     date="2023-01-16",
-    query_type=sj.constant.TicksQueryType.LastCount,
+    query_type=sj.TicksQueryType.LastCount,
     last_cnt=100,
 )
 ```
@@ -144,6 +193,9 @@ curl -X POST http://localhost:8080/api/v1/data/ticks \
 ```
 
 ### Ticks Attributes Tick 屬性
+
+These are Python `api.ticks()` wrapper attributes. HTTP `POST /api/v1/data/ticks` returns the server JSON schema with `datetime` as the time column; HTTP clients should not expect Python's `ts` key.
+以下是 Python `api.ticks()` wrapper 屬性。HTTP `POST /api/v1/data/ticks` 回傳 server JSON schema，時間欄位是 `datetime`；HTTP client 不要期待 Python 的 `ts` key。
 
 ```python
 ticks.ts          # List[int]: Timestamps 時間戳
@@ -197,6 +249,9 @@ curl -X POST http://localhost:8080/api/v1/data/kbars \
 ```
 
 ### KBars Attributes K 棒屬性
+
+These are Python `api.kbars()` wrapper attributes. HTTP `POST /api/v1/data/kbars` returns the server JSON schema with `datetime` as the time column; HTTP clients should not expect Python's `ts` key.
+以下是 Python `api.kbars()` wrapper 屬性。HTTP `POST /api/v1/data/kbars` 回傳 server JSON schema，時間欄位是 `datetime`；HTTP client 不要期待 Python 的 `ts` key。
 
 ```python
 kbars.ts      # List[int]: Timestamps 時間戳
@@ -349,6 +404,9 @@ curl -X POST http://localhost:8080/api/v1/data/short_stock_sources \
 
 ### ShortStockSource Attributes 券源屬性
 
+These are Python `api.short_stock_sources()` wrapper attributes. HTTP `POST /api/v1/data/short_stock_sources` returns the server JSON schema with `datetime`; HTTP clients should not expect Python's `ts` key.
+以下是 Python `api.short_stock_sources()` wrapper 屬性。HTTP `POST /api/v1/data/short_stock_sources` 回傳 server JSON schema，時間欄位是 `datetime`；HTTP client 不要期待 Python 的 `ts` key。
+
 ```python
 source.code               # str: Stock code 股票代碼
 source.short_stock_source # int: Available shares 可借券數量
@@ -365,11 +423,11 @@ Get market rankings by various criteria.
 ### Scanner Types 掃描器類型
 
 ```python
-sj.constant.ScannerType.ChangePercentRank  # 漲跌幅排行
-sj.constant.ScannerType.ChangePriceRank    # 漲跌價排行
-sj.constant.ScannerType.DayRangeRank       # 振幅排行
-sj.constant.ScannerType.VolumeRank         # 成交量排行
-sj.constant.ScannerType.AmountRank         # 成交金額排行
+sj.ScannerType.ChangePercentRank  # 漲跌幅排行
+sj.ScannerType.ChangePriceRank    # 漲跌價排行
+sj.ScannerType.DayRangeRank       # 振幅排行
+sj.ScannerType.VolumeRank         # 成交量排行
+sj.ScannerType.AmountRank         # 成交金額排行
 ```
 
 ### Python
@@ -377,14 +435,14 @@ sj.constant.ScannerType.AmountRank         # 成交金額排行
 ```python
 # Top 10 gainers 漲幅前 10 名
 scanners = api.scanners(
-    scanner_type=sj.constant.ScannerType.ChangePercentRank,
+    scanner_type=sj.ScannerType.ChangePercentRank,
     ascending=False,
     count=10,
 )
 
 # Top 10 losers 跌幅前 10 名
 scanners = api.scanners(
-    scanner_type=sj.constant.ScannerType.ChangePercentRank,
+    scanner_type=sj.ScannerType.ChangePercentRank,
     ascending=True,
     count=10,
 )
@@ -405,6 +463,9 @@ curl -X POST http://localhost:8080/api/v1/data/scanner \
 ```
 
 ### Scanner Attributes 掃描器屬性
+
+These are Python `api.scanners()` wrapper attributes. HTTP `POST /api/v1/data/scanner` returns the server JSON schema with `datetime`; HTTP clients should not expect Python's `ts` key.
+以下是 Python `api.scanners()` wrapper 屬性。HTTP `POST /api/v1/data/scanner` 回傳 server JSON schema，時間欄位是 `datetime`；HTTP client 不要期待 Python 的 `ts` key。
 
 ```python
 scan.date            # str: Trade date 交易日

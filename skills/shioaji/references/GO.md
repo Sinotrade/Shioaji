@@ -1,7 +1,9 @@
-# Go -- Shioaji HTTP API 完整指南 | Complete Guide
+# Go -- HTTP/SSE Client Patterns
 
 > Shioaji HTTP API Server 讓 Go 開發者可以使用永豐金證券的交易功能。
 > The Shioaji HTTP API Server lets Go developers access SinoPac's trading capabilities.
+>
+> This is a transport/client-pattern guide: how to send HTTP requests, parse responses, handle errors, and consume SSE in Go. It is not an endpoint payload or response schema catalog.
 
 ---
 
@@ -31,19 +33,25 @@
 ## 1. 伺服器啟動 | Server Startup
 
 ```bash
-# 安裝 rshioaji | Install rshioaji
-uv tool install rshioaji
-# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.sh | sh
+# 安裝 shioaji | Install shioaji
+uv tool install shioaji
+# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | sh
 
 # 啟動伺服器（預設為模擬模式）| Start server (simulation mode by default)
 shioaji server start
 ```
+
+Before starting the server, configure `.env` in the server working directory or export equivalent variables: `SJ_API_KEY`, `SJ_SEC_KEY`, `SJ_CA_PATH`, `SJ_CA_PASSWD`, and `SJ_PRODUCTION`. Use `SJ_PRODUCTION=false` while testing language clients unless the user explicitly needs production mode. See [PREPARE.md](PREPARE.md) for full setup, certificate, and `.env` details.
 
 伺服器預設在 `http://localhost:8080` 啟動。
 The server starts at `http://localhost:8080` by default.
 
 - **Localhost 模式**: 不需要認證 | No authentication required
 - **公開綁定模式**: 需要 `Authorization: Bearer SJ_API_KEY:SJ_SEC_KEY` | Auth required when binding to non-localhost
+
+Use the matching functional reference for workflow, payload rules, response shapes, and branching decisions. Use [HTTP_API.md](HTTP_API.md) for endpoint inventory. The hand-written structs below are starter transport types; fetch `/openapi.json` for production clients.
+
+This language guide is transport-only. Do not restate or override shared HTTP rules here: order update/cancel `trade_id`, `order_deal_event` over SSE, simulation vs production, and SSE payload field types are governed by [HTTP_API.md](HTTP_API.md) and the matching functional reference.
 
 ---
 
@@ -68,7 +76,7 @@ my-trading-app/
 │   ├── client.go                  # API 客戶端 | API client
 │   ├── types.go                   # 型別定義 | Type definitions
 │   └── stream.go                  # SSE 串流 | SSE streaming
-├── internal/strategies/           # 交易策略 | User trading logic
+├── strategies/                    # 交易策略 | User trading logic
 │   └── example.go
 └── go.mod
 ```
@@ -120,7 +128,7 @@ type SnapshotRequest struct {
 
 // Snapshot 快照
 type Snapshot struct {
-	Ts          int64   `json:"ts"`
+	Datetime    string  `json:"datetime"`
 	Code        string  `json:"code"`
 	Exchange    string  `json:"exchange"`
 	Open        float64 `json:"open"`
@@ -176,14 +184,9 @@ type PlaceOrderRequest struct {
 
 // Trade 交易結果
 type Trade struct {
-	ID        string  `json:"id"`
-	SeqNo     string  `json:"seqno"`
-	OrdNo     string  `json:"ordno"`
-	Action    string  `json:"action"`
-	Price     float64 `json:"price"`
-	Quantity  int     `json:"quantity"`
-	OrderType string  `json:"order_type"`
-	PriceType string  `json:"price_type"`
+	Contract ContractRequest        `json:"contract"`
+	Order    map[string]interface{} `json:"order"`
+	Status   map[string]interface{} `json:"status"`
 }
 
 // CancelOrderRequest 取消委託
@@ -560,46 +563,48 @@ json.NewDecoder(resp.Body).Decode(&snapshots)
 
 ### 5.3 下單 | Place Order
 
+Keep order examples disabled in runnable code. Confirm account, production/simulation mode, payload rules, response status, and `order_deal_event` handling in [ORDERS.md](ORDERS.md) before enabling.
+
 **股票限價買 | Stock limit buy:**
 
 ```go
-trade, err := client.PlaceOrder(shioaji.PlaceOrderRequest{
-    Contract: shioaji.ContractRequest{
-        SecurityType: "STK",
-        Exchange:     "TSE",
-        Code:         "2330",
-    },
-    StockOrder: &shioaji.StockOrder{
-        Action:    "Buy",
-        Price:     600.0,
-        Quantity:  1,
-        PriceType: "LMT",
-        OrderType: "ROD",
-    },
-})
-if err != nil {
-    log.Fatal(err)
-}
-fmt.Printf("成交 | Trade: %+v\n", trade)
+// trade, err := client.PlaceOrder(shioaji.PlaceOrderRequest{
+//     Contract: shioaji.ContractRequest{
+//         SecurityType: "STK",
+//         Exchange:     "TSE",
+//         Code:         "2330",
+//     },
+//     StockOrder: &shioaji.StockOrder{
+//         Action:    "Buy",
+//         Price:     600.0,
+//         Quantity:  1,
+//         PriceType: "LMT",
+//         OrderType: "ROD",
+//     },
+// })
+// if err != nil {
+//     log.Fatal(err)
+// }
+// fmt.Printf("Trade: %+v\n", trade)
 ```
 
 **期貨市價賣 | Futures market sell:**
 
 ```go
-trade, err := client.PlaceOrder(shioaji.PlaceOrderRequest{
-    Contract: shioaji.ContractRequest{
-        SecurityType: "FUT",
-        Exchange:     "TAIFEX",
-        Code:         "TXFC5",
-    },
-    FuturesOrder: &shioaji.FuturesOrder{
-        Action:    "Sell",
-        Price:     0,
-        Quantity:  1,
-        PriceType: "MKT",
-        OrderType: "IOC",
-    },
-})
+// trade, err := client.PlaceOrder(shioaji.PlaceOrderRequest{
+//     Contract: shioaji.ContractRequest{
+//         SecurityType: "FUT",
+//         Exchange:     "TAIFEX",
+//         Code:         "TXFC5",
+//     },
+//     FuturesOrder: &shioaji.FuturesOrder{
+//         Action:    "Sell",
+//         Price:     0,
+//         Quantity:  1,
+//         PriceType: "MKT",
+//         OrderType: "IOC",
+//     },
+// })
 ```
 
 ---
@@ -629,6 +634,10 @@ if err != nil {
 }
 fmt.Println("訂閱結果 | Subscription:", resp.Message)
 ```
+
+For futures continuous-month aliases such as `TXFR1` / `TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into the subscribe request. Regular futures codes do not need `target_code`.
+
+Order events use a separate account subscription in production. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` once per account; simulation does not require it.
 
 ### 6.2 接收資料 | Receive Data
 
@@ -855,7 +864,8 @@ func main() {
 				// 解析 tick 資料 | Parse tick data
 				var tick map[string]any
 				if err := json.Unmarshal([]byte(event.Data), &tick); err == nil {
-					fmt.Printf("[TICK] %s price=%.2f vol=%.0f\n",
+					// SSE price/amount fields may be JSON strings; convert before arithmetic.
+					fmt.Printf("[TICK] %s price=%v vol=%v\n",
 						tick["code"], tick["close"], tick["volume"])
 				}
 			case "heartbeat":

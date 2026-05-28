@@ -1,9 +1,12 @@
 # Reserve Orders 預收券款
 
-This document covers reserve stock and earmarking operations in rshioaji.
-本文件說明 rshioaji 中的預收券款及預收款項功能。
+This document covers reserve stock and earmarking operations in Shioaji.
+本文件說明 Shioaji 中的預收券款及預收款項功能。
 
-See [HTTP_API.md](HTTP_API.md) for full endpoint details.
+See [HTTP_API.md](HTTP_API.md) for full endpoint details. This file owns reserve response payload shapes.
+
+Python returns reserve wrapper responses with `.response` and `.error`; HTTP returns the inner reserve object directly. Check the returned `status` and `info` before assuming the reserve operation succeeded. Fetch `/openapi.json` only when exact installed-server fields are required.
+Python 回傳帶有 `.response` 與 `.error` 的預收 wrapper response；HTTP 直接回傳內層預收物件。請先檢查回傳 `status` 與 `info` 後再判斷預收是否成功。只有需要確認安裝版本精確欄位時才查 `/openapi.json`。
 
 For stocks under disposition, attention, or warning status, you must reserve shares/funds before trading.
 處置股、注意股或警示股在交易前須預收券款。
@@ -14,6 +17,7 @@ Service hours: 8:00 - 14:30 on trading days.
 ## Table of Contents 目錄
 
 - [Overview 概覽](#overview-概覽)
+- [Reserve Response and Decision Summary 預收回應與決策摘要](#reserve-response-and-decision-summary-預收回應與決策摘要)
 - [Stock Reserve Summary 預收券款摘要](#stock-reserve-summary-預收券款摘要)
 - [Stock Reserve Detail 預收券款明細](#stock-reserve-detail-預收券款明細)
 - [Reserve Stock 預收股票](#reserve-stock-預收股票)
@@ -35,6 +39,24 @@ All reserve endpoints are under the **order** domain (not portfolio).
 | `reserve_stock()` | Reserve shares 預收股票 | `POST /api/v1/order/reserve_stock` |
 | `earmarking_detail()` | Earmarking detail 預收款項明細 | `POST /api/v1/order/earmarking_detail` |
 | `reserve_earmarking()` | Reserve earmarking 預收款項 | `POST /api/v1/order/reserve_earmarking` |
+
+---
+
+## Reserve Response and Decision Summary 預收回應與決策摘要
+
+Reserve APIs are stock-account operations. They require a signed stock account in production and return empty/default values in simulation.
+預收 API 是股票帳戶操作。正式環境需要已簽署的股票帳戶；模擬環境會回傳空或預設值。
+
+| Operation | Python return | HTTP response | CLI output | Agent decision |
+|-----------|---------------|---------------|------------|----------------|
+| Stock reserve summary | `api.stock_reserve_summary(account)` -> `ReserveStocksSummaryResponse`; read `resp.response.stocks` | `POST /api/v1/order/stock_reserve_summary` -> `ReserveStocksSummary { stocks, account }` | No primary CLI command | Empty `stocks` can mean no reserve-eligible stocks or simulation mode. Use `available_share` to decide how much can be reserved; do not reserve more than available. |
+| Stock reserve detail | `api.stock_reserve_detail(account)` -> `ReserveStocksDetailResponse`; read `resp.response.stocks` | `POST /api/v1/order/stock_reserve_detail` -> `ReserveStocksDetail { stocks, account }` | No primary CLI command | Each stock row has `status` and `info`; use them to explain accepted/rejected reserve records. Empty list can be normal. |
+| Reserve stock | `api.reserve_stock(contract, share, account=...)` -> `ReserveStockResponse`; read `resp.response.status` / `resp.response.info` | `POST /api/v1/order/reserve_stock` -> `ReserveOrderResp { contract, account, share, status, info }` | No primary CLI command | `status=true` is the success signal. If `status=false`, read `info`; in simulation, `status=false` with empty `info` is the default no-op response. |
+| Earmarking detail | `api.earmarking_detail(account)` -> `EarmarkStocksDetailResponse`; read `resp.response.stocks` | `POST /api/v1/order/earmarking_detail` -> `EarmarkStocksDetail { stocks, account }` | No primary CLI command | Each row includes `share`, `price`, `amount`, `status`, and `info`; use row-level `status/info`, not HTTP 200 alone. |
+| Reserve earmarking | `api.reserve_earmarking(contract, share, price, account=...)` -> `ReserveEarmarkingResponse`; read `resp.response.status` / `resp.response.info` | `POST /api/v1/order/reserve_earmarking` -> `EarmarkingOrderResp { contract, account, share, price, status, info }` | No primary CLI command | `status=true` is the success signal. If `status=false`, read `info`; simulation returns default `status=false`. |
+
+Do not treat HTTP 200 alone as reserve success. These endpoints can return a valid response object whose `status` is false.
+不要只用 HTTP 200 判斷預收成功。這些端點可能回傳合法 response object，但其中 `status` 是 false。
 
 ---
 
@@ -122,7 +144,7 @@ Reserve a specific number of shares for a disposition stock.
 contract = api.Contracts.Stocks["2890"]
 
 # Reserve 1000 shares 預收 1000 股
-resp = api.reserve_stock(api.stock_account, contract, 1000)
+resp = api.reserve_stock(contract, 1000, account=api.stock_account)
 
 print(f"Status: {resp.response.status}")
 print(f"Share: {resp.response.share}")
@@ -132,9 +154,9 @@ print(f"Share: {resp.response.share}")
 
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
 |---------------|----------|---------|------------------|
-| `account` | `Account` | (required) | Stock account 股票帳戶 |
 | `contract` | `Contract` | (required) | Stock contract 股票合約 |
 | `share` | `int` | (required) | Number of shares to reserve 預收股數 |
+| `account` | `Account` | stock account | Stock account 股票帳戶 |
 | `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
 
 ### HTTP Example HTTP 範例
@@ -201,9 +223,9 @@ Pre-pay cash when buying disposition stocks.
 contract = api.Contracts.Stocks["2890"]
 
 # Reserve with price 預收並指定價格
-resp = api.reserve_earmarking(api.stock_account, contract, 1000, 15.15)
+resp = api.reserve_earmarking(contract, 1000, 15.15, account=api.stock_account)
 
-print(f"Amount: {resp.response.amount}")
+print(f"Price: {resp.response.price}")
 print(f"Status: {resp.response.status}")
 ```
 
@@ -211,10 +233,10 @@ print(f"Status: {resp.response.status}")
 
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
 |---------------|----------|---------|------------------|
-| `account` | `Account` | (required) | Stock account 股票帳戶 |
 | `contract` | `Contract` | (required) | Stock contract 股票合約 |
 | `share` | `int` | (required) | Number of shares 預收股數 |
 | `price` | `float` | (required) | Price per share 每股價格 |
+| `account` | `Account` | stock account | Stock account 股票帳戶 |
 | `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
 
 ### HTTP Example HTTP 範例
@@ -247,9 +269,9 @@ summary = api.stock_reserve_summary(api.stock_account)
 for stock in summary.response.stocks:
     if stock.available_share > 0:
         resp = api.reserve_stock(
-            api.stock_account,
             stock.contract,
             stock.available_share,
+            account=api.stock_account,
         )
         print(f"Reserved {stock.contract.code}: {resp.response.status}")
 ```
@@ -269,10 +291,4 @@ All reserve endpoints use `POST` method under `/api/v1/order/`:
 | `/order/earmarking_detail` | Earmarking detail 預收款項明細 |
 | `/order/reserve_earmarking` | Reserve earmarking 預收款項 |
 
-See [HTTP_API.md](HTTP_API.md) for full endpoint details.
-
----
-
-## Reference 參考資料
-
-- Original shioaji docs 原版文檔: https://sinotrade.github.io/tutor/order/Reserve/
+See [HTTP_API.md](HTTP_API.md) for full endpoint details. Reserve response wrappers and simulation defaults are described above in this file.

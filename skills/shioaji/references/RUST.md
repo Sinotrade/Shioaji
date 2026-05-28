@@ -1,8 +1,8 @@
-# Rust HTTP Client Guide / Rust HTTP 客戶端指南
+# Rust HTTP/SSE Client Patterns
 
-This guide covers consuming the Shioaji HTTP API from Rust using `reqwest` and `reqwest-eventsource`. This is **not** the rshioaji Rust library -- it is for building standalone Rust applications that talk to the Shioaji HTTP server.
+Transport guide for building Rust applications that call the Shioaji HTTP API with `reqwest` and consume SSE streams with `reqwest-eventsource`.
 
-本指南介紹如何使用 `reqwest` 和 `reqwest-eventsource` 從 Rust 呼叫 Shioaji HTTP API。這**不是** rshioaji Rust 函式庫，而是用來建立獨立 Rust 應用程式與 Shioaji HTTP 伺服器通訊。
+本文件說明 Rust 如何送 HTTP request、處理 JSON response、消費 SSE 串流。它不是 endpoint payload 或 response schema catalog。
 
 ---
 
@@ -26,13 +26,20 @@ Start the Shioaji HTTP server first:
 先啟動 Shioaji HTTP 伺服器：
 
 ```bash
-uv tool install rshioaji
-# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.sh | sh
-export SJ_API_KEY=YOUR_KEY SJ_SEC_KEY=YOUR_SECRET
+uv tool install shioaji
+# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | sh
 shioaji server start   # simulation mode by default
 ```
 
+Before starting the server, configure `.env` in the server working directory or export equivalent variables: `SJ_API_KEY`, `SJ_SEC_KEY`, `SJ_CA_PATH`, `SJ_CA_PASSWD`, and `SJ_PRODUCTION`. Use `SJ_PRODUCTION=false` while testing language clients unless the user explicitly needs production mode. See [PREPARE.md](PREPARE.md) for full setup, certificate, and `.env` details.
+
 The server runs at `http://localhost:8080` with all endpoints under `/api/v1/`.
+
+This is a transport/client-pattern guide: how to send HTTP requests, parse responses, handle errors, and consume SSE in Rust. It is not an endpoint payload or response schema catalog.
+
+Use the matching functional reference for workflow, payload rules, response shapes, and branching decisions. Use [HTTP_API.md](HTTP_API.md) for endpoint inventory. The hand-written structs below are starter transport types; fetch `/openapi.json` for production clients.
+
+This language guide is transport-only. Do not restate or override shared HTTP rules here: order update/cancel `trade_id`, `order_deal_event` over SSE, simulation vs production, and SSE payload field types are governed by [HTTP_API.md](HTTP_API.md) and the matching functional reference.
 
 ## 2. Project Setup / 專案建置
 
@@ -83,9 +90,11 @@ use serde::{Deserialize, Serialize};
 /// Contract identifier used across multiple endpoints
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ContractRef {
-    pub security_type: String,   // "STK" or "FUT" or "OPT"
+    pub security_type: String,   // "STK", "FUT", "OPT", or "IND"
     pub exchange: String,        // "TSE", "OTC", "TAIFEX"
     pub code: String,            // e.g. "2330"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_code: Option<String>,
 }
 
 /// POST /api/v1/data/snapshots request body
@@ -97,11 +106,11 @@ pub struct SnapshotsRequest {
 /// Snapshot response item
 #[derive(Debug, Deserialize)]
 pub struct Snapshot {
+    pub datetime: String,
     pub code: String,
     pub close: f64,
     pub volume: i64,
     pub total_volume: i64,
-    pub ts: i64,
 }
 
 /// Account info from GET /api/v1/auth/accounts
@@ -115,32 +124,61 @@ pub struct Account {
 #[derive(Debug, Serialize)]
 pub struct PlaceOrderRequest {
     pub contract: ContractRef,
-    pub order: OrderSpec,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stock_order: Option<StockOrder>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub futures_order: Option<FuturesOrder>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct OrderSpec {
+pub struct StockOrder {
     pub action: String,           // "Buy" or "Sell"
     pub price: f64,
     pub quantity: i32,
-    pub price_type: String,       // "LMT", "MKT"
+    pub price_type: String,       // "LMT" or "MKT"
     pub order_type: String,       // "ROD", "IOC", "FOK"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_lot: Option<String>, // "Common", "Odd", "IntradayOdd"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_cond: Option<String>, // "Cash", "MarginTrading", "ShortSelling"
 }
 
-/// Place order response
+#[derive(Debug, Serialize)]
+pub struct FuturesOrder {
+    pub action: String,           // "Buy" or "Sell"
+    pub price: f64,
+    pub quantity: i32,
+    pub price_type: String,       // "LMT", "MKT", or "MKP"
+    pub order_type: String,       // "ROD", "IOC", "FOK"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub octype: Option<String>,   // "Auto", "New", "Cover", "DayTrade"; HTTP also accepts "NewPosition"
+}
+
+/// Place order response. The real Trade contains nested contract/order/status;
+/// fill records, when present, are inside status.deals.
 #[derive(Debug, Deserialize)]
-pub struct OrderResponse {
-    pub order_id: String,
-    pub status: String,
+pub struct Trade {
+    pub contract: serde_json::Value,
+    pub order: serde_json::Value,
+    pub status: serde_json::Value,
 }
 
 /// SSE subscribe request
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SubscribeRequest {
     pub security_type: String,
     pub exchange: String,
     pub code: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_code: Option<String>,
     pub quote_type: String,       // "Tick", "BidAsk", "Quote"
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SubscriptionResponse {
+    pub success: bool,
+    pub message: String,
+    pub subscription: Option<SubscribeRequest>,
 }
 
 /// Tick data from SSE stream
@@ -159,10 +197,8 @@ pub struct TickData {
     #[serde(with = "rust_decimal::serde::str")]
     pub low: rust_decimal::Decimal,
     pub volume: u64,
-    pub vol_sum: u64,
+    pub total_volume: u64,
     pub tick_type: u32,
-    #[serde(with = "rust_decimal::serde::str")]
-    pub diff_price: rust_decimal::Decimal,
     pub simtrade: bool,
 }
 ```
@@ -223,7 +259,7 @@ impl ShioajiClient {
     pub async fn place_order(
         &self,
         request: PlaceOrderRequest,
-    ) -> Result<OrderResponse, reqwest::Error> {
+    ) -> Result<Trade, reqwest::Error> {
         self.client
             .post(format!("{}/api/v1/order/place_order", self.base_url))
             .json(&request)
@@ -237,11 +273,13 @@ impl ShioajiClient {
     pub async fn subscribe(
         &self,
         request: SubscribeRequest,
-    ) -> Result<reqwest::Response, reqwest::Error> {
+    ) -> Result<SubscriptionResponse, reqwest::Error> {
         self.client
             .post(format!("{}/api/v1/stream/subscribe", self.base_url))
             .json(&request)
             .send()
+            .await
+            ?.json()
             .await
     }
 }
@@ -267,6 +305,7 @@ let snapshots = client
         security_type: "STK".into(),
         exchange: "TSE".into(),
         code: "2330".into(),
+        target_code: None,
     }])
     .await?;
 
@@ -277,25 +316,31 @@ for snap in &snapshots {
 
 ### Place Order / 下單
 
-```rust
-let response = client
-    .place_order(PlaceOrderRequest {
-        contract: ContractRef {
-            security_type: "STK".into(),
-            exchange: "TSE".into(),
-            code: "2330".into(),
-        },
-        order: OrderSpec {
-            action: "Buy".into(),
-            price: 580.0,
-            quantity: 1,
-            price_type: "LMT".into(),
-            order_type: "ROD".into(),
-        },
-    })
-    .await?;
+Keep order examples disabled in runnable code. Confirm account, production/simulation mode, payload rules, response status, and `order_deal_event` handling in [ORDERS.md](ORDERS.md) before enabling.
 
-println!("Order ID: {}, Status: {}", response.order_id, response.status);
+```rust
+// let response = client
+//     .place_order(PlaceOrderRequest {
+//         contract: ContractRef {
+//             security_type: "STK".into(),
+//             exchange: "TSE".into(),
+//             code: "2330".into(),
+//             target_code: None,
+//         },
+//         stock_order: Some(StockOrder {
+//             action: "Buy".into(),
+//             price: 580.0,
+//             quantity: 1,
+//             price_type: "LMT".into(),
+//             order_type: "ROD".into(),
+//             order_lot: Some("Common".into()),
+//             order_cond: Some("Cash".into()),
+//         }),
+//         futures_order: None,
+//     })
+//     .await?;
+//
+// println!("Trade: {:?}", response);
 ```
 
 ## 6. SSE Streaming / SSE 即時串流
@@ -325,8 +370,8 @@ pub async fn stream_tick_stk() -> Result<(), Box<dyn std::error::Error>> {
                     match serde_json::from_str::<TickData>(&msg.data) {
                         Ok(tick) => {
                             println!(
-                                "[{}] {} close={} vol={}",
-                                tick.ts, tick.code, tick.close, tick.volume
+                                "[{} {}] {} close={} vol={}",
+                                tick.date, tick.time, tick.code, tick.close, tick.volume
                             );
                         }
                         Err(e) => eprintln!("Parse error: {}", e),
@@ -362,6 +407,10 @@ Workflow:
 1. **Subscribe** -- `POST /api/v1/stream/subscribe` with contract and quote type
 2. **Connect** -- `GET /api/v1/stream/data/tick_stk` (or other stream endpoint)
 3. **Unsubscribe** -- `POST /api/v1/stream/unsubscribe` when done
+
+For futures continuous-month aliases such as `TXFR1` / `TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into `SubscribeRequest`. Regular futures codes do not need `target_code`.
+
+Order events use a separate account subscription in production. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` once per account; simulation does not require it.
 
 ## 7. OpenAPI Client Generation / OpenAPI 客戶端生成
 
@@ -414,31 +463,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             security_type: "STK".into(),
             exchange: "TSE".into(),
             code: "2330".into(),
+            target_code: None,
         }])
         .await?;
     for snap in &snapshots {
         println!("  {} close={} volume={}", snap.code, snap.close, snap.total_volume);
     }
 
-    // 3. Place a limit order / 下限價單
-    println!("\n=== Place Order ===");
-    let order_resp = client
-        .place_order(PlaceOrderRequest {
-            contract: ContractRef {
-                security_type: "STK".into(),
-                exchange: "TSE".into(),
-                code: "2330".into(),
-            },
-            order: OrderSpec {
-                action: "Buy".into(),
-                price: 580.0,
-                quantity: 1,
-                price_type: "LMT".into(),
-                order_type: "ROD".into(),
-            },
-        })
-        .await?;
-    println!("  Order: {} status={}", order_resp.order_id, order_resp.status);
+    // 3. Optional order example / 可選下單範例
+    // Keep disabled in runnable examples; confirm mode/account/order details first.
+    // See ORDERS.md before enabling.
+    // let order_resp = client
+    //     .place_order(PlaceOrderRequest {
+    //         contract: ContractRef {
+    //             security_type: "STK".into(),
+    //             exchange: "TSE".into(),
+    //             code: "2330".into(),
+    //             target_code: None,
+    //         },
+    //         stock_order: Some(StockOrder {
+    //             action: "Buy".into(),
+    //             price: 580.0,
+    //             quantity: 1,
+    //             price_type: "LMT".into(),
+    //             order_type: "ROD".into(),
+    //             order_lot: Some("Common".into()),
+    //             order_cond: Some("Cash".into()),
+    //         }),
+    //         futures_order: None,
+    //     })
+    //     .await?;
+    // println!("  Trade: {:?}", order_resp);
 
     // 4. Subscribe and stream ticks / 訂閱並串流逐筆成交
     println!("\n=== Subscribing to 2330 ticks ===");
@@ -447,6 +502,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             security_type: "STK".into(),
             exchange: "TSE".into(),
             code: "2330".into(),
+            target_code: None,
             quote_type: "Tick".into(),
         })
         .await?;
@@ -464,6 +520,6 @@ Run with:
 cargo run
 ```
 
-> **Note**: This guide covers consuming the HTTP API server. If you are building within the rshioaji Rust codebase itself, use the Rust library directly instead of HTTP.
+> **Note**: This guide covers consuming the Shioaji HTTP API server from an external Rust application.
 >
-> **注意**：本指南介紹的是透過 HTTP API 使用 Shioaji。若您在 rshioaji Rust 專案內開發，請直接使用 Rust 函式庫，無需透過 HTTP。
+> **注意**：本指南介紹的是外部 Rust 應用程式如何透過 HTTP API 使用 Shioaji。

@@ -1,12 +1,12 @@
 {
-  "name": "rshioaji-plugins",
+  "name": "shioaji-plugins",
   "owner": {
     "name": "Sinotrade",
     "url": "https://github.com/Sinotrade"
   },
   "plugins": [
     {
-      "name": "rshioaji",
+      "name": "shioaji",
       "source": "./",
       "description": "Shioaji Taiwan financial trading API — Python, CLI, HTTP API, SSE streaming, and multi-language SDK guide",
       "version": "1.5.1",

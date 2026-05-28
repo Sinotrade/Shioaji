@@ -1,13 +1,17 @@
 # Accounting 帳務查詢
 
-This document covers account balance, margin, positions, profit/loss, settlements, and trading limits in rshioaji.
-本文件說明 rshioaji 中的帳戶餘額、保證金、持倉、損益、交割及交易額度查詢。
+This document covers account balance, margin, positions, profit/loss, settlements, and trading limits in Shioaji.
+本文件說明 Shioaji 中的帳戶餘額、保證金、持倉、損益、交割及交易額度查詢。
 
-See [HTTP_API.md](HTTP_API.md) for full endpoint details.
+See [HTTP_API.md](HTTP_API.md) for endpoint details. This file owns accounting response types and agent branching decisions.
+
+Attribute blocks in this file describe Python wrapper objects. HTTP and CLI clients receive server JSON response shapes, so use the endpoint-specific notes in this file and fetch `/openapi.json` only when exact installed-server field typing is required.
+本檔的屬性區塊描述 Python wrapper 物件。HTTP 與 CLI client 收到的是 server JSON response shape；agent 要決策前，請依本檔各端點說明判斷；只有需要確認安裝版本精確欄位型別時才查 `/openapi.json`。
 
 ## Table of Contents 目錄
 
 - [Overview 概覽](#overview-概覽)
+- [Accounting Response and Decision Summary 帳務回應與決策摘要](#accounting-response-and-decision-summary-帳務回應與決策摘要)
 - [Account Balance 帳戶餘額](#account-balance-帳戶餘額)
 - [Margin 保證金查詢](#margin-保證金查詢)
 - [Positions 持倉查詢](#positions-持倉查詢)
@@ -36,6 +40,29 @@ See [HTTP_API.md](HTTP_API.md) for full endpoint details.
 | `list_settlements()` | Settlement (legacy format) 交割（舊格式） | `POST /api/v1/portfolio/settlement` |
 | `settlements()` | Settlement list (new format) 交割列表（新格式） | `POST /api/v1/portfolio/settlements` |
 | `trading_limits()` | Trading limits 交易額度 | `POST /api/v1/portfolio/trading_limits` |
+
+---
+
+## Accounting Response and Decision Summary 帳務回應與決策摘要
+
+Use this table before generating accounting code. Python returns wrapper objects/lists; HTTP clients receive server JSON; CLI currently exposes the common portfolio commands (`balance`, `positions`, `margin`) and uses formatted output by default unless JSON is requested.
+產生帳務查詢程式前先看這張表。Python 回傳 wrapper object/list；HTTP client 收到 server JSON；CLI 目前主要提供常用 portfolio 指令（`balance`、`positions`、`margin`），預設為格式化輸出，除非指定 JSON。
+
+| Operation | Python return | HTTP response | CLI output | Agent decision |
+|-----------|---------------|---------------|------------|----------------|
+| Account balance | `api.account_balance(...)` -> `AccountBalance` | `POST /api/v1/portfolio/account_balance` -> `AccountBalance { acc_balance, date, errmsg }` | `shioaji portfolio balance`; JSON follows HTTP shape | Default account is stock. Check `errmsg` before trusting `acc_balance`; in simulation, zero/default balance is expected and must not be treated as real buying power. |
+| Futures margin | `api.margin(...)` -> `Margin` | `POST /api/v1/portfolio/margin` -> `Margin` | `shioaji portfolio margin`; JSON follows HTTP shape | Requires futures/options account. If the caller supplies a stock account, fix account selection before interpreting fields. Simulation can return default zero margin. |
+| Positions | `api.list_positions(...)` -> `List[StockPosition | FuturePosition]` | `POST /api/v1/portfolio/position_unit` -> `Vec<Position>` | `shioaji portfolio positions`; JSON follows HTTP shape | Empty list can be normal. Before calling it failure, verify account type (`S`/`F`) and `unit` (`Common` vs `Share`). |
+| Position detail | `api.list_position_detail(detail_id=...)` -> `List[StockPositionDetail | FuturePositionDetail]` | `POST /api/v1/portfolio/position_detail` -> `Vec<PositionDetail>` | No primary CLI command | Call `list_positions()` first in Python or query positions first over HTTP, then use the intended position `id` as `detail_id`. Empty detail usually means wrong/stale `detail_id` or account. |
+| Realized P&L | `api.list_profit_loss(...)` -> `List[StockProfitLoss | FutureProfitLoss]` | `POST /api/v1/portfolio/profit_loss` -> `Vec<ProfitLoss>` | No primary CLI command | Empty list can mean no realized P&L in the date range. Check date range, account type, and `unit` before changing logic. |
+| P&L detail | `api.list_profit_loss_detail(detail_id=...)` -> `List[StockProfitDetail | FutureProfitDetail]` | `POST /api/v1/portfolio/profit_loss_detail` -> `Vec<ProfitDetail>` | No primary CLI command | Call `list_profit_loss()` first and pass the selected P&L row id. For stock detail, `quantity` is an integer. |
+| P&L summary | `api.list_profit_loss_summary(...)` -> `ProfitLossSummaryTotal` | `POST /api/v1/portfolio/profitloss_sum` -> `ProfitLossSummaryTotal` | No primary CLI command | Use this for summarized realized P&L. In simulation it can return an empty summary/default total. |
+| Settlement legacy | `api.list_settlements(...)` -> `SettlementLegacy` | `POST /api/v1/portfolio/settlement` -> `SettlementLegacy` | No primary CLI command | Legacy endpoint returns a single T/T+1/T+2 object. Use only when the caller expects that old shape. |
+| Settlement list | `api.settlements(...)` -> `List[Settlement]`; Python `date` is `datetime.date` | `POST /api/v1/portfolio/settlements` -> `Vec<Settlement>` JSON | No primary CLI command | Current settlement-list shape. Do not copy Python `datetime.date` assumptions into HTTP clients. Simulation can return empty. |
+| Trading limits | `api.trading_limits(...)` -> `TradingLimits` | `POST /api/v1/portfolio/trading_limits` -> `TradingLimits` | No primary CLI command | Stock account only. Available on trading days 08:30-15:00; default/zero values in simulation are not production affordability. |
+
+All HTTP portfolio requests accept account selectors such as `account_type`, `broker_id`, and `account_id`. If an empty list or default object is surprising, check `/api/v1/info` for `simulation`, then check account selection before guessing the business meaning.
+所有 HTTP portfolio request 可帶 `account_type`、`broker_id`、`account_id` 等帳號 selector。若空陣列或預設物件看起來不合理，先用 `/api/v1/info` 確認 `simulation`，再檢查帳號選擇，不要直接猜業務含義。
 
 ---
 
@@ -145,12 +172,11 @@ curl -X POST http://localhost:8080/api/v1/portfolio/margin \
 
 ## Positions 持倉查詢
 
-Supports three position unit types via the `unit` parameter:
-透過 `unit` 參數支援三種持倉單位：
+Supports two position unit types via the `unit` parameter:
+透過 `unit` 參數支援兩種持倉單位：
 
 - `Unit.Common` (default) - Regular lot positions 整股
-- `Unit.OddLot` - Odd lot positions 零股
-- `Unit.Intraday` - Intraday odd lot positions 盤中零股
+- `Unit.Share` - Share-level / odd-lot positions 股數單位／零股
 
 ### Python Usage Python 用法
 
@@ -166,7 +192,7 @@ positions = api.list_positions(account=api.futopt_account)
 
 # Odd lot positions 零股持倉
 from shioaji import Unit
-positions = api.list_positions(unit=Unit.OddLot)
+positions = api.list_positions(unit=Unit.Share)
 
 for pos in positions:
     print(f"Code: {pos.code}, Qty: {pos.quantity}, P&L: {pos.pnl}")
@@ -192,7 +218,7 @@ curl -X POST http://localhost:8080/api/v1/portfolio/position_unit \
 # Odd lot positions 零股持倉
 curl -X POST http://localhost:8080/api/v1/portfolio/position_unit \
   -H "Content-Type: application/json" \
-  -d '{"account_id": "your_account_id", "unit": "OddLot"}'
+  -d '{"account_id": "your_account_id", "unit": "Share"}'
 ```
 
 ---
@@ -294,6 +320,9 @@ details = api.list_profit_loss_detail(detail_id=0)
 # With unit 指定單位
 details = api.list_profit_loss_detail(detail_id=0, unit=Unit.Common)
 ```
+
+For stock P&L details, `detail.quantity` is an `int`.
+股票損益明細中的 `detail.quantity` 是 `int`。
 
 ### Parameters 參數
 
@@ -417,6 +446,14 @@ for s in settlements:
     print(s)
 ```
 
+### Attributes 屬性
+
+```python
+s.date    # datetime.date: Settlement date 交割日
+s.amount  # float: Settlement amount 交割金額
+s.T       # int: T offset T 日偏移
+```
+
 ### Parameters 參數
 
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
@@ -528,9 +565,3 @@ All endpoints use `POST` method under `/api/v1/portfolio/`:
 | `/portfolio/trading_limits` | Trading limits 交易額度 |
 
 See [HTTP_API.md](HTTP_API.md) for full endpoint details.
-
----
-
-## Reference 參考資料
-
-- Original shioaji docs 原版文檔: https://sinotrade.github.io/tutor/accounting/

@@ -1,14 +1,18 @@
 # Streaming Market Data 即時行情
 
-This document covers subscribing to real-time market data in rshioaji via Python callbacks and HTTP SSE.
-本文件說明如何在 rshioaji 中透過 Python 回調和 HTTP SSE 訂閱即時行情資料。
+This document covers subscribing to real-time market data in Shioaji via Python callbacks and HTTP SSE.
+本文件說明如何在 Shioaji 中透過 Python 回調和 HTTP SSE 訂閱即時行情資料。
+
+Use [MIGRATION.md](MIGRATION.md) when old code uses legacy quote helpers or submodule constants. This file owns subscribe/unsubscribe responses and SSE event payload decisions.
 
 ## Table of Contents 目錄
 
 - [Overview 概覽](#overview-概覽)
 - [Subscribe / Unsubscribe 訂閱與取消訂閱](#subscribe--unsubscribe-訂閱與取消訂閱)
+- [Streaming Response and Decision Summary 即時串流回應與決策摘要](#streaming-response-and-decision-summary-即時串流回應與決策摘要)
 - [Python Callbacks 行情回調](#python-callbacks-行情回調)
 - [Async Callbacks 非同步回調](#async-callbacks-非同步回調)
+- [Python Receivers Python 接收器](#python-receivers-python-接收器)
 - [Callback Reference 回調參考](#callback-reference-回調參考)
 - [System Callbacks 系統回調](#system-callbacks-系統回調)
 - [SSE Streaming (HTTP) SSE 串流](#sse-streaming-http-sse-串流)
@@ -18,8 +22,8 @@ This document covers subscribing to real-time market data in rshioaji via Python
 
 ## Overview 概覽
 
-rshioaji provides real-time streaming data through two mechanisms:
-rshioaji 透過兩種機制提供即時串流資料：
+Shioaji provides real-time streaming data through two mechanisms:
+shioaji 透過兩種機制提供即時串流資料：
 
 1. **Python callbacks** -- Direct function callbacks for `Shioaji` (sync) and `ShioajiAsync` (async)
 2. **SSE (Server-Sent Events)** -- HTTP streaming via the built-in server, accessible from any language
@@ -41,50 +45,51 @@ import shioaji as sj
 api = sj.Shioaji()
 api.login(api_key="YOUR_KEY", secret_key="YOUR_SECRET")
 
+# Register callbacks before subscribing so early ticks are not missed.
+# 先註冊 callback 再訂閱，避免剛訂閱後的事件漏接。
+@api.on_tick_stk_v1()
+def on_tick(tick):
+    if tick.intraday_odd:
+        print(f"[盤中零股] {tick.code} close={tick.close} vol={tick.volume}")
+    else:
+        print(f"[一般] {tick.code} close={tick.close} vol={tick.volume}")
+
 # Subscribe tick data 訂閱逐筆成交
 api.subscribe(
     api.Contracts.Stocks["2330"],
-    quote_type=sj.constant.QuoteType.Tick,
+    quote_type=sj.QuoteType.Tick,
 )
 
 # Subscribe bidask data 訂閱五檔
 api.subscribe(
     api.Contracts.Stocks["2330"],
-    quote_type=sj.constant.QuoteType.BidAsk,
+    quote_type=sj.QuoteType.BidAsk,
 )
 
 # Subscribe futures tick 訂閱期貨 Tick
 api.subscribe(
     api.Contracts.Futures["TXFC0"],
-    quote_type=sj.constant.QuoteType.Tick,
+    quote_type=sj.QuoteType.Tick,
 )
 
 # Intraday odd lot 盤中零股 - Tick
 api.subscribe(
     api.Contracts.Stocks["2330"],
-    quote_type=sj.constant.QuoteType.Tick,
+    quote_type=sj.QuoteType.Tick,
     intraday_odd=True,
 )
 
 # Intraday odd lot 盤中零股 - BidAsk (五檔)
 api.subscribe(
     api.Contracts.Stocks["2330"],
-    quote_type=sj.constant.QuoteType.BidAsk,
+    quote_type=sj.QuoteType.BidAsk,
     intraday_odd=True,
 )
-
-# 在 callback 區分零股 vs 一般 tick: 用 `intraday_odd` 旗標
-@api.on_tick_stk_v1()
-def on_tick(exchange, tick):
-    if tick.intraday_odd:
-        print(f"[盤中零股] {tick.code} close={tick.close} vol={tick.volume}")
-    else:
-        print(f"[一般] {tick.code} close={tick.close} vol={tick.volume}")
 
 # Unsubscribe 取消訂閱
 api.unsubscribe(
     api.Contracts.Stocks["2330"],
-    quote_type=sj.constant.QuoteType.Tick,
+    quote_type=sj.QuoteType.Tick,
 )
 ```
 
@@ -124,8 +129,26 @@ contracts = [
 ]
 
 for contract in contracts:
-    api.subscribe(contract, quote_type=sj.constant.QuoteType.Tick)
+    api.subscribe(contract, quote_type=sj.QuoteType.Tick)
 ```
+
+---
+
+## Streaming Response and Decision Summary 即時串流回應與決策摘要
+
+Use this table before generating client code. Python receives typed callback objects; HTTP, CLI, JavaScript, Go, Rust, C#, C++, and Java receive server JSON/SSE shapes.
+產生 client code 前先看這張表。Python 收到 typed callback object；HTTP、CLI、JavaScript、Go、Rust、C#、C++、Java 收到 server JSON/SSE 形狀。
+
+| Operation | Python return | HTTP response | CLI output | Agent decision |
+|-----------|---------------|---------------|------------|----------------|
+| Subscribe market data | `api.subscribe(contract, quote_type=..., intraday_odd=...)`; normal use relies on callbacks/receivers, not a JSON response | `POST /api/v1/stream/subscribe` returns `SubscriptionResponse { success, message, subscription }` | Stream commands subscribe before opening SSE; `--format json` follows HTTP JSON where available | If `success=false` or the POST errors, do not open SSE as if subscribed. Check contract, `quote_type`, `intraday_odd`, and HTTP body. |
+| Unsubscribe market data | `api.unsubscribe(contract, quote_type=...)` | `POST /api/v1/stream/unsubscribe` returns `SubscriptionResponse { success, message, subscription }` | Stream commands unsubscribe on exit when they created the subscription | Treat `success=true` as accepted. If it errors, report the failed unsubscribe; do not invent a remaining subscription state. |
+| Market-data SSE | Python callbacks receive `TickSTKv1`, `BidAskSTKv1`, `TickFOPv1`, `BidAskFOPv1`, quote objects, or receiver values | `GET /api/v1/stream/data/*` is SSE. Each event has `event:` and JSON `data:`; heartbeat events are keep-alive only | CLI stream prints events from the SSE channel after subscribe | Parse `event:` first, then decode `data:` for that channel. A heartbeat means the connection is alive, not that market data arrived. |
+| Stock/FOP tick and bidask payloads | Python object fields include Python-native `datetime` and Decimal-like values; `.to_dict(raw=True)` is useful when exact raw fields are needed | SSE JSON uses server field names such as `date`, `time`, `total_volume`, `price_chg`, `pct_chg`; Decimal price/amount fields are strings | Same as HTTP/SSE for non-Python languages | Do not copy Python-only field names or types into HTTP clients. Convert string prices to decimal/float in the client language. |
+| Continuous futures R1/R2 over HTTP | Python can subscribe by the resolved contract object | For `TXFR1`/`TXFR2`, include `target_code` from `GET /api/v1/data/contracts/TXFR1?security_type=FUT`; regular futures codes do not need it | CLI/HTTP stream paths that build HTTP payloads must include `target_code` for R1/R2 | If HTTP subscribe returns 200 but SSE only emits heartbeats for R1/R2, first check missing or stale `target_code`. This special rule is futures R1/R2 only. |
+| Order/deal event stream | Use order callbacks/receivers (`api.set_order_callback`, `api.get_order_event_receiver()`) and `api.subscribe_trade(account)` for production event relay | `POST /api/v1/auth/subscribe_trade` returns `SubscribeTradeOut`; `GET /api/v1/stream/data/order_event` emits `order_event` SSE | `shioaji order events` is an active event stream, not historical records | In production, subscribe per account before opening `order_event`; otherwise expect heartbeat-only. In simulation, subscribe is not required and unsubscribe can return validation error. |
+| Stream status | No normal Python equivalent for HTTP connection count | `GET /api/v1/stream/status` returns `ConnectionStatus { active_connections, timestamp, status }` | Diagnostic only if exposed | Use this to diagnose live SSE connection count or unhealthy stream service; it does not prove a symbol is subscribed. |
+| Receiver availability | Python receivers are obtained directly by `api.get_*_receiver()` | `GET /api/v1/stream/receivers` returns receiver availability text | Diagnostic only if exposed | This is diagnostic. Use `/stream/status` for live connection count and subscribe/SSE endpoints for actual data flow. |
 
 ---
 
@@ -192,19 +215,19 @@ api.clear_on_quote_fop_v1_callback()
 
 ### Context Binding 綁定上下文
 
-Pass `bind=True` to inject a shared context object into the callback:
-傳入 `bind=True` 將共享上下文物件注入回調：
+Pass `bind=True` to inject a shared context object as the **first** callback argument:
+傳入 `bind=True` 時，共享 context 會成為 callback 的**第一個**參數：
 
 ```python
 api.set_context({"positions": {}})
 
 @api.on_tick_stk_v1(bind=True)
-def on_tick(tick, context):
+def on_tick(context, tick):
     context["positions"][tick.code] = tick.close
 ```
 
-**Note 注意:** Legacy 2-argument callbacks `(exchange, data)` are deprecated. Use 1-argument `(data)` callbacks.
-舊式雙參數回調 `(exchange, data)` 已棄用，請使用單參數 `(data)` 回調。
+**Note 注意:** Legacy examples may show the compatible 2-argument form `(exchange, data)`. Current bindings auto-detect that form, dispatch it for compatibility, and emit a deprecation warning. For newly generated code, prefer 1-argument callbacks `(data)`. With `bind=True`, prefer `(context, data)` because context is pre-bound as the first argument. The legacy bind form `(context, exchange, data)` also works but emits the same deprecation warning.
+舊範例可能出現相容用的雙參數寫法 `(exchange, data)`。目前 binding 會自動偵測並相容 dispatch，但會發出 deprecation warning。新產生的程式碼建議使用單參數 callback `(data)`；使用 `bind=True` 時，建議使用 `(context, data)`，因為 context 會預先綁成第一個參數。舊式 bind 寫法 `(context, exchange, data)` 也可運作，但同樣會有 deprecation warning。
 
 ---
 
@@ -231,6 +254,35 @@ api.set_on_tick_fop_v1_callback(some_async_callback)
 # Same clear methods 相同的清除方法
 api.clear_on_tick_stk_v1_callback()
 ```
+
+---
+
+## Python Receivers Python 接收器
+
+Callbacks are the normal Python path. Receivers are lower-level public APIs for consumers that want to pull events themselves. They are Python-only and are not the same as HTTP SSE; HTTP clients should use `/api/v1/stream/data/*`.
+Callbacks 是一般 Python 使用路徑。Receivers 是較底層的 public API，給想自行拉取事件的 Python consumer 使用。這是 Python-only，和 HTTP SSE 不同；HTTP client 應使用 `/api/v1/stream/data/*`。
+
+```python
+api.subscribe(api.Contracts.Stocks["2330"], quote_type=sj.QuoteType.Tick)
+
+receiver = api.get_tick_stk_v1_receiver()
+tick = await receiver.recv()       # async wait
+maybe_tick = receiver.try_recv()   # None if no event is ready
+```
+
+Available receivers:
+可用 receiver：
+
+```python
+api.get_tick_stk_v1_receiver()
+api.get_bidask_stk_v1_receiver()
+api.get_tick_fop_v1_receiver()
+api.get_bidask_fop_v1_receiver()
+api.get_order_event_receiver()
+```
+
+Callback setters prepare the required event handling automatically. Do not ask users to call private `start_*_handler()` helpers; they are not part of the normal Python API surface.
+Callback setter 會自動準備需要的事件處理。不要要求使用者直接呼叫 private `start_*_handler()` helper；那些不是正常 Python API surface。
 
 ---
 
@@ -321,6 +373,22 @@ api.set_on_quote_callback(quote_cb)
 api.clear_on_quote_callback()
 ```
 
+### set_contract_event_callback 設定商品檔更新事件回調
+
+`set_contract_event_callback` is a Python-only system callback for `SYS/CONTRACT` update events. It is different from login-time `contracts_cb`: `contracts_cb` notifies that contract files finished loading, while contract event callbacks notify that an upstream contract update event arrived and the client reloaded contracts.
+`set_contract_event_callback` 是 Python-only 的 `SYS/CONTRACT` 商品檔更新事件 callback。它和登入時的 `contracts_cb` 不同：`contracts_cb` 通知商品檔下載完成；contract event callback 則通知上游商品檔更新事件到達，且 client 已重新載入商品檔。
+
+```python
+def on_contract_event(event):
+    print(event.action)
+    print(event.security_type)
+
+api.set_contract_event_callback(on_contract_event)
+
+# Clear 清除
+api.clear_contract_event_callback()
+```
+
 ### set_session_down_callback 設定斷線回調
 
 Fires when the session goes down (DownError events):
@@ -359,8 +427,8 @@ api.set_on_quote_callback(quote_cb)
 
 ## SSE Streaming (HTTP) SSE 串流
 
-The rshioaji HTTP server provides Server-Sent Events (SSE) for real-time data streaming.
-rshioaji HTTP 伺服器透過 Server-Sent Events (SSE) 提供即時資料串流。
+The Shioaji HTTP server provides Server-Sent Events (SSE) for real-time data streaming.
+Shioaji HTTP 伺服器透過 Server-Sent Events (SSE) 提供即時資料串流。
 
 ### SSE Channels 串流頻道
 
@@ -389,6 +457,17 @@ curl -X POST http://localhost:8080/api/v1/stream/subscribe \
   -H "Content-Type: application/json" \
   -d '{"security_type":"STK","exchange":"TSE","code":"2330","quote_type":"Tick"}'
 
+# Futures continuous-month aliases via HTTP, such as TXFR1/TXFR2,
+# require target_code from contract lookup. Regular futures codes do not.
+# Step 1: look up TXFR1 and read the returned target_code, for example TXFF6.
+curl "http://localhost:8080/api/v1/data/contracts/TXFR1?security_type=FUT"
+
+# Step 2: subscribe with both code=TXFR1 and the returned target_code.
+# For TXFR1/TXFR2, missing target_code can return 200 but only emit SSE heartbeats.
+curl -X POST http://localhost:8080/api/v1/stream/subscribe \
+  -H "Content-Type: application/json" \
+  -d '{"security_type":"FUT","exchange":"TAIFEX","code":"TXFR1","target_code":"TXFF6","quote_type":"Tick"}'
+
 # Trade events: subscribe per account before opening order_event stream.
 # REQUIRED for /stream/data/order_event in production — without it the SSE
 # stream only emits heartbeats. Mirrors api.subscribe_trade(account) in Python.
@@ -404,17 +483,17 @@ curl -N http://localhost:8080/api/v1/stream/data/tick_stk
 curl -N http://localhost:8080/api/v1/stream/data/order_event
 ```
 
-Trade subscriptions survive the daily client swap via an internal registry — call `subscribe_trade` once per account per server boot. Use `POST /api/v1/auth/unsubscribe_trade` (same body) to stop receiving events for an account.
+Trade subscriptions stay active across the server's daily client refresh — call `subscribe_trade` once per account per server boot. Use `POST /api/v1/auth/unsubscribe_trade` (same body) to stop receiving events for an account.
 
-In **simulation**, `subscribe_trade` is a client-side no-op success and `unsubscribe_trade` returns `400` — paper order events flow through a separate path and don't use the relay subscription registry. You don't need to call either in simulation.
+In **simulation**, `subscribe_trade` returns a no-op success and `unsubscribe_trade` returns `400`. Paper order events do not require trade-event subscription. You don't need to call either in simulation.
 
-訂閱委託回報需要在打開 `/stream/data/order_event` SSE 之前**先呼叫**一次 `/auth/subscribe_trade`（每帳號一次）；沒有訂閱的話正式環境只會收到 heartbeat。每日換 client 時系統會自動 replay 訂閱表，所以一個 server 開機後對每個帳號訂閱一次即可。**Simulation 模式下不需要呼叫**：`subscribe_trade` 會直接 no-op 成功，`unsubscribe_trade` 會回 400，因為 paper 委託事件走的是另一條路徑。
+訂閱委託回報需要在打開 `/stream/data/order_event` SSE 之前**先呼叫**一次 `/auth/subscribe_trade`（每帳號一次）；沒有訂閱的話正式環境只會收到 heartbeat。訂閱會跨過 server 每日 client refresh，所以一個 server 開機後對每個帳號訂閱一次即可。**Simulation 模式下不需要呼叫**：`subscribe_trade` 會直接 no-op 成功，`unsubscribe_trade` 會回 400，paper 委託事件不需要 trade-event subscription。
 
 ### SSE Event Format SSE 事件格式
 
 ```
 event: tick_fop
-data: {"code":"TXFD6","date":"2026-04-01","time":"18:33:18.084000","open":"33601","close":"33438","high":"33728","low":"33317","volume":1,"vol_sum":21748,"tick_type":0,"diff_price":"49","simtrade":false}
+data: {"code":"TXFD6","date":"2026-04-01","time":"18:33:18.084000","open":"33601","close":"33438","high":"33728","low":"33317","volume":1,"total_volume":21748,"tick_type":0,"price_chg":"49","simtrade":false}
 
 event: heartbeat
 data: {"type":"heartbeat","timestamp":"2026-03-31T01:00:30Z","connection_id":"42"}
@@ -425,7 +504,9 @@ data: {"operation":{"op_type":"New","op_code":"00","op_msg":""},"order":{...},..
 
 > **Important — Decimal fields are JSON strings / Decimal 欄位為 JSON 字串**
 >
-> Price and amount fields (`open`, `close`, `high`, `low`, `amount`, `amount_sum`, `avg_price`, `diff_price`, `diff_rate`, `target_kind_price`) are serialized as **strings** (e.g., `"close":"33438"`) because the server uses `Decimal` type for precision. Volume fields (`volume`, `vol_sum`, `trade_bid_vol_sum`, `trade_ask_vol_sum`) are numbers.
+> Python callback objects and HTTP SSE JSON do not use exactly the same field names. HTTP SSE uses the server JSON names, for example `total_volume`, `total_amount`, `price_chg`, `pct_chg`, `bid_side_total_vol`, and `ask_side_total_vol`.
+>
+> Price and amount fields (`open`, `close`, `high`, `low`, `amount`, `total_amount`, `avg_price`, `price_chg`, `pct_chg`, `underlying_price`) are serialized as **strings** (e.g., `"close":"33438"`) because the server uses `Decimal` type for precision. Volume fields (`volume`, `total_volume`, `bid_side_total_vol`, `ask_side_total_vol`) are numbers.
 >
 > This differs from REST API responses (like `/data/snapshots`) where prices are JSON numbers. When parsing SSE data, convert string fields to your language's decimal/float type.
 >
@@ -482,7 +563,7 @@ es.onerror = () => console.log("SSE connection error");
 import time
 
 for i, contract in enumerate(contracts):
-    api.subscribe(contract, quote_type=sj.constant.QuoteType.Tick)
+    api.subscribe(contract, quote_type=sj.QuoteType.Tick)
     if (i + 1) % 50 == 0:
         time.sleep(5)
 ```

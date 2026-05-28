@@ -1,8 +1,8 @@
-# C# Project Guide / C# 專案指南
+# C# HTTP/SSE Client Patterns
 
-Complete guide for building trading applications with Shioaji HTTP API in C#.
+Transport guide for building C# applications that call the Shioaji HTTP API and consume SSE streams.
 
-使用 Shioaji HTTP API 建立 C# 交易應用程式的完整指南。
+本文件說明 C# 如何送 HTTP request、處理 JSON response、消費 SSE 串流。它不是 endpoint payload 或 response schema catalog。
 
 ---
 
@@ -19,6 +19,7 @@ Complete guide for building trading applications with Shioaji HTTP API in C#.
 6. [SSE Streaming / SSE 即時串流](#sse-streaming--sse-即時串流)
 7. [OpenAPI Client Generation / OpenAPI 用戶端產生](#openapi-client-generation--openapi-用戶端產生)
 8. [Complete Example / 完整範例](#complete-example--完整範例)
+9. [Endpoint Inventory / 端點清單](#endpoint-inventory--端點清單)
 
 ---
 
@@ -29,19 +30,16 @@ Start the Shioaji HTTP server before running any C# client code:
 在執行 C# 用戶端之前，先啟動 Shioaji HTTP 伺服器：
 
 ```bash
-uv tool install rshioaji
-# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/rshioaji/main/install.sh | sh
+uv tool install shioaji
+# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | sh
 shioaji server start          # simulation mode by default
 ```
 
-For remote/production servers, set your API credentials:
+Before starting the server, configure `.env` in the server working directory or export equivalent variables: `SJ_API_KEY`, `SJ_SEC_KEY`, `SJ_CA_PATH`, `SJ_CA_PASSWD`, and `SJ_PRODUCTION`. Use `SJ_PRODUCTION=false` while testing language clients unless the user explicitly needs production mode. See [PREPARE.md](PREPARE.md) for full setup, certificate, and `.env` details.
 
-遠端或正式環境需設定 API 憑證：
+Use the matching functional reference for workflow, payload rules, response shapes, and branching decisions. Use [HTTP_API.md](HTTP_API.md) for endpoint inventory. The hand-written records below are starter transport types; fetch `/openapi.json` for production clients.
 
-```bash
-export SJ_API_KEY=YOUR_API_KEY
-export SJ_SEC_KEY=YOUR_SECRET_KEY
-```
+This language guide is transport-only. Do not restate or override shared HTTP rules here: order update/cancel `trade_id`, `order_deal_event` over SSE, simulation vs production, and SSE payload field types are governed by [HTTP_API.md](HTTP_API.md) and the matching functional reference.
 
 ---
 
@@ -111,7 +109,8 @@ public record Account(
     [property: JsonPropertyName("person_id")] string PersonId,
     [property: JsonPropertyName("broker_id")] string BrokerId,
     [property: JsonPropertyName("account_id")] string AccountId,
-    [property: JsonPropertyName("username")] string Username
+    [property: JsonPropertyName("username")] string Username,
+    [property: JsonPropertyName("signed")] bool Signed
 );
 ```
 
@@ -124,7 +123,8 @@ namespace MyTradingApp.Shioaji.Models;
 public record Contract(
     [property: JsonPropertyName("security_type")] string SecurityType,
     [property: JsonPropertyName("exchange")] string Exchange,
-    [property: JsonPropertyName("code")] string Code
+    [property: JsonPropertyName("code")] string Code,
+    [property: JsonPropertyName("target_code")] string? TargetCode = null
 );
 ```
 
@@ -135,6 +135,7 @@ using System.Text.Json.Serialization;
 namespace MyTradingApp.Shioaji.Models;
 
 public record Snapshot(
+    [property: JsonPropertyName("datetime")] string Datetime,
     [property: JsonPropertyName("code")] string Code,
     [property: JsonPropertyName("close")] double Close,
     [property: JsonPropertyName("total_volume")] long TotalVolume,
@@ -168,12 +169,14 @@ public record SubscriptionRequest(
     [property: JsonPropertyName("exchange")] string Exchange,
     [property: JsonPropertyName("code")] string Code,
     [property: JsonPropertyName("quote_type")] string QuoteType,
+    [property: JsonPropertyName("target_code")] string? TargetCode = null,
     [property: JsonPropertyName("intraday_odd")] bool IntradayOdd = false
 );
 
 public record SubscriptionResponse(
     [property: JsonPropertyName("success")] bool Success,
-    [property: JsonPropertyName("message")] string Message
+    [property: JsonPropertyName("message")] string Message,
+    [property: JsonPropertyName("subscription")] SubscriptionRequest? Subscription
 );
 ```
 
@@ -183,6 +186,7 @@ public record SubscriptionResponse(
 // Shioaji/ShioajiClient.cs
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MyTradingApp.Shioaji.Models;
 
 namespace MyTradingApp.Shioaji;
@@ -206,7 +210,8 @@ public class ShioajiClient : IDisposable
         _http.DefaultRequestHeaders.Add("Accept", "application/json");
         _jsonOptions = new JsonSerializerOptions
         {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
     }
 
@@ -328,21 +333,23 @@ foreach (var snap in snapshots)
 
 ### Place Order / 下單
 
+Keep order examples disabled in runnable code. Confirm account, production/simulation mode, payload rules, response status, and `order_deal_event` handling in [ORDERS.md](ORDERS.md) before enabling.
+
 ```csharp
 // POST /api/v1/order/place_order
-var order = new PlaceOrderRequest(
-    Contract: new Contract("STK", "TSE", "2330"),
-    StockOrder: new StockOrder(
-        Action: "Buy",
-        Price: 580.0,
-        Quantity: 1,
-        PriceType: "LMT",
-        OrderType: "ROD"
-    )
-);
-
-var result = await client.PlaceOrderAsync(order);
-Console.WriteLine($"Order result: {result}");
+// var order = new PlaceOrderRequest(
+//     Contract: new Contract("STK", "TSE", "2330"),
+//     StockOrder: new StockOrder(
+//         Action: "Buy",
+//         Price: 580.0,
+//         Quantity: 1,
+//         PriceType: "LMT",
+//         OrderType: "ROD"
+//     )
+// );
+//
+// var result = await client.PlaceOrderAsync(order);
+// Console.WriteLine($"Order result: {result}");
 ```
 
 ---
@@ -458,6 +465,10 @@ await foreach (var evt in SseClient.StreamAsync(
 }
 ```
 
+For futures continuous-month aliases such as `TXFR1` / `TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into the subscribe request. Regular futures codes do not need `target_code`.
+
+Order events use a separate account subscription in production. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` once per account; simulation does not require it.
+
 ### SSE Endpoints / SSE 端點
 
 | Endpoint | Event Name | Description |
@@ -532,10 +543,12 @@ record Account(
 record Contract(
     [property: JsonPropertyName("security_type")] string SecurityType,
     [property: JsonPropertyName("exchange")] string Exchange,
-    [property: JsonPropertyName("code")] string Code
+    [property: JsonPropertyName("code")] string Code,
+    [property: JsonPropertyName("target_code")] string? TargetCode = null
 );
 
 record SnapshotResponse(
+    [property: JsonPropertyName("datetime")] string Datetime,
     [property: JsonPropertyName("code")] string Code,
     [property: JsonPropertyName("close")] double Close,
     [property: JsonPropertyName("total_volume")] long TotalVolume
@@ -670,19 +683,6 @@ using var client = new ShioajiClient(
 
 ---
 
-## API Endpoint Reference / API 端點參考
+## Endpoint Inventory / 端點清單
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/auth/accounts` | List accounts / 查詢帳號 |
-| POST | `/api/v1/data/snapshots` | Market snapshots / 快照報價 |
-| POST | `/api/v1/data/ticks` | Historical ticks / 歷史逐筆 |
-| POST | `/api/v1/data/kbars` | K-bar data / K 線資料 |
-| POST | `/api/v1/order/place_order` | Place order / 下單 |
-| POST | `/api/v1/order/cancel_order` | Cancel order / 刪單 |
-| POST | `/api/v1/order/update_status` | Update order status / 更新委託狀態 |
-| GET | `/api/v1/portfolio/account_balance` | Account balance / 帳戶餘額 |
-| POST | `/api/v1/stream/subscribe` | Subscribe to stream / 訂閱串流 |
-| GET | `/api/v1/stream/data/tick_stk` | SSE tick stream / 逐筆串流 |
-
-For the full endpoint list, see [HTTP_API.md](HTTP_API.md).
+Do not maintain endpoint lists in this language guide. Use [HTTP_API.md](HTTP_API.md) for the endpoint inventory, the matching functional reference for response decisions, and `/openapi.json` before typing installed-server response fields.
