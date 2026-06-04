@@ -1,0 +1,20 @@
+{
+  "name": "sinotrade",
+  "interface": {
+    "displayName": "Sinotrade"
+  },
+  "plugins": [
+    {
+      "name": "shioaji",
+      "source": {
+        "source": "local",
+        "path": "./plugins/shioaji"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Finance"
+    }
+  ]
+}

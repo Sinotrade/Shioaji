@@ -41,6 +41,16 @@ claude plugin marketplace add Sinotrade/Shioaji
 claude plugin install shioaji
 ```
 
+#### Codex
+```bash
+codex plugin marketplace add Sinotrade/Shioaji
+codex plugin add shioaji@sinotrade
+```
+
+#### Cursor
+
+Install from the [Cursor Marketplace](https://cursor.com/marketplace) after the Shioaji plugin is published, or submit the repository through the [Cursor publisher flow](https://cursor.com/marketplace/publish) for review.
+
 #### Multi-platform Installers (Cursor, Windsurf, Copilot, Codex, and more)
 ```bash
 npx skills add Sinotrade/Shioaji                # skills.sh - 18+ agents
@@ -90,7 +100,7 @@ curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh
 curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh | CHANNEL=prerelease sh
 
 # Specific version
-curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh | VERSION=v1.5.1 sh
+curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh | VERSION=v1.5.2 sh
 ```
 
 **Windows (PowerShell):**

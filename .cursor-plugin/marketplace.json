@@ -1,0 +1,16 @@
+{
+  "name": "sinotrade",
+  "owner": {
+    "name": "Sinotrade"
+  },
+  "metadata": {
+    "description": "Sinotrade Cursor plugin marketplace for Taiwan trading workflows."
+  },
+  "plugins": [
+    {
+      "name": "shioaji",
+      "source": "plugins/shioaji",
+      "description": "Shioaji Taiwan financial trading API — Python, CLI, HTTP API, SSE streaming, and multi-language SDK guide"
+    }
+  ]
+}
