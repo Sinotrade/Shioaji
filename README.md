@@ -94,22 +94,22 @@ shioaji --help
 **Linux / macOS:**
 ```bash
 # Stable
-curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh | sh
+curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | sh
 
 # Pre-release
-curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh | CHANNEL=prerelease sh
+curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | CHANNEL=prerelease sh
 
 # Specific version
-curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/master/install.sh | VERSION=v1.5.2 sh
+curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | VERSION=v1.5.2 sh
 ```
 
 **Windows (PowerShell):**
 ```bash
 # Stable
-irm https://raw.githubusercontent.com/sinotrade/shioaji/master/install.ps1 | iex
+irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
 
 # Pre-release
-$env:CHANNEL="prerelease"; irm https://raw.githubusercontent.com/sinotrade/shioaji/master/install.ps1 | iex
+$env:CHANNEL="prerelease"; irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
 ```
 
 </details>

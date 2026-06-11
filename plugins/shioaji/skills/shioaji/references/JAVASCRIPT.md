@@ -32,7 +32,7 @@
 ```bash
 # 安裝 shioaji | Install shioaji
 uv tool install shioaji
-# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | sh
+# or: curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | sh
 
 # 啟動伺服器（預設為模擬模式）| Start server (simulation mode by default)
 shioaji server start

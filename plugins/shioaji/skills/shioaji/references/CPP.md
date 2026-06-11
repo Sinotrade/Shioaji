@@ -32,7 +32,7 @@ Start the Shioaji HTTP server before running any C/C++ client code:
 
 ```bash
 uv tool install shioaji
-# or: curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | sh
+# or: curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | sh
 shioaji server start          # simulation mode by default
 ```
 

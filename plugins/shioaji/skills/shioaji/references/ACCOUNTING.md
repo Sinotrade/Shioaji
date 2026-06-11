@@ -45,21 +45,21 @@ Attribute blocks in this file describe Python wrapper objects. HTTP and CLI clie
 
 ## Accounting Response and Decision Summary 帳務回應與決策摘要
 
-Use this table before generating accounting code. Python returns wrapper objects/lists; HTTP clients receive server JSON; CLI currently exposes the common portfolio commands (`balance`, `positions`, `margin`) and uses formatted output by default unless JSON is requested.
-產生帳務查詢程式前先看這張表。Python 回傳 wrapper object/list；HTTP client 收到 server JSON；CLI 目前主要提供常用 portfolio 指令（`balance`、`positions`、`margin`），預設為格式化輸出，除非指定 JSON。
+Use this table before generating accounting code. Python returns wrapper objects/lists; HTTP clients receive server JSON; CLI exposes portfolio commands (`balance`, `positions`, `margin`, `position-detail`, `profit-loss`, `profit-loss-detail`, `profit-loss-summary`, `trading-limits`, `settlements`) and uses TOON output by default unless `--format json` is requested.
+產生帳務查詢程式前先看這張表。Python 回傳 wrapper object/list；HTTP client 收到 server JSON；CLI 提供 portfolio 指令（`balance`、`positions`、`margin`、`position-detail`、`profit-loss`、`profit-loss-detail`、`profit-loss-summary`、`trading-limits`、`settlements`），預設為 TOON 輸出，除非指定 `--format json`。
 
 | Operation | Python return | HTTP response | CLI output | Agent decision |
 |-----------|---------------|---------------|------------|----------------|
 | Account balance | `api.account_balance(...)` -> `AccountBalance` | `POST /api/v1/portfolio/account_balance` -> `AccountBalance { acc_balance, date, errmsg }` | `shioaji portfolio balance`; JSON follows HTTP shape | Default account is stock. Check `errmsg` before trusting `acc_balance`; in simulation, zero/default balance is expected and must not be treated as real buying power. |
 | Futures margin | `api.margin(...)` -> `Margin` | `POST /api/v1/portfolio/margin` -> `Margin` | `shioaji portfolio margin`; JSON follows HTTP shape | Requires futures/options account. If the caller supplies a stock account, fix account selection before interpreting fields. Simulation can return default zero margin. |
 | Positions | `api.list_positions(...)` -> `List[StockPosition | FuturePosition]` | `POST /api/v1/portfolio/position_unit` -> `Vec<Position>` | `shioaji portfolio positions`; JSON follows HTTP shape | Empty list can be normal. Before calling it failure, verify account type (`S`/`F`) and `unit` (`Common` vs `Share`). |
-| Position detail | `api.list_position_detail(detail_id=...)` -> `List[StockPositionDetail | FuturePositionDetail]` | `POST /api/v1/portfolio/position_detail` -> `Vec<PositionDetail>` | No primary CLI command | Call `list_positions()` first in Python or query positions first over HTTP, then use the intended position `id` as `detail_id`. Empty detail usually means wrong/stale `detail_id` or account. |
-| Realized P&L | `api.list_profit_loss(...)` -> `List[StockProfitLoss | FutureProfitLoss]` | `POST /api/v1/portfolio/profit_loss` -> `Vec<ProfitLoss>` | No primary CLI command | Empty list can mean no realized P&L in the date range. Check date range, account type, and `unit` before changing logic. |
-| P&L detail | `api.list_profit_loss_detail(detail_id=...)` -> `List[StockProfitDetail | FutureProfitDetail]` | `POST /api/v1/portfolio/profit_loss_detail` -> `Vec<ProfitDetail>` | No primary CLI command | Call `list_profit_loss()` first and pass the selected P&L row id. For stock detail, `quantity` is an integer. |
-| P&L summary | `api.list_profit_loss_summary(...)` -> `ProfitLossSummaryTotal` | `POST /api/v1/portfolio/profitloss_sum` -> `ProfitLossSummaryTotal` | No primary CLI command | Use this for summarized realized P&L. In simulation it can return an empty summary/default total. |
-| Settlement legacy | `api.list_settlements(...)` -> `SettlementLegacy` | `POST /api/v1/portfolio/settlement` -> `SettlementLegacy` | No primary CLI command | Legacy endpoint returns a single T/T+1/T+2 object. Use only when the caller expects that old shape. |
-| Settlement list | `api.settlements(...)` -> `List[Settlement]`; Python `date` is `datetime.date` | `POST /api/v1/portfolio/settlements` -> `Vec<Settlement>` JSON | No primary CLI command | Current settlement-list shape. Do not copy Python `datetime.date` assumptions into HTTP clients. Simulation can return empty. |
-| Trading limits | `api.trading_limits(...)` -> `TradingLimits` | `POST /api/v1/portfolio/trading_limits` -> `TradingLimits` | No primary CLI command | Stock account only. Available on trading days 08:30-15:00; default/zero values in simulation are not production affordability. |
+| Position detail | `api.list_position_detail(detail_id=...)` -> `List[StockPositionDetail | FuturePositionDetail]` | `POST /api/v1/portfolio/position_detail` -> `Vec<PositionDetail>` | `shioaji portfolio position-detail --detail-id <ID>`; JSON follows HTTP shape | Call `list_positions()` first in Python or query positions first over HTTP/CLI, then use the intended position `id` as `detail_id`. Empty detail usually means wrong/stale `detail_id` or account. |
+| Realized P&L | `api.list_profit_loss(...)` -> `List[StockProfitLoss | FutureProfitLoss]` | `POST /api/v1/portfolio/profit_loss` -> `Vec<ProfitLoss>` | `shioaji portfolio profit-loss`; dates default to today; JSON follows HTTP shape | Empty list can mean no realized P&L in the date range. Check date range, account type, and `unit` before changing logic. |
+| P&L detail | `api.list_profit_loss_detail(detail_id=...)` -> `List[StockProfitDetail | FutureProfitDetail]` | `POST /api/v1/portfolio/profit_loss_detail` -> `Vec<ProfitDetail>` | `shioaji portfolio profit-loss-detail --detail-id <ID>`; JSON follows HTTP shape | Call `list_profit_loss()` first and pass the selected P&L row id. For stock detail, `quantity` is an integer. |
+| P&L summary | `api.list_profit_loss_summary(...)` -> `ProfitLossSummaryTotal` | `POST /api/v1/portfolio/profitloss_sum` -> `ProfitLossSummaryTotal` | `shioaji portfolio profit-loss-summary`; dates default to today; JSON follows HTTP shape | Use this for summarized realized P&L. In simulation it can return an empty summary/default total. |
+| Settlement legacy | `api.list_settlements(...)` -> `SettlementLegacy` | `POST /api/v1/portfolio/settlement` -> `SettlementLegacy` | No CLI command (legacy, intentionally not exposed) | Returns a single T/T+1/T+2 object. Prefer the settlement list below. |
+| Settlement list | `api.settlements(...)` -> `List[Settlement]`; Python `date` is `datetime.date` | `POST /api/v1/portfolio/settlements` -> `Vec<Settlement>` JSON | `shioaji portfolio settlements`; JSON follows HTTP shape | Current settlement-list shape (date/amount/T rows). Do not copy Python `datetime.date` assumptions into HTTP clients. Simulation can return empty. |
+| Trading limits | `api.trading_limits(...)` -> `TradingLimits` | `POST /api/v1/portfolio/trading_limits` -> `TradingLimits` | `shioaji portfolio trading-limits`; JSON follows HTTP shape | Stock account only. Available on trading days 08:30-15:00; default/zero values in simulation are not production affordability. |
 
 All HTTP portfolio requests accept account selectors such as `account_type`, `broker_id`, and `account_id`. If an empty list or default object is surprising, check `/api/v1/info` for `simulation`, then check account selection before guessing the business meaning.
 所有 HTTP portfolio request 可帶 `account_type`、`broker_id`、`account_id` 等帳號 selector。若空陣列或預設物件看起來不合理，先用 `/api/v1/info` 確認 `simulation`，再檢查帳號選擇，不要直接猜業務含義。
@@ -255,6 +255,14 @@ curl -X POST http://localhost:8080/api/v1/portfolio/position_detail \
   -d '{"account_id": "your_account_id", "detail_id": 0}'
 ```
 
+### CLI Example CLI 範例
+
+```bash
+shioaji portfolio position-detail --detail-id 0
+shioaji portfolio position-detail --detail-id 0 --account-type F
+shioaji portfolio position-detail --detail-id 0 --account 9A00-1234567 --format json
+```
+
 ---
 
 ## Profit & Loss 損益查詢
@@ -304,6 +312,15 @@ curl -X POST http://localhost:8080/api/v1/portfolio/profit_loss \
   }'
 ```
 
+### CLI Example CLI 範例
+
+```bash
+shioaji portfolio profit-loss                                # today, stock account 今日、股票帳戶
+shioaji portfolio profit-loss --begin-date 2024-01-01 --end-date 2024-01-31
+shioaji portfolio profit-loss --account-type F               # futures account 期貨帳戶
+shioaji portfolio profit-loss --unit share --format json
+```
+
 ---
 
 ## P&L Detail 損益明細
@@ -346,6 +363,14 @@ curl -X POST http://localhost:8080/api/v1/portfolio/profit_loss_detail \
   }'
 ```
 
+### CLI Example CLI 範例
+
+```bash
+shioaji portfolio profit-loss-detail --detail-id 0
+shioaji portfolio profit-loss-detail --detail-id 0 --unit share
+shioaji portfolio profit-loss-detail --detail-id 0 --account-type F --format json
+```
+
 ---
 
 ## P&L Summary 損益彙總
@@ -383,6 +408,14 @@ curl -X POST http://localhost:8080/api/v1/portfolio/profitloss_sum \
     "begin_date": "2024-01-01",
     "end_date": "2024-12-31"
   }'
+```
+
+### CLI Example CLI 範例
+
+```bash
+shioaji portfolio profit-loss-summary                        # today, stock account 今日、股票帳戶
+shioaji portfolio profit-loss-summary --begin-date 2024-01-01 --end-date 2024-12-31
+shioaji portfolio profit-loss-summary --account-type F --format json
 ```
 
 ---
@@ -430,6 +463,9 @@ curl -X POST http://localhost:8080/api/v1/portfolio/settlement \
   -d '{"account_id": "your_account_id"}'
 ```
 
+No CLI command for the legacy format — use `shioaji portfolio settlements` (new list format below).
+舊格式無 CLI 指令——請使用 `shioaji portfolio settlements`（下方新版列表格式）。
+
 ---
 
 ## Settlements (New) 交割資訊（新版）
@@ -469,6 +505,16 @@ s.T       # int: T offset T 日偏移
 curl -X POST http://localhost:8080/api/v1/portfolio/settlements \
   -H "Content-Type: application/json" \
   -d '{"account_id": "your_account_id"}'
+```
+
+### CLI Example CLI 範例
+
+The CLI `settlements` command uses this endpoint and returns the settlement list (date/amount/T rows).
+CLI 的 `settlements` 指令使用此端點，回傳交割列表（date/amount/T 列）。
+
+```bash
+shioaji portfolio settlements
+shioaji portfolio settlements --account 9A00-1234567 --format json
 ```
 
 ---
@@ -523,6 +569,13 @@ limits.short_available    # int: Short available 可用融券
 curl -X POST http://localhost:8080/api/v1/portfolio/trading_limits \
   -H "Content-Type: application/json" \
   -d '{"account_id": "your_account_id"}'
+```
+
+### CLI Example CLI 範例
+
+```bash
+shioaji portfolio trading-limits
+shioaji portfolio trading-limits --account 9A00-1234567 --format json
 ```
 
 ---

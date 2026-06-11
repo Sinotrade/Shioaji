@@ -16,12 +16,12 @@ Use this table before writing parsers or deciding why a market-data response is 
 | Snapshots | `List[Snapshot]`; Python objects expose `ts` | `Vec<Snapshot>` JSON with `datetime` | `shioaji data snapshots --format json` follows HTTP JSON; default output may be formatted | Empty array means no snapshots returned. Do not use Python `ts` in JS/Go/Rust/C#/C++/Java clients. |
 | Historical ticks | `Ticks` with `ts`, `close`, `volume`, bid/ask vectors | `Ticks` JSON with `datetime` vector | JSON follows HTTP `Ticks`; non-JSON formats may transpose to rows | Empty response: check `GET /api/v1/auth/usage` first for traffic quota, then date range, contract, trading day, and query parameters. |
 | Historical K-bars | `KBars` with `ts`, `Open`, `High`, `Low`, `Close`, `Volume`, `Amount` vectors | `KBars` JSON with `datetime`, `Open`, `High`, `Low`, `Close`, `Volume`, `Amount` vectors | JSON follows HTTP `KBars`; non-JSON formats may transpose to rows | Date/time arrays are column-oriented, not row objects. Empty response follows the same quota/date/contract checks as ticks. |
-| Daily quotes | `DailyQuotes`; Python date values are `datetime.date` | `DailyQuotes` JSON | CLI output may be JSON or formatted | Python `date=` accepts `datetime.date` / `datetime.datetime`, not strings. Empty fields usually mean no data for the date/exclude combination. |
-| Credit enquiry | `List[CreditEnquire]` | `Vec<CreditEnquire>` JSON | CLI output may be JSON or formatted | Empty array can mean no credit data for the contracts. |
-| Short stock sources | `List[ShortStockSource]`; Python object exposes `ts` | `Vec<ShortStockSource>` JSON with server date/time fields | CLI output may be JSON or formatted | Empty array can be normal if no source exists. Do not use Python `ts` in HTTP typed clients. |
+| Daily quotes | `DailyQuotes`; Python date values are `datetime.date` | `DailyQuotes` JSON | `shioaji data daily-quotes --format json` follows HTTP JSON; non-JSON formats transpose to rows | Python `date=` accepts `datetime.date` / `datetime.datetime`, not strings. Empty fields usually mean no data for the date/exclude combination. |
+| Credit enquiry | `List[CreditEnquire]` | `Vec<CreditEnquire>` JSON | `shioaji data credit-enquire --format json` follows HTTP JSON; default output may be formatted | Empty array can mean no credit data for the contracts. |
+| Short stock sources | `List[ShortStockSource]`; Python object exposes `ts` | `Vec<ShortStockSource>` JSON with server date/time fields | `shioaji data short-stock-sources --format json` follows HTTP JSON; default output may be formatted | Empty array can be normal if no source exists. Do not use Python `ts` in HTTP typed clients. |
 | Scanner | `List[ScannerItem]`; Python object exposes `ts` | `Vec<ScannerItem>` JSON with `datetime` | `shioaji data scanner --format json` follows scanner JSON; default output may be formatted | Ranking response; `count` limits size. Do not use Python `ts` in HTTP typed clients. |
-| Regulatory punish | `PunishResp`; Python may expose `date` / `datetime` values | `PunishResp` JSON | CLI output, if available, may be formatted | Use for disposition stocks; do not assume Python date objects in HTTP JSON. |
-| Regulatory notice | `NoticeResp`; Python may expose `date` / `datetime` values | `NoticeResp` JSON | CLI output, if available, may be formatted | Use for attention stocks; do not assume Python date objects in HTTP JSON. |
+| Regulatory punish | `PunishResp`; Python may expose `date` / `datetime` values | `PunishResp` JSON | `shioaji data regulatory --type punish --format json` follows HTTP JSON; non-JSON formats transpose to rows | Use for disposition stocks; do not assume Python date objects in HTTP JSON. |
+| Regulatory notice | `NoticeResp`; Python may expose `date` / `datetime` values | `NoticeResp` JSON | `shioaji data regulatory --type notice --format json` follows HTTP JSON; non-JSON formats transpose to rows | Use for attention stocks; do not assume Python date objects in HTTP JSON. |
 
 ## Snapshots 即時快照
 
@@ -299,6 +299,19 @@ curl -X POST http://localhost:8080/api/v1/data/daily_quotes \
   -d '{"date": "2023-01-16", "exclude": false}'
 ```
 
+### CLI: Get Daily Quotes
+
+```bash
+shioaji data daily-quotes                          # today 今日
+shioaji data daily-quotes --date 2023-01-16
+shioaji data daily-quotes --date 2023-01-16                       # warrants excluded by default 預設排除權證
+shioaji data daily-quotes --date 2023-01-16 --exclude-warrant=false   # include warrants 含權證
+shioaji data daily-quotes -f json                  # column-oriented HTTP JSON 欄位導向 JSON
+```
+
+Default `toon`/`human` output transposes to per-stock rows; `-f json` follows the HTTP column-oriented `DailyQuotes` schema.
+預設 `toon`/`human` 輸出會轉置為逐檔列；`-f json` 沿用 HTTP 欄位導向的 `DailyQuotes` 格式。
+
 ---
 
 ## Continuous Futures 連續期貨
@@ -360,6 +373,13 @@ curl -X POST http://localhost:8080/api/v1/data/credit_enquire \
   }'
 ```
 
+### CLI: Get Credit Enquiries
+
+```bash
+shioaji data credit-enquire --codes 2330,2890
+shioaji data credit-enquire --codes 2330,2890 -f json
+```
+
 ### CreditEnquire Attributes 資券餘額屬性
 
 ```python
@@ -400,6 +420,13 @@ curl -X POST http://localhost:8080/api/v1/data/short_stock_sources \
       {"security_type": "STK", "exchange": "TSE", "code": "2317"}
     ]
   }'
+```
+
+### CLI: Get Short Stock Sources
+
+```bash
+shioaji data short-stock-sources --codes 2330,2317
+shioaji data short-stock-sources --codes 2330,2317 -f json
 ```
 
 ### ShortStockSource Attributes 券源屬性
@@ -517,6 +544,17 @@ punish = api.punish()
 curl http://localhost:8080/api/v1/data/regulatory_punish
 ```
 
+### CLI: Get Disposition Stocks
+
+```bash
+shioaji data regulatory                  # --type punish is the default 預設即為處置股
+shioaji data regulatory --type punish
+shioaji data regulatory --type punish -f json
+```
+
+Default `toon`/`human` output transposes to per-stock rows; `-f json` follows the HTTP column-oriented `PunishResp` schema.
+預設 `toon`/`human` 輸出會轉置為逐檔列；`-f json` 沿用 HTTP 欄位導向的 `PunishResp` 格式。
+
 ### Punish Attributes 處置股屬性
 
 ```python
@@ -550,6 +588,16 @@ notice = api.notice()
 # GET /api/v1/data/regulatory_notice
 curl http://localhost:8080/api/v1/data/regulatory_notice
 ```
+
+### CLI: Get Attention Stocks
+
+```bash
+shioaji data regulatory --type notice
+shioaji data regulatory --type notice -f json
+```
+
+Default `toon`/`human` output transposes to per-stock rows; `-f json` follows the HTTP column-oriented `NoticeResp` schema.
+預設 `toon`/`human` 輸出會轉置為逐檔列；`-f json` 沿用 HTTP 欄位導向的 `NoticeResp` 格式。
 
 ### Notice Attributes 注意股屬性
 

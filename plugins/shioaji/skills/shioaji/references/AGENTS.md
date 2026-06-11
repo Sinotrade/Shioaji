@@ -15,6 +15,10 @@ claude plugin install shioaji
 
 ## Codex
 
+Search for **Shioaji** in the Codex Marketplace to install it, or use the CLI:
+
+在 Codex 的 Marketplace 中搜尋 **Shioaji** 即可安裝，或使用指令：
+
 ```bash
 codex plugin marketplace add Sinotrade/Shioaji
 codex plugin add shioaji@sinotrade
@@ -22,6 +26,6 @@ codex plugin add shioaji@sinotrade
 
 ## Cursor
 
-Install from the [Cursor Marketplace](https://cursor.com/marketplace) after the Shioaji plugin is published, or submit the repository through the [Cursor publisher flow](https://cursor.com/marketplace/publish) for review.
+Search for **Shioaji** in the Cursor Marketplace and click **Get** to install.
 
-Shioaji plugin 發布後可從 [Cursor Marketplace](https://cursor.com/marketplace) 安裝；若要上架，需透過 [Cursor publisher flow](https://cursor.com/marketplace/publish) 送審。
+在 Cursor 的 Marketplace 中搜尋 **Shioaji**，點選 **Get** 即可安裝。

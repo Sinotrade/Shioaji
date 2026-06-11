@@ -395,26 +395,26 @@ uvx --from shioaji shioaji server start
 
 ```bash
 # Stable
-curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | sh
+curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | sh
 
 # Pre-release
-curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | CHANNEL=prerelease sh
+curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | CHANNEL=prerelease sh
 
 # Specific version
-curl -fsSL https://raw.githubusercontent.com/sinotrade/shioaji/main/install.sh | VERSION=v1.5.2 sh
+curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | VERSION=v1.5.2 sh
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
 # Stable
-irm https://raw.githubusercontent.com/sinotrade/shioaji/main/install.ps1 | iex
+irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
 
 # Pre-release
-$env:CHANNEL="prerelease"; irm https://raw.githubusercontent.com/sinotrade/shioaji/main/install.ps1 | iex
+$env:CHANNEL="prerelease"; irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
 
 # Specific version
-$env:VERSION="v1.5.2"; irm https://raw.githubusercontent.com/sinotrade/shioaji/main/install.ps1 | iex
+$env:VERSION="v1.5.2"; irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
 ```
 
 ### Verify Installation 驗證安裝
@@ -633,7 +633,7 @@ True async/await client. All I/O methods return awaitables.
 
 ```python
 import shioaji as sj
-import asyncio
+import uvloop
 
 async def main():
     api = sj.ShioajiAsync(simulation=True)
@@ -648,8 +648,12 @@ async def main():
         print(tick)
     api.set_on_tick_stk_v1_callback(on_tick)
 
-asyncio.run(main())
+uvloop.run(main())
 ```
+
+This example uses [uvloop](https://pypi.org/project/uvloop/) (`pip install uvloop`), the recommended event loop for `ShioajiAsync` under high-throughput streaming. `uvloop.run(...)` is the preferred entry point since uvloop 0.18 (older versions: call `uvloop.install()` once before `asyncio.run(main())`). On Windows, uvloop is not supported (Linux/macOS only) — use the built-in asyncio loop instead with `import asyncio; asyncio.run(main())`. The code inside `main()` is identical either way.
+
+本範例使用 [uvloop](https://pypi.org/project/uvloop/)（`pip install uvloop`），這是 `ShioajiAsync` 在高吞吐串流時建議的 event loop。自 uvloop 0.18 起建議使用 `uvloop.run(...)`（舊版則在 `asyncio.run(main())` 之前呼叫一次 `uvloop.install()`）。若是 Windows 使用者，uvloop 不支援（僅 Linux/macOS），請改用內建的 asyncio loop，以 `import asyncio; asyncio.run(main())` 執行 — 兩種方式下 `main()` 內的程式碼完全相同。
 
 ### Key Differences 主要差異
 
@@ -946,6 +950,13 @@ from datetime import datetime
 
 expire_time: datetime = api.get_ca_expiretime(person_id="A123456789")
 print(f"CA expires: {expire_time}")
+```
+
+**CLI:**
+```bash
+shioaji auth ca-expiretime --person-id A123456789
+shioaji auth ca-expiretime --person-id A123456789 -f json
+# → person_id + expire_time
 ```
 
 ### CA Workflow 憑證流程

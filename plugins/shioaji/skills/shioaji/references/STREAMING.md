@@ -146,9 +146,31 @@ Use this table before generating client code. Python receives typed callback obj
 | Market-data SSE | Python callbacks receive `TickSTKv1`, `BidAskSTKv1`, `TickFOPv1`, `BidAskFOPv1`, quote objects, or receiver values | `GET /api/v1/stream/data/*` is SSE. Each event has `event:` and JSON `data:`; heartbeat events are keep-alive only | CLI stream prints events from the SSE channel after subscribe | Parse `event:` first, then decode `data:` for that channel. A heartbeat means the connection is alive, not that market data arrived. |
 | Stock/FOP tick and bidask payloads | Python object fields include Python-native `datetime` and Decimal-like values; `.to_dict(raw=True)` is useful when exact raw fields are needed | SSE JSON uses server field names such as `date`, `time`, `total_volume`, `price_chg`, `pct_chg`; Decimal price/amount fields are strings | Same as HTTP/SSE for non-Python languages | Do not copy Python-only field names or types into HTTP clients. Convert string prices to decimal/float in the client language. |
 | Continuous futures R1/R2 over HTTP | Python can subscribe by the resolved contract object | For `TXFR1`/`TXFR2`, include `target_code` from `GET /api/v1/data/contracts/TXFR1?security_type=FUT`; regular futures codes do not need it | CLI/HTTP stream paths that build HTTP payloads must include `target_code` for R1/R2 | If HTTP subscribe returns 200 but SSE only emits heartbeats for R1/R2, first check missing or stale `target_code`. This special rule is futures R1/R2 only. |
-| Order/deal event stream | Use order callbacks/receivers (`api.set_order_callback`, `api.get_order_event_receiver()`) and `api.subscribe_trade(account)` for production event relay | `POST /api/v1/auth/subscribe_trade` returns `SubscribeTradeOut`; `GET /api/v1/stream/data/order_event` emits `order_event` SSE | `shioaji order events` is an active event stream, not historical records | In production, subscribe per account before opening `order_event`; otherwise expect heartbeat-only. In simulation, subscribe is not required and unsubscribe can return validation error. |
-| Stream status | No normal Python equivalent for HTTP connection count | `GET /api/v1/stream/status` returns `ConnectionStatus { active_connections, timestamp, status }` | Diagnostic only if exposed | Use this to diagnose live SSE connection count or unhealthy stream service; it does not prove a symbol is subscribed. |
-| Receiver availability | Python receivers are obtained directly by `api.get_*_receiver()` | `GET /api/v1/stream/receivers` returns receiver availability text | Diagnostic only if exposed | This is diagnostic. Use `/stream/status` for live connection count and subscribe/SSE endpoints for actual data flow. |
+| Order/deal event stream | Use order callbacks/receivers (`api.set_order_callback`, `api.get_order_event_receiver()`) and `api.subscribe_trade(account)` for production event relay | `POST /api/v1/auth/subscribe_trade` returns `SubscribeTradeOut`; `GET /api/v1/stream/data/order_event` emits `order_event` SSE | `shioaji order events` is an active event stream, not historical records; `shioaji auth subscribe-trade [--account]` / `shioaji auth unsubscribe-trade` manage the per-account trade subscription | In production, subscribe per account before opening `order_event`; otherwise expect heartbeat-only. In simulation, subscribe is not required and unsubscribe can return validation error. |
+| Stream status | No normal Python equivalent for HTTP connection count | `GET /api/v1/stream/status` returns `ConnectionStatus { active_connections, timestamp, status }` | `shioaji server status --streams` includes it as `stream_status` | Use this to diagnose live SSE connection count or unhealthy stream service; it does not prove a symbol is subscribed. |
+| Receiver availability | Python receivers are obtained directly by `api.get_*_receiver()` | `GET /api/v1/stream/receivers` returns receiver availability text | `shioaji server status --streams` includes it as `stream_receivers` | This is diagnostic. Use `/stream/status` for live connection count and subscribe/SSE endpoints for actual data flow. |
+
+### CLI Stream Diagnostics CLI 串流診斷
+
+`shioaji server status --streams` appends stream diagnostics to the daemon status by calling `GET /api/v1/stream/receivers` and `GET /api/v1/stream/status` on the running daemon. If the daemon is not running or unhealthy, the stream fields are skipped gracefully.
+
+`shioaji server status --streams` 會呼叫運行中 daemon 的 `GET /api/v1/stream/receivers` 與 `GET /api/v1/stream/status`，把串流診斷附加在 daemon 狀態之後；daemon 未運行時自動略過串流欄位。
+
+```bash
+shioaji server status --streams
+shioaji server status --streams -f json
+# → daemon status + stream_receivers (text) + stream_status { active_connections, timestamp, status }
+```
+
+In production, remember the per-account trade subscription before opening the order event stream:
+正式環境下，開啟委託回報串流前記得先訂閱帳戶事件:
+
+```bash
+shioaji auth subscribe-trade                          # default stock account 預設證券帳戶
+shioaji auth subscribe-trade --account 9A95-9816502   # specific account 指定帳戶
+shioaji order events                                  # then stream order/deal events
+shioaji auth unsubscribe-trade --account 9A95-9816502 # stop receiving 取消訂閱
+```
 
 ---
 
@@ -254,6 +276,9 @@ api.set_on_tick_fop_v1_callback(some_async_callback)
 # Same clear methods 相同的清除方法
 api.clear_on_tick_stk_v1_callback()
 ```
+
+> **Performance (Python only) 效能（限 Python）**: for high-throughput streaming with `ShioajiAsync`, run it on uvloop for a faster event loop. See [PREPARE.md → Why uvloop](PREPARE.md#why-uvloop-為什麼用-uvloop).
+> 高吞吐串流使用 `ShioajiAsync` 時，建議搭配 uvloop 取得更快的 event loop。見 [PREPARE.md → Why uvloop](PREPARE.md#why-uvloop-為什麼用-uvloop)。
 
 ---
 

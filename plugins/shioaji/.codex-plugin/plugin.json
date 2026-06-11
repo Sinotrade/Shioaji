@@ -1,6 +1,6 @@
 {
   "name": "shioaji",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Shioaji Taiwan financial trading API guide. Covers Python native binding (sync/async), CLI tool, HTTP API server with SSE streaming, dashboard, and multi-language SDK integration (JS/TS, Go, C/C++, C#, Rust, Java/Kotlin) for TWSE/TPEX/TAIFEX markets.",
   "author": {
     "name": "Sinotrade",

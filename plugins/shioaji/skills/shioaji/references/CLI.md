@@ -20,34 +20,65 @@
 7. [auth -- Authentication / 認證](#auth----authentication--認證)
    - [auth accounts](#auth-accounts)
    - [auth usage](#auth-usage)
-8. [data -- Market Data / 行情資料](#data----market-data--行情資料)
+   - [auth ca-expiretime](#auth-ca-expiretime)
+   - [auth subscribe-trade](#auth-subscribe-trade)
+   - [auth unsubscribe-trade](#auth-unsubscribe-trade)
+8. [apps -- Custom Dashboard Apps / 自訂儀表板應用](#apps----custom-dashboard-apps--自訂儀表板應用)
+   - [apps list](#apps-list)
+   - [apps upload](#apps-upload)
+   - [apps delete](#apps-delete)
+9. [data -- Market Data / 行情資料](#data----market-data--行情資料)
    - [data ticks](#data-ticks)
    - [data kbars](#data-kbars)
    - [data scanner](#data-scanner)
    - [data stream](#data-stream)
    - [data snapshots](#data-snapshots)
-9. [order -- Order Management / 委託管理](#order----order-management--委託管理)
+   - [data daily-quotes](#data-daily-quotes)
+   - [data credit-enquire](#data-credit-enquire)
+   - [data short-stock-sources](#data-short-stock-sources)
+   - [data regulatory](#data-regulatory)
+10. [order -- Order Management / 委託管理](#order----order-management--委託管理)
    - [order place](#order-place)
    - [order cancel](#order-cancel)
    - [order list](#order-list)
    - [order update-price](#order-update-price)
    - [order update-qty](#order-update-qty)
    - [order events](#order-events)
-10. [portfolio -- Portfolio Queries / 投資組合查詢](#portfolio----portfolio-queries--投資組合查詢)
+11. [portfolio -- Portfolio Queries / 投資組合查詢](#portfolio----portfolio-queries--投資組合查詢)
     - [portfolio balance](#portfolio-balance)
     - [portfolio positions](#portfolio-positions)
     - [portfolio margin](#portfolio-margin)
-11. [utils -- Utility Commands / 工具指令](#utils----utility-commands--工具指令)
+    - [portfolio position-detail](#portfolio-position-detail)
+    - [portfolio profit-loss](#portfolio-profit-loss)
+    - [portfolio profit-loss-detail](#portfolio-profit-loss-detail)
+    - [portfolio profit-loss-summary](#portfolio-profit-loss-summary)
+    - [portfolio trading-limits](#portfolio-trading-limits)
+    - [portfolio settlements](#portfolio-settlements)
+12. [reserve -- Stock Reserve & Earmarking / 股票預收券款](#reserve----stock-reserve--earmarking--股票預收券款)
+    - [reserve summary](#reserve-summary)
+    - [reserve detail](#reserve-detail)
+    - [reserve stock](#reserve-stock)
+    - [reserve earmarking-detail](#reserve-earmarking-detail)
+    - [reserve earmarking](#reserve-earmarking)
+13. [watchlist -- Watchlist Management / 自選股管理](#watchlist----watchlist-management--自選股管理)
+    - [watchlist list](#watchlist-list)
+    - [watchlist create](#watchlist-create)
+    - [watchlist show](#watchlist-show)
+    - [watchlist sync](#watchlist-sync)
+    - [watchlist delete](#watchlist-delete)
+    - [watchlist add](#watchlist-add)
+    - [watchlist remove](#watchlist-remove)
+14. [utils -- Utility Commands / 工具指令](#utils----utility-commands--工具指令)
     - [utils token list](#utils-token-list)
     - [utils token show](#utils-token-show)
     - [utils token status](#utils-token-status)
     - [utils token clean](#utils-token-clean)
     - [utils api check](#utils-api-check)
-12. [tree -- Show Command Tree / 顯示指令樹](#tree----show-command-tree--顯示指令樹)
-13. [completions -- Shell Completions / Shell 自動完成](#completions----shell-completions--shell-自動完成)
-14. [version -- Print Version / 顯示版本](#version----print-version--顯示版本)
-15. [Daemon Architecture / 背景服務架構](#daemon-architecture--背景服務架構)
-16. [UDS Support / Unix Domain Socket 支援](#uds-support--unix-domain-socket-支援)
+15. [tree -- Show Command Tree / 顯示指令樹](#tree----show-command-tree--顯示指令樹)
+16. [completions -- Shell Completions / Shell 自動完成](#completions----shell-completions--shell-自動完成)
+17. [version -- Print Version / 顯示版本](#version----print-version--顯示版本)
+18. [Daemon Architecture / 背景服務架構](#daemon-architecture--背景服務架構)
+19. [UDS Support / Unix Domain Socket 支援](#uds-support--unix-domain-socket-支援)
 
 ---
 
@@ -57,7 +88,7 @@ The `shioaji` binary is a single CLI that doubles as:
 - **A command-line client** for querying market data, placing orders, and managing portfolios.
 - **A daemon server** (`shioaji server start`) that hosts the HTTP API.
 
-All data-path commands (`auth`, `data`, `order`, `portfolio`) communicate with the daemon via HTTP (preferring UDS on Unix). If no daemon is running, the CLI auto-starts one (`ensure_daemon`).
+All data-path commands (`auth`, `apps`, `data`, `order`, `portfolio`, `reserve`, `watchlist`) communicate with the daemon via HTTP (preferring UDS on Unix). If no daemon is running, the CLI auto-starts one (`ensure_daemon`).
 Use the matching functional reference when an agent needs to reason about the response objects behind CLI output; `toon` is the default output format.
 
 Binary name: `shioaji`
@@ -138,17 +169,28 @@ shioaji
 ├── server
 │   ├── start       [--production] [--no-open]
 │   ├── check
-│   ├── status
+│   ├── status      [--streams]
 │   └── stop
 ├── auth
 │   ├── accounts
-│   └── usage
+│   ├── usage
+│   ├── ca-expiretime     --person-id <PERSON_ID>
+│   ├── subscribe-trade   [--account-type S] [--account]
+│   └── unsubscribe-trade [--account-type S] [--account]
+├── apps
+│   ├── list
+│   ├── upload      --name <NAME> (--dir <DIR> | --file <PATH>...)
+│   └── delete      --name <NAME>
 ├── data
 │   ├── ticks       --code <CODE> [--date] [--last 10] [--all] [--security-type STK] [--exchange TSE]
 │   ├── kbars       --code <CODE> [--start] [--end] [--security-type STK] [--exchange TSE]
 │   ├── scanner     [--scanner-type change-percent-rank] [--date] [--ascending] [--count 50]
 │   ├── stream      --code <CODE> [--quote-type tick] [--security-type STK] [--intraday-odd]
-│   └── snapshots   --codes <CODES> [--security-type STK] [--exchange TSE]
+│   ├── snapshots   --codes <CODES> [--security-type STK] [--exchange TSE]
+│   ├── daily-quotes [--date] [--exclude-warrant]
+│   ├── credit-enquire --codes <CODES> [--security-type STK] [--exchange TSE]
+│   ├── short-stock-sources --codes <CODES> [--security-type STK] [--exchange TSE]
+│   └── regulatory  [--type punish]
 ├── order
 │   ├── place       --code <CODE> --action <ACTION> --quantity <QTY> [--price 0] [--price-type lmt] [--order-type rod] [--order-lot] [--order-cond] [--octype] [--account] [--security-type STK] [--no-wait]
 │   ├── cancel      --id <ID> [--no-wait]
@@ -159,7 +201,27 @@ shioaji
 ├── portfolio
 │   ├── balance     [--account]
 │   ├── positions   [--account-type S] [--account] [--unit common]
-│   └── margin      [--account]
+│   ├── margin      [--account]
+│   ├── position-detail     --detail-id <ID> [--account-type S] [--account]
+│   ├── profit-loss         [--account-type S] [--account] [--begin-date] [--end-date] [--unit common]
+│   ├── profit-loss-detail  --detail-id <ID> [--account-type S] [--account] [--unit common]
+│   ├── profit-loss-summary [--account-type S] [--account] [--begin-date] [--end-date]
+│   ├── trading-limits      [--account]
+│   └── settlements         [--account]
+├── reserve
+│   ├── summary     [--account]
+│   ├── detail      [--account]
+│   ├── stock       --code <CODE> --share <SHARE> [--account]
+│   ├── earmarking-detail [--account]
+│   └── earmarking  --code <CODE> --share <SHARE> --price <PRICE> [--account]
+├── watchlist
+│   ├── list
+│   ├── create      --name <NAME> [--codes <CODES>] [--security-type STK]
+│   ├── show        --id <ID>
+│   ├── sync        --id <ID> --codes <CODES> [--security-type STK]
+│   ├── delete      --id <ID>
+│   ├── add         --id <ID> --codes <CODES> [--security-type STK]
+│   └── remove      --id <ID> --codes <CODES> [--security-type STK]
 ├── utils
 │   ├── token       [-k <KEY>] [-s <SECRET>]
 │   │   ├── list    [--detailed]
@@ -245,7 +307,12 @@ Show daemon status (running, PID, port, health, simulation mode).
 
 ```bash
 shioaji server status
+shioaji server status --streams     # also fetch stream diagnostics 同時取得串流診斷
 ```
+
+| Flag | Description |
+|------|-------------|
+| `--streams` | Additionally fetch stream diagnostics from the running daemon: `GET /api/v1/stream/receivers` and `GET /api/v1/stream/status` (active SSE connections). If the daemon is not running or unhealthy, the stream fields are skipped gracefully. 若 daemon 未運行則自動略過串流欄位 |
 
 ### server stop
 
@@ -282,6 +349,102 @@ shioaji auth usage -f json
 ```
 
 Note: When using the default `toon` format, usage automatically switches to `human` format for a visual bar display. Use `-f json` for machine-readable output.
+
+### auth ca-expiretime
+
+Get the CA certificate expiry time for a person ID. 查詢 CA 憑證到期時間。
+
+```bash
+shioaji auth ca-expiretime --person-id A123456789
+shioaji auth ca-expiretime --person-id A123456789 -f json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--person-id` | (required) | Person ID bound to the CA certificate (e.g. A123456789) |
+
+Returns `person_id` and `expire_time`. Requires the CA certificate to be activated on the server (see PREPARE.md).
+
+### auth subscribe-trade
+
+Subscribe to per-account trade/deal events. Mirrors Python `api.subscribe_trade(account)`. In production, the relay only forwards order/deal events for accounts that have an active trade subscription — without it the order event stream stays empty.
+
+訂閱指定帳戶的委託/成交事件。正式環境下未訂閱的帳戶不會收到委託回報。
+
+```bash
+shioaji auth subscribe-trade                              # default stock account
+shioaji auth subscribe-trade --account-type F             # default futures account
+shioaji auth subscribe-trade --account 9A95-9816502       # specific account
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--account-type` | S | Account type: S (stock) or F (futures) |
+| `--account` | (default account) | Account in BROKER_ID-ACCOUNT_ID format (e.g. 9A00-1234567) |
+
+### auth unsubscribe-trade
+
+Unsubscribe from per-account trade/deal events. Mirrors Python `api.unsubscribe_trade(account)`. 取消訂閱帳戶委託/成交事件。
+
+```bash
+shioaji auth unsubscribe-trade
+shioaji auth unsubscribe-trade --account 9A95-9816502 --account-type S
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--account-type` | S | Account type: S (stock) or F (futures) |
+| `--account` | (default account) | Account in BROKER_ID-ACCOUNT_ID format |
+
+---
+
+## apps -- Custom Dashboard Apps / 自訂儀表板應用
+
+Manage custom apps served by the dashboard (uploaded files are served at `/apps/<NAME>/` on the running server). 管理儀表板自訂應用（上傳的檔案會在伺服器的 `/apps/<NAME>/` 路徑提供）。
+
+```
+shioaji apps <SUBCOMMAND>
+```
+
+### apps list
+
+List uploaded custom dashboard apps. 列出已上傳的自訂應用。
+
+```bash
+shioaji apps list
+shioaji apps list -f json
+```
+
+### apps upload
+
+Upload files for a custom dashboard app (multipart upload to `POST /api/v1/apps/<NAME>`, 50MB total limit). Use `--dir` to upload a whole built directory (recommended), or repeat `--file` for individual files. 上傳自訂應用檔案（總大小上限 50MB）。建議用 `--dir` 上傳整個建置目錄，或重複 `--file` 上傳個別檔案。
+
+```bash
+# Recommended: upload a whole built directory, preserving structure 建議：上傳整個建置目錄並保留結構
+shioaji apps upload --name myapp --dir dist
+
+# Or individual files 或個別檔案
+shioaji apps upload --name myapp --file index.html
+shioaji apps upload --name myapp --file index.html --file assets/app.js
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--name` | (required) | App name (served at `/apps/<NAME>/` on the dashboard) |
+| `--dir` | (none) | Directory to upload recursively, preserving structure relative to it (e.g. `dist/assets/main.js` → `assets/main.js`). Mutually exclusive with `--file` 遞迴上傳整個目錄並保留相對結構，與 `--file` 互斥 |
+| `--file` | (none) | File to upload; repeatable. Relative paths keep their directory layout (e.g. `assets/main.js` is served as `assets/main.js`); absolute paths upload as the bare file name. Provide `--file` or `--dir` 可重複；相對路徑保留目錄結構，絕對路徑只取檔名。需擇一提供 `--file` 或 `--dir` |
+
+### apps delete
+
+Delete an uploaded app and all its files. 刪除已上傳的應用及其所有檔案。
+
+```bash
+shioaji apps delete --name myapp
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--name` | (required) | App name |
 
 ---
 
@@ -380,6 +543,75 @@ shioaji data snapshots --codes TXFR1,MXFR1 --security-type FUT --exchange TAIFEX
 | `--codes` | (required) | Comma-separated security codes |
 | `--security-type` | STK | Security type: STK, FUT, OPT, IND |
 | `--exchange` | TSE | Exchange: TSE, OTC, TAIFEX |
+
+### data daily-quotes
+
+Get daily quotes (OHLCV) for the whole market. 取得全市場每日行情（開高低收量）。
+
+```bash
+shioaji data daily-quotes
+shioaji data daily-quotes --date 2024-01-16
+shioaji data daily-quotes --date 2024-01-16
+shioaji data daily-quotes --exclude-warrant=false   # include warrants 含權證
+shioaji data daily-quotes -f json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--date` | today | Trading date (YYYY-MM-DD) 交易日 |
+| `--exclude-warrant` | true | Exclude warrants from the result (pass `--exclude-warrant=false` to include them) 排除權證（`--exclude-warrant=false` 可包含權證） |
+
+JSON output follows the HTTP `DailyQuotes` column-oriented schema (`Date`, `Code`, `Open`, `High`, `Low`, `Close`, `Volume`, `Transaction`, `Amount` vectors); non-JSON formats transpose to per-stock rows.
+JSON 輸出沿用 HTTP `DailyQuotes` 欄位導向格式；非 JSON 格式會轉置為逐檔列。
+
+### data credit-enquire
+
+Get credit enquire (margin/short remaining) for contracts. 查詢合約的融資融券餘額。
+
+```bash
+shioaji data credit-enquire --codes 2330,2890
+shioaji data credit-enquire --codes 2330 -f json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--codes` | (required) | Comma-separated security codes 逗號分隔的證券代碼 |
+| `--security-type` | STK | Security type: STK, FUT, OPT, IND |
+| `--exchange` | TSE | Exchange: TSE, OTC, TAIFEX |
+
+### data short-stock-sources
+
+Get short stock sources (borrowable shares) for contracts. 查詢合約的可借券數量（券源）。
+
+```bash
+shioaji data short-stock-sources --codes 2330,2317
+shioaji data short-stock-sources --codes 2330 -f json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--codes` | (required) | Comma-separated security codes 逗號分隔的證券代碼 |
+| `--security-type` | STK | Security type: STK, FUT, OPT, IND |
+| `--exchange` | TSE | Exchange: TSE, OTC, TAIFEX |
+
+### data regulatory
+
+Get regulatory disposition (處置股) or attention (注意股) stock data. One command serves both lists; `--type` selects the endpoint.
+查詢處置股或注意股清單。單一指令以 `--type` 切換端點。
+
+```bash
+shioaji data regulatory                  # disposition stocks (default) 處置股（預設）
+shioaji data regulatory --type punish    # disposition stocks 處置股
+shioaji data regulatory --type notice    # attention stocks 注意股
+shioaji data regulatory --type notice -f json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--type` | punish | Regulatory data type: `punish` (處置股) or `notice` (注意股) |
+
+JSON output follows the HTTP `PunishResp` / `NoticeResp` column-oriented schemas; non-JSON formats transpose to per-stock rows.
+JSON 輸出沿用 HTTP `PunishResp` / `NoticeResp` 欄位導向格式；非 JSON 格式會轉置為逐檔列。
 
 ---
 
@@ -548,6 +780,325 @@ shioaji portfolio margin --account F002000-7654321
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format (e.g. F002000-7654321) |
+
+### portfolio position-detail
+
+Get position detail by detail id (the `id` field from `portfolio positions`).
+依持倉明細編號查詢部位明細（`id` 取自 `portfolio positions` 的回傳）。
+
+```bash
+shioaji portfolio position-detail --detail-id 0
+shioaji portfolio position-detail --detail-id 0 --account-type F
+shioaji portfolio position-detail --detail-id 0 --account 9A00-1234567
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--detail-id` | (required) | Detail ID from `portfolio positions` |
+| `--account-type` | S | Account type: S (stock) or F (futures) |
+| `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format |
+
+### portfolio profit-loss
+
+Get realized profit and loss for a date range.
+查詢區間已實現損益。
+
+```bash
+shioaji portfolio profit-loss
+shioaji portfolio profit-loss --begin-date 2026-06-01 --end-date 2026-06-10
+shioaji portfolio profit-loss --account-type F
+shioaji portfolio profit-loss --unit share --account 9A00-1234567
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--account-type` | S | Account type: S (stock) or F (futures) |
+| `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format |
+| `--begin-date` | today | Begin date (YYYY-MM-DD) |
+| `--end-date` | today | End date (YYYY-MM-DD) |
+| `--unit` | common | Unit: common or share |
+
+### portfolio profit-loss-detail
+
+Get realized profit and loss detail by detail id (the `id` field from `portfolio profit-loss`).
+依損益明細編號查詢已實現損益明細（`id` 取自 `portfolio profit-loss` 的回傳）。
+
+```bash
+shioaji portfolio profit-loss-detail --detail-id 0
+shioaji portfolio profit-loss-detail --detail-id 0 --unit share
+shioaji portfolio profit-loss-detail --detail-id 0 --account-type F
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--detail-id` | (required) | Detail ID from `portfolio profit-loss` |
+| `--account-type` | S | Account type: S (stock) or F (futures) |
+| `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format |
+| `--unit` | common | Unit: common or share |
+
+### portfolio profit-loss-summary
+
+Get profit and loss summary for a date range.
+查詢區間損益彙總。
+
+```bash
+shioaji portfolio profit-loss-summary
+shioaji portfolio profit-loss-summary --begin-date 2026-06-01 --end-date 2026-06-10
+shioaji portfolio profit-loss-summary --account-type F
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--account-type` | S | Account type: S (stock) or F (futures) |
+| `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format |
+| `--begin-date` | today | Begin date (YYYY-MM-DD) |
+| `--end-date` | today | End date (YYYY-MM-DD) |
+
+### portfolio trading-limits
+
+Get trading limits (stock account).
+查詢股票帳戶交易額度。
+
+```bash
+shioaji portfolio trading-limits
+shioaji portfolio trading-limits --account 9A00-1234567
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format (e.g. 9A00-1234567) |
+
+### portfolio settlements
+
+Get the settlement list (date / amount / T offset rows, stock account). Uses `POST /api/v1/portfolio/settlements`; the legacy single T/T+1/T+2 endpoint is intentionally not exposed.
+查詢交割列表（date / amount / T 偏移列，股票帳戶）。使用 `POST /api/v1/portfolio/settlements`；舊版單一 T/T+1/T+2 端點刻意不提供 CLI。
+
+```bash
+shioaji portfolio settlements
+shioaji portfolio settlements --account 9A00-1234567
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format (e.g. 9A00-1234567) |
+
+---
+
+## reserve -- Stock Reserve & Earmarking / 股票預收券款
+
+```
+shioaji reserve <SUBCOMMAND>
+```
+
+Stock reserve (預收股票) and earmarking (預收款項) operations for disposition/attention/warning stocks. All subcommands operate on the stock account; `--account` is optional and defaults to the default stock account. See [RESERVE.md](RESERVE.md) for response payload shapes and decision guidance.
+
+預收券款指令群組，適用於處置股、注意股或警示股。所有子指令皆使用股票帳戶；`--account` 為選填，預設使用預設股票帳戶。回應欄位與判讀方式詳見 [RESERVE.md](RESERVE.md)。
+
+> **Note 注意**: `reserve stock` and `reserve earmarking` submit real reserve requests in production. Check `status` and `info` in the response — HTTP 200 alone does not mean the reserve succeeded. Simulation mode returns default/empty values.
+>
+> `reserve stock` 與 `reserve earmarking` 在正式環境會送出真實預收申請。請檢查回應中的 `status` 與 `info` —— 僅 HTTP 200 不代表預收成功。模擬環境回傳預設／空值。
+
+### reserve summary
+
+Get the stock reserve summary: which stocks are available for reserve and how many shares are already reserved.
+取得預收券款摘要：哪些股票可預收以及已預收股數。
+
+```bash
+shioaji reserve summary
+shioaji reserve summary --account 9A00-1234567
+shioaji reserve summary -f json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--account` | (default stock account) | Account in BROKER_ID-ACCOUNT_ID format (e.g. 9A00-1234567) |
+
+### reserve detail
+
+Get the stock reserve detail: records of already-reserved stocks with per-row `status` / `info`.
+取得預收券款明細：已預收股票記錄，每筆含 `status` / `info`。
+
+```bash
+shioaji reserve detail
+shioaji reserve detail --account 9A00-1234567
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--account` | (default stock account) | Account in BROKER_ID-ACCOUNT_ID format |
+
+### reserve stock
+
+Place a stock reserve request (reserve shares for a disposition stock). The CLI resolves the contract from the code.
+送出預收股票申請（為處置股預收股數）。CLI 會依代碼解析合約。
+
+```bash
+# Reserve 1000 shares of 2890 預收 2890 共 1000 股
+shioaji reserve stock --code 2890 --share 1000
+
+# Target a specific account 指定帳戶
+shioaji reserve stock --code 2890 --share 1000 --account 9A00-1234567
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--code` | (required) | Stock code (e.g. 2890) |
+| `--share` | (required) | Number of shares to reserve 預收股數 |
+| `--account` | (default stock account) | Account in BROKER_ID-ACCOUNT_ID format |
+
+### reserve earmarking-detail
+
+Get earmarking (cash pre-payment) detail records.
+取得預收款項（現金預付）記錄明細。
+
+```bash
+shioaji reserve earmarking-detail
+shioaji reserve earmarking-detail --account 9A00-1234567
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--account` | (default stock account) | Account in BROKER_ID-ACCOUNT_ID format |
+
+### reserve earmarking
+
+Place an earmarking request (pre-pay cash before buying a disposition stock).
+送出預收款項申請（買進處置股前預付現金）。
+
+```bash
+# Earmark 1000 shares of 2890 at 15.15 per share 預收 2890 共 1000 股、每股 15.15
+shioaji reserve earmarking --code 2890 --share 1000 --price 15.15
+
+# Target a specific account 指定帳戶
+shioaji reserve earmarking --code 2890 --share 1000 --price 15.15 --account 9A00-1234567
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--code` | (required) | Stock code (e.g. 2890) |
+| `--share` | (required) | Number of shares 預收股數 |
+| `--price` | (required) | Price per share 每股價格 |
+| `--account` | (default stock account) | Account in BROKER_ID-ACCOUNT_ID format |
+
+---
+
+## watchlist -- Watchlist Management / 自選股管理
+
+```
+shioaji watchlist <SUBCOMMAND>
+```
+
+Manage saved watchlists (自選股清單) through the daemon's watchlist HTTP API. All commands return the full `Watchlist` object(s); see [WATCHLIST.md](WATCHLIST.md) for response shapes and agent decision guidance.
+
+For `--codes`, the CLI resolves each code via the contract lookup endpoint, so the correct exchange (TSE/OTC/TAIFEX) and `target_code` for continuous futures like `TXFR1` are filled in automatically. With `--security-type STK` (the default), the lookup falls back to FUT/OPT/IND when no stock matches; `FUT`, `OPT`, or `IND` searches only that type.
+`--codes` 中的每個代碼會先經由合約查詢端點解析，自動帶入正確的交易所（TSE/OTC/TAIFEX）以及連續月期貨（如 `TXFR1`）的 `target_code`。`--security-type STK`（預設值）查無股票時會回退嘗試 FUT/OPT/IND；指定 `FUT`、`OPT`、`IND` 則只查該類型。
+
+### watchlist list
+
+List all watchlists. 取得所有自選股清單。
+
+```bash
+shioaji watchlist list
+shioaji watchlist list -f json
+```
+
+Maps to `GET /api/v1/watchlist`.
+
+### watchlist create
+
+Create a new watchlist, optionally with initial contracts. 建立新清單，可同時加入初始合約。
+
+```bash
+shioaji watchlist create --name "My Watchlist"
+shioaji watchlist create --name "Tech" --codes 2330,2317
+shioaji watchlist create --name "Futures" --codes TXFR1 --security-type FUT
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--name` | (required) | Watchlist name |
+| `--codes` | (none) | Comma-separated security codes for initial contracts |
+| `--security-type` | STK | Security type hint for contract lookup: STK, FUT, OPT, IND |
+
+Maps to `POST /api/v1/watchlist`. The response contains the created `id`; use it for subsequent commands.
+
+### watchlist show
+
+Show a single watchlist by ID. 依 ID 取得單一清單。
+
+```bash
+shioaji watchlist show --id wl-1
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--id` | (required) | Watchlist ID |
+
+Maps to `GET /api/v1/watchlist/{id}`.
+
+### watchlist sync
+
+Replace **ALL** contracts in a watchlist with the given codes. 以指定代碼**覆蓋**清單中的所有合約。
+
+```bash
+shioaji watchlist sync --id wl-1 --codes 2330,2454
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--id` | (required) | Watchlist ID |
+| `--codes` | (required) | Comma-separated security codes (replaces all existing contracts) |
+| `--security-type` | STK | Security type hint for contract lookup: STK, FUT, OPT, IND |
+
+Maps to `PUT /api/v1/watchlist/{id}`. Use only when overwrite is intended; for append/remove use `add` / `remove`.
+僅在確定要覆蓋時使用；要追加或移除請改用 `add` / `remove`。
+
+### watchlist delete
+
+Delete a watchlist by ID. 依 ID 刪除清單。
+
+```bash
+shioaji watchlist delete --id wl-1
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--id` | (required) | Watchlist ID |
+
+Maps to `DELETE /api/v1/watchlist/{id}`. The response is the deleted watchlist object.
+
+### watchlist add
+
+Add contracts to a watchlist. 新增合約至清單。
+
+```bash
+shioaji watchlist add --id wl-1 --codes 2330,2317
+shioaji watchlist add --id wl-1 --codes TXFR1 --security-type FUT
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--id` | (required) | Watchlist ID |
+| `--codes` | (required) | Comma-separated security codes to add |
+| `--security-type` | STK | Security type hint for contract lookup: STK, FUT, OPT, IND |
+
+Maps to `POST /api/v1/watchlist/{id}/contracts`. The response is the updated watchlist.
+
+### watchlist remove
+
+Remove contracts from a watchlist. 從清單移除合約。
+
+```bash
+shioaji watchlist remove --id wl-1 --codes 2330
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--id` | (required) | Watchlist ID |
+| `--codes` | (required) | Comma-separated security codes to remove |
+| `--security-type` | STK | Security type hint for contract lookup: STK, FUT, OPT, IND |
+
+Maps to `DELETE /api/v1/watchlist/{id}/contracts`. The response is the updated watchlist.
 
 ---
 
@@ -729,7 +1280,7 @@ Use the flag for a one-liner, the subcommand when you need machine-readable outp
 
 The CLI operates in a **daemon-client** architecture:
 
-1. **Auto-start**: When any data-path command is executed (`auth`, `data`, `order`, `portfolio`), the CLI calls `ensure_daemon()`. If no daemon is running, one is spawned automatically.
+1. **Auto-start**: When any data-path command is executed (`auth`, `apps`, `data`, `order`, `portfolio`, `reserve`, `watchlist`), the CLI calls `ensure_daemon()`. If no daemon is running, one is spawned automatically.
 2. **Communication**: The CLI client (`DaemonClient`) sends HTTP requests to the daemon, preferring UDS on Unix for localhost connections, falling back to TCP.
 3. **Lifecycle**:
    - `shioaji server start` -- explicitly start the daemon (foreground)
