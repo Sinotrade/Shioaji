@@ -23,6 +23,60 @@ Use this table before writing parsers or deciding why a market-data response is 
 | Regulatory punish | `PunishResp`; Python may expose `date` / `datetime` values | `PunishResp` JSON | `shioaji data regulatory --type punish --format json` follows HTTP JSON; non-JSON formats transpose to rows | Use for disposition stocks; do not assume Python date objects in HTTP JSON. |
 | Regulatory notice | `NoticeResp`; Python may expose `date` / `datetime` values | `NoticeResp` JSON | `shioaji data regulatory --type notice --format json` follows HTTP JSON; non-JSON formats transpose to rows | Use for attention stocks; do not assume Python date objects in HTTP JSON. |
 
+## Market Data Time Handling 行情資料時間處理
+
+For market-data fields in this file, do not treat Shioaji Python `ts` values as
+UTC and do not add 8 hours. Historical `api.ticks().ts` and `api.kbars().ts`
+are nanosecond timestamps encoded so `pd.to_datetime(...)` / Polars
+`cast(pl.Datetime("ns"))` already yields Taiwan market wall-clock time. Adding
+`+8h` shifts the data to the wrong session; for example, a stock `09:01` K-bar
+becomes `17:01`.
+
+本文件的行情資料欄位不要把 Python `ts` 當 UTC，也不要自行 `+8` 小時。
+歷史 `api.ticks().ts` 與 `api.kbars().ts` 是 nanosecond timestamp，直接
+`pd.to_datetime(...)` 或 Polars `cast(pl.Datetime("ns"))` 解出來就是台灣
+市場牆鐘時間；自行 `+8h` 會把資料移到錯誤時段，例如股票 `09:01` K 棒會
+變成 `17:01`。
+
+```python
+import pandas as pd
+
+# Correct: direct market-data timestamp decode.
+ticks_dt = pd.to_datetime(ticks.ts)
+kbars_dt = pd.to_datetime(kbars.ts)
+
+# Wrong: do not add 8 hours to Shioaji market-data ts.
+wrong = pd.to_datetime(kbars.ts) + pd.Timedelta(hours=8)
+```
+
+If downstream code requires timezone-aware datetimes, attach Asia/Taipei without
+shifting the clock time. Do not parse as UTC and convert to Asia/Taipei.
+
+若下游需要 timezone-aware datetime，請在不移動牆鐘時間的前提下標上
+Asia/Taipei；不要先當 UTC parse 再 convert 到 Asia/Taipei。
+
+```python
+import pandas as pd
+import polars as pl
+
+ticks_dt_tz = pd.to_datetime(ticks.ts).tz_localize("Asia/Taipei")
+
+ticks_pl = pl.DataFrame({**ticks}).with_columns(
+    pl.col("ts")
+    .cast(pl.Datetime("ns"))
+    .dt.replace_time_zone("Asia/Taipei")
+)
+```
+
+Streaming market-data callback objects follow the same market-time rule:
+`tick.datetime` / `bidask.datetime` are already Taiwan market datetimes; do not
+add 8 hours. This note is scoped to market data only. Do not infer order,
+trade, deal, or account timestamp behavior from it.
+
+即時行情 callback 物件也遵守同一個市場時間規則：`tick.datetime` /
+`bidask.datetime` 已經是台灣市場時間，不要再 `+8` 小時。此段只適用於
+行情資料；不要把它外推到委託、交易、成交或帳務 timestamp。
+
 ## Snapshots 即時快照
 
 Get current snapshot for multiple contracts (max 500 per request).
@@ -235,6 +289,106 @@ kbars = api.kbars(
 )
 ```
 
+### KBar Date Range Limit and Usage Pattern K 棒日期區間限制與使用方式
+
+`api.kbars()` accepts historical backfill, but one request must not exceed 30
+calendar days. If the range is too long, the server returns `400: Kbars date
+range must not exceed 30 days`. This is a per-request window limit, not "only
+the latest 30 days are available". Use chunks of 29 days or less to avoid
+inclusive-boundary confusion.
+
+`api.kbars()` 可用於歷史回補，但單次 request 不可超過 30 個 calendar
+days。區間太長時 server 會回 `400: Kbars date range must not exceed 30
+days`。這是單次 request 的窗口限制，不是「只能回溯最近 30 天」。建議每段
+切成 29 天以內，避免 inclusive boundary 誤差。
+
+For intraday systems, do not keep querying long ranges during market hours. Use
+30-day chunks only for backfill. During the session, query only today's changing
+data and merge it into a local data manager backed by a columnar, partitioned
+format such as Parquet. For long-term daily history, use TWSE daily data instead
+of repeatedly pulling minute K-bars.
+
+盤中系統不要反覆查長天期 K 棒。30 天分段是方便回補資料，不是盤中使用方式。
+盤中只查當天會變動的資料，合併進本地 data manager；底層建議用 Parquet
+這類 columnar、可 partition、可跨語言讀取的格式。長期日線資料請用 TWSE
+日線，不要反覆拉長天期分鐘 K。
+
+```python
+import datetime as dt
+from pathlib import Path
+
+import polars as pl
+
+
+def date_chunks(start: str, end: str, days: int = 29):
+    cur = dt.date.fromisoformat(start)
+    last = dt.date.fromisoformat(end)
+    step = dt.timedelta(days=days - 1)
+    while cur <= last:
+        chunk_end = min(cur + step, last)
+        yield cur.isoformat(), chunk_end.isoformat()
+        cur = chunk_end + dt.timedelta(days=1)
+
+
+class KBarDataManager:
+    def __init__(self, root: str):
+        self.root = Path(root)
+
+    def _file(self, code: str, date: dt.date) -> Path:
+        return self.root / f"code={code}" / f"date={date.isoformat()}" / "kbars.parquet"
+
+    def write(self, code: str, frame: pl.DataFrame) -> None:
+        frame = frame.sort("ts").unique(subset=["ts"], keep="last", maintain_order=True)
+        for key, day_frame in frame.group_by("date"):
+            trade_date = key[0] if isinstance(key, tuple) else key
+            file = self._file(code, trade_date)
+            file.parent.mkdir(parents=True, exist_ok=True)
+            if file.exists():
+                existing = pl.read_parquet(file)
+                day_frame = (
+                    pl.concat([existing, day_frame])
+                    .sort("ts")
+                    .unique(subset=["ts"], keep="last", maintain_order=True)
+                )
+            day_frame.write_parquet(file)
+
+    def scan(self, code: str) -> pl.LazyFrame:
+        return pl.scan_parquet(str(self.root / f"code={code}" / "date=*" / "kbars.parquet"))
+
+
+def kbars_frame(kbars) -> pl.DataFrame:
+    return (
+        pl.DataFrame({**kbars})
+        .with_columns(pl.col("ts").cast(pl.Datetime("ns")).alias("datetime"))
+        .with_columns(pl.col("datetime").dt.date().alias("date"))
+    )
+
+
+def backfill_kbars(api, contract, start: str, end: str, manager: KBarDataManager):
+    """Backfill immutable history in <=29-day request windows."""
+
+    for chunk_start, chunk_end in date_chunks(start, end):
+        kbars = api.kbars(contract, start=chunk_start, end=chunk_end)
+        manager.write(contract.code, kbars_frame(kbars))
+
+
+def refresh_today_kbars(api, contract, manager: KBarDataManager):
+    """Intraday refresh only touches today's mutable partition."""
+    today = dt.date.today().isoformat()
+    kbars = api.kbars(contract, start=today, end=today)
+    manager.write(contract.code, kbars_frame(kbars))
+
+
+manager = KBarDataManager("./market-data/kbars")
+contract = api.Contracts.Stocks["2330"]
+
+# Backfill historical partitions in chunks.
+backfill_kbars(api, contract, "2024-01-01", "2024-12-31", manager)
+
+# Intraday refresh: only query today's changing partition, then upsert locally.
+refresh_today_kbars(api, contract, manager)
+```
+
 ### HTTP: Get KBars
 
 ```bash
@@ -271,6 +425,195 @@ df = pl.DataFrame({**kbars}).with_columns(
     pl.col("ts").cast(pl.Datetime("ns"))
 )
 ```
+
+### Resample Ticks to API-Compatible 1-Minute KBars 用 Tick 自聚成 API 對齊的一分鐘 K 棒
+
+`api.kbars()` 1-minute bars are right-labelled: for normal intraday minutes,
+the bar timestamp is the minute end and the content is `[ts - 1 minute, ts)`.
+When rebuilding bars from `api.ticks()`, start from the bar semantics. A
+right-labelled 1-minute bar groups ticks into `[ts - 1 minute, ts)`, so compute
+that right-labelled bucket directly with `dt.truncate("1m") + 1 minute`, then
+use normal `group_by`.
+`group_by_dynamic(..., closed="left", label="right")` is also valid after the
+same close-boundary adjustment, but it is not required for this case.
+
+Before grouping, shrink exact session-close boundary ticks by 1 microsecond.
+This keeps Shioaji's close-auction tick in the close-labelled K-bar while still
+using the normal truncate-and-group rule. Verified examples:
+
+- Stock day session: exact `13:30:00` ticks belong to the `13:30` K-bar.
+- Futures day session: exact `13:45:00` ticks belong to the `13:45` K-bar.
+
+`api.kbars()` 一分鐘 K 棒是右標：一般分鐘內容是 `[ts - 1 分鐘, ts)`。
+自聚 tick 要先從 K 棒語意理解：右標一分鐘 K 棒把 tick 分到
+`[ts - 1 分鐘, ts)`，所以直接用 `dt.truncate("1m") + 1 分鐘` 算出
+右標 bucket，再做一般 `group_by`。若使用 dynamic window，也是在同樣的
+close-boundary 調整後使用 `group_by_dynamic(..., closed="left",
+label="right")` 表達同一個分組語意。session close 邊界 tick 先內縮
+1 微秒後再分 bucket。
+實測 2330 股票日盤與 TXFR1 期貨日盤：股票 `13:30:00` 收盤集合競價 tick
+歸在 `13:30` K 棒；期貨日盤 `13:45:00` 邊界 tick 歸在 `13:45` K 棒。
+
+```python
+import datetime as dt
+import polars as pl
+
+date = "2025-01-06"
+contract = api.Contracts.Stocks["2330"]
+
+# For futures day session, use a futures contract and switch these settings:
+# contract = api.Contracts.Futures.TXF.TXFR1
+# session_start = dt.datetime.fromisoformat(f"{date} 08:45:00")
+# session_close = dt.datetime.fromisoformat(f"{date} 13:45:00")
+# amount_multiplier = 1
+session_start = dt.datetime.fromisoformat(f"{date} 09:00:00")
+session_close = dt.datetime.fromisoformat(f"{date} 13:30:00")
+amount_multiplier = 1000
+
+ticks = api.ticks(contract, date=date)
+
+ticks_df = (
+    pl.DataFrame(
+        {
+            "ts": ticks.ts,
+            "price": ticks.close,
+            "volume": ticks.volume,
+        }
+    )
+    .with_columns(pl.col("ts").cast(pl.Datetime("ns")))
+    .sort("ts")
+)
+
+bars = (
+    ticks_df
+    .filter((pl.col("ts") >= session_start) & (pl.col("ts") <= session_close))
+    .with_columns(
+        pl.when(pl.col("ts") == session_close)
+        .then(pl.col("ts") - pl.duration(microseconds=1))
+        .otherwise(pl.col("ts"))
+        .cast(pl.Datetime("ns"))
+        .alias("ts_for_bucket")
+    )
+    .with_columns(
+        (pl.col("ts_for_bucket").dt.truncate("1m") + pl.duration(minutes=1))
+        .alias("ts")
+    )
+    .group_by("ts", maintain_order=True)
+    .agg(
+        pl.col("price").first().alias("Open"),
+        pl.col("price").max().alias("High"),
+        pl.col("price").min().alias("Low"),
+        pl.col("price").last().alias("Close"),
+        pl.col("volume").sum().alias("Volume"),
+        (pl.col("price") * pl.col("volume") * amount_multiplier)
+        .sum()
+        .alias("Amount"),
+    )
+    .sort("ts")
+)
+```
+
+The Polars dynamic-window form follows the same basic concept: keep the same
+`ts_for_bucket` adjustment, then let `group_by_dynamic` express the
+left-closed, right-labelled window. The result timestamp column is the window
+label, so rename it back to `ts` for Shioaji-style output.
+
+```python
+bars_dynamic = (
+    ticks_df
+    .filter((pl.col("ts") >= session_start) & (pl.col("ts") <= session_close))
+    .with_columns(
+        pl.when(pl.col("ts") == session_close)
+        .then(pl.col("ts") - pl.duration(microseconds=1))
+        .otherwise(pl.col("ts"))
+        .cast(pl.Datetime("ns"))
+        .alias("ts_for_bucket")
+    )
+    .group_by_dynamic(
+        "ts_for_bucket",
+        every="1m",
+        period="1m",
+        closed="left",
+        label="right",
+    )
+    .agg(
+        pl.col("price").first().alias("Open"),
+        pl.col("price").max().alias("High"),
+        pl.col("price").min().alias("Low"),
+        pl.col("price").last().alias("Close"),
+        pl.col("volume").sum().alias("Volume"),
+        (pl.col("price") * pl.col("volume") * amount_multiplier)
+        .sum()
+        .alias("Amount"),
+    )
+    .rename({"ts_for_bucket": "ts"})
+    .sort("ts")
+)
+```
+
+Use `amount_multiplier = 1000` for stock ticks because stock tick volume is in
+lots. Use `amount_multiplier = 1` for futures ticks. For futures, choose the
+session window explicitly; the day session starts at `08:45:00`, first
+right-labelled bar is `08:46:00`, and the day close bar is labelled `13:45`.
+
+Pandas follows the same rule: shrink the close-boundary tick first, then build
+the right-labelled bucket with `floor("min") + 1 minute` and use normal
+`groupby`.
+
+```python
+import pandas as pd
+
+date = "2025-01-06"
+session_start = pd.Timestamp(f"{date} 09:00:00")
+session_close = pd.Timestamp(f"{date} 13:30:00")
+amount_multiplier = 1000
+
+ticks_pd = pd.DataFrame(
+    {
+        "ts": pd.to_datetime(ticks.ts),
+        "price": ticks.close,
+        "volume": ticks.volume,
+    }
+)
+ticks_pd = ticks_pd[
+    (ticks_pd["ts"] >= session_start) & (ticks_pd["ts"] <= session_close)
+].copy()
+ticks_pd.loc[ticks_pd["ts"] == session_close, "ts"] -= pd.Timedelta(
+    microseconds=1
+)
+ticks_pd["bar_ts"] = ticks_pd["ts"].dt.floor("min") + pd.Timedelta(minutes=1)
+ticks_pd["amount"] = ticks_pd["price"] * ticks_pd["volume"] * amount_multiplier
+
+bars_pd = (
+    ticks_pd.groupby("bar_ts", sort=True)
+    .agg(
+        Open=("price", "first"),
+        High=("price", "max"),
+        Low=("price", "min"),
+        Close=("price", "last"),
+        Volume=("volume", "sum"),
+        Amount=("amount", "sum"),
+    )
+)
+```
+
+For left-labelled display, add a separate display column instead of changing the
+canonical Shioaji timestamp. For normal bars, `bar_start = ts - 1 minute`.
+Treat the close-auction bar specially in UI/signals if needed, because it
+represents the close boundary auction tick, not a normal
+`[close - 1 minute, close)` interval.
+
+```python
+bars_for_display = bars.with_columns(
+    (pl.col("ts") - pl.duration(minutes=1)).alias("bar_start")
+)
+```
+
+Do not look ahead. A right-labelled `09:01` bar is complete only after
+`09:01:00`; the close bar is complete only after the close-auction tick is
+available. Some `api.kbars()` responses may include zero-volume carry-forward
+bars that cannot be produced by a pure tick aggregation unless you build the
+session calendar and fill no-trade minutes explicitly.
 
 ---
 
@@ -318,6 +661,18 @@ Default `toon`/`human` output transposes to per-stock rows; `-f json` follows th
 
 For historical data of expired futures, use continuous contracts `R1` (near-month) and `R2` (next-to-near-month).
 查詢已過期期貨的歷史資料，使用連續合約 `R1`（近月）和 `R2`（次近月）。
+
+For futures ticks, `api.ticks(contract, date=D)` uses the futures trading-day
+assignment: the night session is attached to the next trading day. In practical
+terms, `date=D` covers the session from the previous trading day's `15:00`
+night-session open through `D 13:45` day-session close. Do not query the
+previous calendar date expecting to get that night session; use the trading day
+it belongs to.
+
+期貨 ticks 的 `api.ticks(contract, date=D)` 使用期貨交易日歸屬：夜盤掛在
+下一個交易日。實務上，`date=D` 涵蓋前一交易日 `15:00` 夜盤開盤到
+`D 13:45` 日盤收盤。不要用前一個 calendar date 查那段夜盤；請用夜盤歸屬
+的交易日。
 
 ```python
 # Continuous near-month futures 連續近月期貨

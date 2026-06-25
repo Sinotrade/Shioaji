@@ -51,6 +51,9 @@ trade = api.place_order(contract, order, timeout=0)
 For order APIs, non-blocking mode does not mean the exchange has accepted, rejected, filled, or cancelled the order. Treat the returned `Trade` as an initial object, then wait for `order_deal_event` through Python order callbacks, or use `update_status()` only for reconciliation if active reports were unavailable or missed. See [ORDERS.md](ORDERS.md).
 對下單 API 來說，非阻塞不代表交易所已接受、拒絕、成交或取消。請把回傳的 `Trade` 視為初始物件，接著等待 Python order callback 收到的 `order_deal_event`；只有在無法使用或疑似漏掉主動回報時，才用 `update_status()` 補查。詳見 [ORDERS.md](ORDERS.md)。
 
+With `timeout=0`, the immediately returned `Trade` is a placeholder: `trade.order.id`, `seqno`, and `ordno` can be empty strings. Do not anchor hedge, cancel, or risk logic on the immediate return value. Use the per-order `cb=` callback or active order/deal callback event and key off the `seqno` / order identifiers delivered there.
+使用 `timeout=0` 時，立即回傳的 `Trade` 是 placeholder：`trade.order.id`、`seqno`、`ordno` 可能是空字串。不要用當下回傳值定錨避險、刪單或風控邏輯；請用單筆 `cb=` callback 或主動委託/成交 callback 事件，並以 callback 中的 `seqno` / 委託識別欄位為準。
+
 ### Get Results via Callback 透過回調取得結果
 
 ```python

@@ -10,7 +10,7 @@
       "name": "shioaji",
       "source": "./plugins/shioaji",
       "description": "Shioaji Taiwan financial trading API — Python, CLI, HTTP API, SSE streaming, and multi-language SDK guide",
-      "version": "1.5.3",
+      "version": "1.5.4",
       "author": {
         "name": "Sinotrade"
       }

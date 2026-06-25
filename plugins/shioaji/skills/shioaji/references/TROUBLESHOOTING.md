@@ -63,11 +63,13 @@ Real-time subscriptions are different: streaming subscriptions do **not** consum
    週末、休市日或未來日期可能沒有歷史資料。
 4. **Supported historical range 支援區間** — Historical ticks/K-bars are only available from the supported start dates in [MARKET_DATA.md](MARKET_DATA.md#historical-data-periods-歷史資料可查詢區間).
    歷史 ticks/K-bars 只支援 [MARKET_DATA.md](MARKET_DATA.md#historical-data-periods-歷史資料可查詢區間) 內列出的起始日期之後資料。
-5. **Contract identity 合約身分** — Verify `security_type`, `exchange`, and `code` with `GET /api/v1/data/contracts/{code}?security_type=...` before querying data.
+5. **KBar request window K 棒單次窗口** — If KBar returns `400: Kbars date range must not exceed 30 days`, split backfill into chunks of 29 days or less and write them into a local data manager, preferably as partitioned Parquet. This is not a "latest 30 days only" rule. During market hours, query only today's changing K-bars and upsert that mutable partition instead of repeatedly querying long ranges.
+   如果 K 棒回 `400: Kbars date range must not exceed 30 days`，請把回補切成 29 天以內的小段，寫進本地 data manager，底層建議用 partitioned Parquet。這不是「只能查最近 30 天」的規則。盤中只查今天會變動的 K 棒並 upsert 當天 mutable partition，不要反覆查長區間。
+6. **Contract identity 合約身分** — Verify `security_type`, `exchange`, and `code` with `GET /api/v1/data/contracts/{code}?security_type=...` before querying data.
    查資料前先用 `GET /api/v1/data/contracts/{code}?security_type=...` 確認 `security_type`、`exchange`、`code`。
-6. **Expired futures 過期期貨** — For old futures history, use continuous contracts such as `TXFR1` / `TXFR2`; an expired concrete code may return no rows.
+7. **Expired futures 過期期貨** — For old futures history, use continuous contracts such as `TXFR1` / `TXFR2`; an expired concrete code may return no rows.
    查已過期期貨歷史資料時使用 `TXFR1` / `TXFR2` 這類連續合約；已過期的實際合約代碼可能沒有資料。
-7. **Time filters 時間條件** — `RangeTime` can legitimately return empty if the interval has no trades; `LastCount` with `last_cnt <= 0` is invalid.
+8. **Time filters 時間條件** — `RangeTime` can legitimately return empty if the interval has no trades; `LastCount` with `last_cnt <= 0` is invalid.
    `RangeTime` 區間內沒有成交時會合法回空；`LastCount` 的 `last_cnt <= 0` 是無效參數。
 
 ```bash
@@ -332,7 +334,59 @@ Contract files are time-sensitive. Use these update windows when diagnosing stal
 
 ## Connection 連線相關
 
+### 503 Response Triage: rate-limit ban vs yanked version
+
+Do not treat every 503 the same. First branch on the response detail/message.
+`503` can mean either a temporary rate-limit ban or a rejected client version;
+the fixes are opposite.
+
+不要把所有 503 當成同一種問題。先看 response detail/message 分流。
+`503` 可能是暫時限流 ban，也可能是 client 版本被伺服器拒收；兩者修法不同。
+
+| Symptom / detail | Cause | Fix |
+|---|---|---|
+| `操作異常，請1分鐘後再重新登入` | Temporary rate-limit ban. The account/IP has exceeded a request-rate guardrail, so the backend blocks the whole session path; even `login()` can return 503 during the ban window. | Stop retry loops. Wait at least one minute without sending more login/API requests, then reduce request rate, replace polling with streaming, batch/cache repeated queries, and add client-side backoff. |
+| `Please update the version of shioaji ...` followed by `Not authenticated` on later calls | Version rejected by the server. Known bad yanked 1.5.x releases are not accepted; PyPI marks `1.5.0` and `1.5.1` yanked, and as of 2026-06-25 `1.5.2` is also yanked. | Upgrade to `shioaji==1.5.3`, then restart the Python process or `shioaji server` daemon and login again. |
+
+| 症狀 / detail | 成因 | 修法 |
+|---|---|---|
+| `操作異常，請1分鐘後再重新登入` | 暫時限流 ban。帳號/IP 超過 request-rate 防護後，後端會擋住整個 session path；ban 期間連 `login()` 都可能回 503。 | 停止重試迴圈。至少一分鐘內不要再送 login/API request，再降低頻率、用 streaming 取代輪詢、批次/快取重複查詢，並加入 client-side backoff。 |
+| `Please update the version of shioaji ...`，後續呼叫又出現 `Not authenticated` | 版本被伺服器拒收。已知有問題的 yanked 1.5.x 版本不被接受；PyPI 標記 `1.5.0`、`1.5.1` 為 yanked，截至 2026-06-25 `1.5.2` 也被標記為 yanked。 | 升級到 `shioaji==1.5.3`，然後重啟 Python process 或 `shioaji server` daemon，再重新登入。 |
+
+```bash
+# uv project
+uv add "shioaji==1.5.3"
+
+# pip / existing environment
+python -m pip install -U "shioaji==1.5.3"
+
+# CLI tool install
+uv tool install --force "shioaji==1.5.3"
+```
+
+Rate-limit ban guardrails include market-data queries (50 / 5 sec),
+accounting queries (25 / 5 sec), and order operations (250 / 10 sec). These
+limits are intentionally broad; correct Shioaji usage should stay far away from
+them. Hitting a rate limit is a strong signal that the program's usage pattern
+is wrong, not that a normal strategy needs to run closer to the limit. A ban is
+not solved by trying `login()` again every few seconds; repeated login attempts
+can keep the ban alive. Fix the usage pattern instead: keep one logged-in
+process/server session, subscribe to streaming market data instead of polling,
+cache historical data and account snapshots, and avoid `update_status()` loops
+when order/deal callbacks or SSE can provide active reports.
+
+限流 ban 的常見 guardrail 包含行情查詢 5 秒 50 次、帳務查詢 5 秒 25 次、
+委託操作 10 秒 250 次。這些限制目前設得很寬；正確 Shioaji 用法應該離
+rate limit 很遠。觸發 rate limit 是程式使用模式有明顯問題的訊號，不是
+合理策略需要貼近限制執行。ban 不是每幾秒重打 `login()` 就能解；反覆登入
+可能讓 ban 延長。要修的是使用方式：維持一個已登入 process/server
+session、用 streaming 訂閱取代輪詢、快取歷史行情與帳務快照，並避免用
+`update_status()` 迴圈取代主動委託/成交回報或 SSE。
+
 ### Rate limit exceeded 超過流量限制
+
+For 503 responses, first use [503 Response Triage](#503-response-triagerate-limit-ban-vs-yanked-version) above. This section is the general limit reference.
+遇到 503 時先看上方 [503 Response Triage](#503-response-triagerate-limit-ban-vs-yanked-version) 分流；本節是一般限制參考。
 
 **Limits 限制:**
 
@@ -345,9 +399,14 @@ Contract files are time-sensitive. Use these update windows when diagnosing stal
 | Daily logins 每日登入 | 1000 times |
 
 **Solution 解決方案:**
-- Use callbacks instead of polling 使用回調代替輪詢
-- Add delays between requests 請求間加入延遲
-- Cache results when possible 盡可能快取結果
+- Treat the limit hit as a usage bug first; inspect loops, reconnect paths,
+  polling, and error retries.
+  先把觸發限制視為使用方式錯誤；檢查迴圈、重連路徑、輪詢和錯誤重試。
+- Use callbacks or SSE streaming instead of polling.
+  用 callback 或 SSE streaming 取代輪詢。
+- Cache or batch repeated reads; add delay/backoff only after the workflow is
+  corrected.
+  快取或批次處理重複查詢；先修正 workflow，再加 delay/backoff。
 
 ### Connection lost 連線中斷
 

@@ -1,27 +1,16 @@
 ---
 name: shioaji
 description: |
-  Use this skill whenever the user works with Shioaji, SinoPac (永豐金), or Taiwan
-  financial markets (TWSE/TPEX/TAIFEX) — even if they don't name the library.
-  Covers all access layers: Python binding (sync/async), `shioaji` CLI, HTTP API
-  server with SSE streaming, dashboard with custom-app embedding, and multi-language
-  HTTP clients (JavaScript/TypeScript, Go, C/C++, C#, Rust, Java/Kotlin).
-  Tasks covered: place/modify/cancel stock/futures/options orders (limit, market,
-  ROD/IOC/FOK, margin, short, odd-lot, combo); real-time streaming (tick, bidask,
-  quote) via Python callbacks or HTTP SSE; historical kbars/ticks/snapshots;
-  account balance/margin/positions/P&L; watchlists, scanners, reserve orders;
-  building HTTP/SSE clients in any language against the Shioaji server.
-  Trigger keywords: shioaji, sinopac, 永豐金, 台股, TWSE, TPEX, TAIFEX,
-  下單, 即時行情, 台灣股票交易, shioaji CLI, shioaji server, SSE streaming.
-  First-time users: when the user says they have never used Shioaji, are using it
-  for the first time, do not know how to start, or asks to be guided step by step,
-  first ask whether they already have a SinoPac securities/futures account and
-  whether they need stock, futures/options, or both. Do not start with install
-  commands, Python snippets, local project inspection, .env/.venv setup, or
-  workspace checks until onboarding gates are confirmed or the user explicitly
-  asks for that technical step.
-  Not for: US/HK markets, Interactive Brokers, generic ta-lib/pandas indicators
-  unless paired with Shioaji data.
+  Use for Shioaji, SJ, SinoPac (永豐金), Taiwan market trading/API tasks, or
+  broad order/trading requests where Shioaji may apply. Covers Python sync/async
+  bindings, `shioaji` CLI, HTTP API, SSE streaming, dashboard embedding, and
+  JS/TS, Go, C/C++, C#, Rust, Java/Kotlin HTTP clients. Covers TWSE/TPEX/TAIFEX
+  orders, quotes, market data, accounts, watchlists, reserve orders, setup,
+  migration, and troubleshooting. Trigger keywords include shioaji, sj, sinopac,
+  永豐金, 台股, 下單, 交易, 即時行情, shioaji server, and SSE streaming.
+  For first-time users, start with account/API onboarding gates before local
+  installation or code. Not for US/HK markets or generic indicators unless
+  paired with Shioaji data.
 ---
 
 # Shioaji Trading API
@@ -135,6 +124,20 @@ For installation, first-use setup, API keys, signing, CA, login, and readiness c
 ---
 
 ## Rate Limits / 速率限制
+
+Treat limits as guardrails, not as the starting point for API design. Start
+from the correct Shioaji workflow: keep one logged-in client/server session per
+user process, reuse subscriptions instead of polling, batch or cache repeated
+lookups when the functional reference recommends it, and retry only after
+checking the response meaning. Correct usage should stay far away from these
+limits; hitting them usually means a loop, reconnection pattern, polling design,
+or error-retry path is wrong and should be fixed rather than worked around.
+
+使用限制是防濫用邊界，不是設計用法的出發點。回答或實作時先從正確
+Shioaji 使用方式開始：每個使用者行程維持一個已登入 client/server
+session、用訂閱取代輪詢、依功能參考建議批次或快取重複查詢，並且先判斷
+response 意義再 retry。正確用法會離這些限制很遠；若碰到限制，通常代表
+迴圈、重連、輪詢或錯誤重試路徑有問題，應修正用法而不是設法貼著限制跑。
 
 | Category | Limit |
 |----------|-------|
