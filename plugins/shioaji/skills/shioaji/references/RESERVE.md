@@ -114,7 +114,7 @@ for stock in summary.response.stocks:
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
 |---------------|----------|---------|------------------|
 | `account` | `Account` | (required) | Stock account 股票帳戶 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 
 ### HTTP Example HTTP 範例
 
@@ -155,7 +155,7 @@ for stock in detail.response.stocks:
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
 |---------------|----------|---------|------------------|
 | `account` | `Account` | (required) | Stock account 股票帳戶 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 
 ### HTTP Example HTTP 範例
 
@@ -198,7 +198,7 @@ print(f"Share: {resp.response.share}")
 | `contract` | `Contract` | (required) | Stock contract 股票合約 |
 | `share` | `int` | (required) | Number of shares to reserve 預收股數 |
 | `account` | `Account` | stock account | Stock account 股票帳戶 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 
 ### HTTP Example HTTP 範例
 
@@ -252,7 +252,7 @@ for stock in detail.response.stocks:
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
 |---------------|----------|---------|------------------|
 | `account` | `Account` | (required) | Stock account 股票帳戶 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 
 ### HTTP Example HTTP 範例
 
@@ -296,7 +296,7 @@ print(f"Status: {resp.response.status}")
 | `share` | `int` | (required) | Number of shares 預收股數 |
 | `price` | `float` | (required) | Price per share 每股價格 |
 | `account` | `Account` | stock account | Stock account 股票帳戶 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 
 ### HTTP Example HTTP 範例
 

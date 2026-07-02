@@ -87,7 +87,7 @@ for wl in watchlists:
 
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
 |---------------|----------|---------|------------------|
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback for timeout=0 mode 回呼函數 |
 
 ### HTTP Example HTTP 範例
@@ -122,7 +122,7 @@ for contract in watchlist.contracts:
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
 |---------------|----------|---------|------------------|
 | `group_id` | `str` | (required) | Watchlist ID 清單 ID |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### HTTP Example HTTP 範例
@@ -164,7 +164,7 @@ empty_wl = api.create_watchlist(name="Empty List")
 |---------------|----------|---------|------------------|
 | `name` | `str` | (required) | Watchlist name 清單名稱 |
 | `contracts` | `List[BaseContract]` | `None` | Initial contracts (optional) 初始合約 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### HTTP Example HTTP 範例
@@ -210,7 +210,7 @@ print(f"Deleted: {deleted.name}")
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
 |---------------|----------|---------|------------------|
 | `group_id` | `str` | (required) | Watchlist ID to delete 要刪除的清單 ID |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### HTTP Example HTTP 範例
@@ -252,7 +252,7 @@ print(f"Synced contracts: {len(synced.contracts)}")
 |---------------|----------|---------|------------------|
 | `group_id` | `str` | (required) | Watchlist ID 清單 ID |
 | `contracts` | `List[BaseContract]` | (required) | Contracts to sync (replaces all) 要同步的合約 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### HTTP Example HTTP 範例
@@ -298,7 +298,7 @@ print(f"Updated contracts: {len(updated.contracts)}")
 |---------------|----------|---------|------------------|
 | `group_id` | `str` | (required) | Watchlist ID 清單 ID |
 | `contracts` | `List[BaseContract]` | (required) | Contracts to add 要新增的合約 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### HTTP Example HTTP 範例
@@ -340,7 +340,7 @@ print(f"Remaining contracts: {len(updated.contracts)}")
 |---------------|----------|---------|------------------|
 | `group_id` | `str` | (required) | Watchlist ID 清單 ID |
 | `contracts` | `List[BaseContract]` | (required) | Contracts to remove 要移除的合約 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### HTTP Example HTTP 範例

@@ -91,7 +91,7 @@ api.account_balance(timeout=0, cb=lambda bal: print(bal))
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
 |---------------|----------|---------|------------------|
 | `account` | `Account` | `None` (stock_account) | Account to query 查詢帳戶 |
-| `timeout` | `int` | `5000` | Timeout ms; 0 = non-blocking 超時毫秒; 0 = 非阻塞 |
+| `timeout` | `int` | `30000` | Timeout ms; 0 = non-blocking 超時毫秒; 0 = 非阻塞 |
 | `cb` | `Callable` | `None` | Callback for timeout=0 mode 回呼函數 |
 
 ### Attributes 屬性
@@ -127,7 +127,7 @@ margin = api.margin(account=api.futopt_account)
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
 |---------------|----------|---------|------------------|
 | `account` | `Account` | `None` (futopt_account) | Futures account 期貨帳戶 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### Attributes 屬性
@@ -204,7 +204,7 @@ for pos in positions:
 |---------------|----------|---------|------------------|
 | `account` | `Account` | `None` | Account (stock or futures) 帳戶 |
 | `unit` | `Unit` | `Common` | Position unit type 持倉單位 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### HTTP Example HTTP 範例
@@ -241,7 +241,7 @@ details = api.list_position_detail(detail_id=0)
 |---------------|----------|---------|------------------|
 | `account` | `Account` | `None` | Account 帳戶 |
 | `detail_id` | `int` | `0` | Position detail ID (from list_positions cache) 持倉明細 ID |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 Note: `detail_id` is resolved from the position cache populated by `list_positions()`. Call `list_positions()` first.
@@ -296,7 +296,7 @@ for pnl in pnl_list:
 | `begin_date` | `str` | `""` | Start date (YYYY-MM-DD) 開始日期 |
 | `end_date` | `str` | `""` | End date (YYYY-MM-DD) 結束日期 |
 | `unit` | `Unit` | `Common` | Position unit type 持倉單位 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### HTTP Example HTTP 範例
@@ -348,7 +348,7 @@ For stock P&L details, `detail.quantity` is an `int`.
 | `account` | `Account` | `None` | Account 帳戶 |
 | `detail_id` | `int` | `0` | P&L detail ID (from list_profit_loss cache) 損益明細 ID |
 | `unit` | `Unit` | `Common` | Position unit type 持倉單位 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### HTTP Example HTTP 範例
@@ -395,7 +395,7 @@ for item in summary.profitloss_summary:
 | `account` | `Account` | `None` | Account 帳戶 |
 | `begin_date` | `str` | `""` | Start date (YYYY-MM-DD) 開始日期 |
 | `end_date` | `str` | `""` | End date (YYYY-MM-DD) 結束日期 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### HTTP Example HTTP 範例
@@ -440,7 +440,7 @@ print(f"T+2 day: {settlement.t2_day}, T+2 money: {settlement.t2_money}")
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
 |---------------|----------|---------|------------------|
 | `account` | `Account` | `None` (stock_account) | Stock account 股票帳戶 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### Attributes 屬性
@@ -495,7 +495,7 @@ s.T       # int: T offset T 日偏移
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
 |---------------|----------|---------|------------------|
 | `account` | `Account` | `None` (stock_account) | Stock account 股票帳戶 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### HTTP Example HTTP 範例
@@ -542,7 +542,7 @@ print(f"Trading Available: {limits.trading_available}")
 | Parameter 參數 | Type 類型 | Default | Description 說明 |
 |---------------|----------|---------|------------------|
 | `account` | `Account` | `None` (stock_account) | Stock account 股票帳戶 |
-| `timeout` | `int` | `5000` | Timeout ms 超時毫秒 |
+| `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
 
 ### Attributes 屬性

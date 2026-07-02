@@ -3,7 +3,11 @@
 This document covers placing, modifying, and canceling orders in Shioaji.
 本文件說明如何在 Shioaji 中下單、改單和刪單。
 
-Use [MIGRATION.md](MIGRATION.md) when migrating legacy order constructors or submodule constants. This file owns `Trade`, `Vec<Trade>`, `ComboTrade`, `PendingSubmit`, and order-event response decisions.
+Use [MIGRATION.md](MIGRATION.md) when migrating legacy order constructors or
+submodule constants. This file owns regular `Trade`, `Vec<Trade>`,
+`PendingSubmit`, and order-event response decisions. Combo-order-specific
+rules and `ComboTrade` status handling live in
+[COMBO_ORDERS.md](COMBO_ORDERS.md).
 
 ## Table of Contents 目錄
 
@@ -335,200 +339,20 @@ trade = api.place_order(contract, order)
 
 ## Combo Orders 組合單
 
-Combo orders allow trading multi-leg strategies: calendar spreads, option spreads, straddles, strangles.
-組合單可交易多腳策略（期貨日曆價差、選擇權價差、跨式、勒式等）。
+Combo orders have separate rules for two-leg contracts, net-price
+calculation, `combo_type`, TAIFEX order conditions, and combo status
+confirmation. Read [COMBO_ORDERS.md](COMBO_ORDERS.md) before placing,
+cancelling, or troubleshooting combo orders.
 
-**Exactly 2 legs are required.** The client raises `ShioajiValueError` if the
-leg count is wrong (matches the sw backend hard requirement at
-`swrelaystation/api/v1/endpoints/order/place_comboorder.py:67-68`).
+Quick reminders:
 
-### Create Combo Contract — field-by-field 建立組合合約
-
-```python
-import shioaji as sj
-
-# Futures calendar spread — buy near-month, sell next-month
-combo_contract = sj.ComboContract(
-    legs=[
-        sj.ComboBase(
-            action=sj.Action.Buy,
-            security_type=sj.SecurityType.Future,
-            exchange=sj.Exchange.TAIFEX,
-            code="TXFG5",
-            symbol="TXFG5",
-            category="TXF",
-            delivery_month="202607",
-        ),
-        sj.ComboBase(
-            action=sj.Action.Sell,
-            security_type=sj.SecurityType.Future,
-            exchange=sj.Exchange.TAIFEX,
-            code="TXFH5",
-            symbol="TXFH5",
-            category="TXF",
-            delivery_month="202608",
-        ),
-    ]
-)
-```
-
-### Create Combo Contract — from richer contract objects (compat helper)
-
-Canonical shioaji users can pass a full `Contract` / `Future` / `Option` /
-`Stock` / `Index` and let shioaji extract the relevant fields:
-
-```python
-r1 = api.Contracts.Futures["TXFR1"]   # near-month alias
-r2 = api.Contracts.Futures["TXFR2"]   # next-month alias
-
-combo_contract = sj.ComboContract(legs=[
-    sj.ComboBase.from_contract(r1, action=sj.Action.Buy),
-    sj.ComboBase.from_contract(r2, action=sj.Action.Sell),
-])
-```
-
-`from_contract` copies `security_type/exchange/code/symbol/category/
-delivery_month/strike_price/option_right/target_code`. For bare
-`BaseContract` instances (only 4 fields) use the field-by-field constructor.
-
-### Place Combo Order 下組合單
-
-```python
-# Canonical shape: ComboOrder defaults action=Sell (see note below).
-# Legs built via ComboBase.from_contract(future_or_option) carry full
-# contract info — shioaji auto-fills `combo_type` for you, so you can
-# omit it.
-order = sj.ComboOrder(
-    price=50,   # Net price 淨價
-    quantity=1,
-    price_type=sj.FuturesPriceType.LMT,
-    order_type=sj.OrderType.ROD,
-    octype=sj.FuturesOCType.Auto,
-    account=api.futopt_account,
-)
-
-trade = api.place_comboorder(combo_contract, order)
-```
-
-`place_comboorder` also accepts a plain `FuturesOrder` for backcompat —
-the same auto-fill path runs when the legs are full contracts.
-
-#### `combo_type` — when to fill it yourself 何時需要自己帶入
-
-- **Full contracts** (`ComboBase.from_contract(future_or_option)` or
-  manually populating `category` / `delivery_month` / `strike_price` /
-  `option_right`): shioaji auto-fills `combo_type` from the leg shape.
-  You can omit the argument.
-- **Bare `BaseContract` legs** (only `security_type` / `exchange` /
-  `code`): Shioaji cannot infer the strategy. **You must pass
-  `combo_type=sj.ComboType.<variant>` yourself**, otherwise
-  `place_comboorder` raises `ShioajiValueError`.
-- **`WeeklyTimeSpread`**: always pass it explicitly — the auto-fill path
-  can't tell it apart from `TimeSpread` (they share `f_mttype` "2").
-- **Explicit always wins**: passing `combo_type=...` overrides the
-  auto-fill regardless of leg shape.
-
-| `sj.ComboType.*`     | f_mttype | Strategy                         |
-| -------------------- | :------: | -------------------------------- |
-| `PriceSpread`        | `1`      | 價格價差                          |
-| `TimeSpread`         | `2`      | 時間價差 (跨月價差)                 |
-| `Straddle`           | `3`      | 跨式                             |
-| `Strangle`           | `4`      | 勒式                             |
-| `ConversionReversal` | `5`      | 轉換 / 逆轉組合                    |
-| `WeeklyTimeSpread`   | `2`      | 週選跨月價差                       |
-
-```python
-order = sj.ComboOrder(
-    price=50,
-    quantity=1,
-    price_type=sj.FuturesPriceType.LMT,
-    order_type=sj.OrderType.ROD,
-    combo_type=sj.ComboType.WeeklyTimeSpread,
-)
-```
-
-#### Note on combo-level `action`
-
-`ComboOrder.action` defaults to `Sell` to match canonical `shioaji.ComboOrder`
-(`shioaji/order.py:105-128`). **Per-leg `ComboBase.action` is what the
-exchange reads for combo direction** (mapped to STS `ord_bs` and `c_buysell`).
-The order-level `action` reaches the wire as `trade_type` (see
-`swrelaystation/backend/sts/protocol/futureoption/handler.py:219` and the
-binary struct at `tr.py:5-44`), but its semantic effect on TAIFEX matching
-for combo orders is empirically unverified — the sw author's comment
-`# trade_type如果sell會不會有影響` ("does Sell have any effect?") reflects
-this open question. The canonical default of `Sell` is used here to
-minimise divergence from `shioaji`; if you need a specific value, pass
-`action=...` explicitly.
-
-#### HTTP: Place Combo Order
-
-```bash
-# POST /api/v1/order/place_comboorder
-curl -X POST http://localhost:8080/api/v1/order/place_comboorder \
-  -H "Content-Type: application/json" \
-  -d '{
-    "combo_contract": {
-      "legs": [
-        {"action": "Buy",  "security_type": "FUT", "exchange": "TAIFEX", "code": "TXFG5", "symbol": "TXFG5", "category": "TXF", "delivery_month": "202607"},
-        {"action": "Sell", "security_type": "FUT", "exchange": "TAIFEX", "code": "TXFH5", "symbol": "TXFH5", "category": "TXF", "delivery_month": "202608"}
-      ]
-    },
-    "order": {
-      "action": "Sell",
-      "price": 50,
-      "quantity": 1,
-      "price_type": "LMT",
-      "order_type": "ROD",
-      "octype": "Auto",
-      "combo_type": "Straddle"
-    }
-  }'
-```
-
-`combo_type` is optional on the JSON body when each leg includes the
-full contract fields (`category`, `delivery_month`, and for options
-`strike_price` / `option_right`); shioaji auto-fills it on the server
-side. Pass it explicitly when the legs are bare codes, or when you need
-`WeeklyTimeSpread`. Accepted values: `PriceSpread`, `TimeSpread`,
-`Straddle`, `Strangle`, `ConversionReversal`, `WeeklyTimeSpread`.
-
-Note on payload keys: the public shioaji HTTP request body uses
-`combo_contract`. Do not send `combocontract` to shioaji's HTTP server.
-
-### Cancel Combo Order 取消組合單
-
-```python
-api.cancel_comboorder(trade)
-```
-
-#### HTTP: Cancel Combo Order
-
-```bash
-# POST /api/v1/order/cancel_comboorder
-curl -X POST http://localhost:8080/api/v1/order/cancel_comboorder \
-  -H "Content-Type: application/json" \
-  -d '{"trade_id": "abc123"}'
-```
-
-### Combo Trades 組合單查詢
-
-```python
-# Update combo status 更新組合單狀態
-api.update_combostatus(api.futopt_account)
-
-# List all combo trades 列出所有組合單
-combo_trades = api.list_combotrades()
-```
-
-#### HTTP: List Combo Trades
-
-```bash
-# POST /api/v1/order/combotrades
-curl -X POST http://localhost:8080/api/v1/order/combotrades \
-  -H "Content-Type: application/json" \
-  -d '{}'
-```
+- Exactly two `ComboBase` legs are required.
+- `ComboOrder.price` is the net combo price, not a per-leg price.
+- Per-leg `ComboBase.action` drives the combo direction.
+- Standard option combo orders do not support `ROD`; use legal `LMT + IOC`
+  or `LMT + FOK` during continuous trading.
+- Confirm combo final state with `update_combostatus(account)` and
+  `list_combotrades()`.
 
 ---
 

@@ -79,7 +79,8 @@ Routing rule: choose the functional reference first, then add the access-method 
 | Install, login, API keys, CA cert, simulation, env vars, constants | [PREPARE.md](references/PREPARE.md) |
 | Install this Shioaji plugin/skill into Claude, Codex, Cursor, or another agent environment | [AGENTS.md](references/AGENTS.md) |
 | Look up contract codes, attributes, security types | [CONTRACTS.md](references/CONTRACTS.md) |
-| Place, modify, cancel orders; combos; `order_deal_event` active order/deal reports (Python callbacks, HTTP order-event SSE) | [ORDERS.md](references/ORDERS.md) |
+| Place, modify, cancel regular stock/futures/options orders; `order_deal_event` active order/deal reports (Python callbacks, HTTP order-event SSE) | [ORDERS.md](references/ORDERS.md) |
+| Place, cancel, price, validate, or troubleshoot combo orders; combo legs, net price, `combo_type`, TAIFEX combo order conditions, `update_combostatus` / `list_combotrades` | [COMBO_ORDERS.md](references/COMBO_ORDERS.md) |
 | Reserve shares for disposition/attention stocks | [RESERVE.md](references/RESERVE.md) |
 | Subscribe real-time quotes, tick/bidask/quote callbacks, SSE streams | [STREAMING.md](references/STREAMING.md) |
 | Historical ticks, K-bars, snapshots, scanners, credit enquiry | [MARKET_DATA.md](references/MARKET_DATA.md) |

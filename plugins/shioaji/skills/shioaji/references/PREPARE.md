@@ -401,7 +401,7 @@ curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install
 curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | CHANNEL=prerelease sh
 
 # Specific version
-curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | VERSION=v1.5.2 sh
+curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | VERSION=v1.5.5 sh
 ```
 
 **Windows (PowerShell):**
@@ -414,7 +414,7 @@ irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | 
 $env:CHANNEL="prerelease"; irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
 
 # Specific version
-$env:VERSION="v1.5.2"; irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
+$env:VERSION="v1.5.5"; irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
 ```
 
 ### Verify Installation 驗證安裝

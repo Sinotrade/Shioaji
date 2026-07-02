@@ -119,7 +119,7 @@ Timeouts live on **different legs of the path** and are **not interchangeable** 
 
 | Knob 旋鈕 | Leg it bounds 限制的路段 | Default 預設 | Set by 設定者 | Active on path 在哪條路徑生效 |
 |---|---|---|---|---|
-| Per-call `timeout=` (Python arg) | In-process call waiting for the backend reply 行程內呼叫等待後端回覆 | Varies by method: orders & snapshots **30000ms**; balance, combo, ticks, kbars, daily quotes **5000ms** 視方法而定 | Caller, per call 呼叫者,逐次 | **Python only** 僅 Python |
+| Per-call `timeout=` (Python arg) | In-process call waiting for the backend reply 行程內呼叫等待後端回覆 | **30000ms** | Caller, per call 呼叫者,逐次 | **Python only** 僅 Python |
 | `SJ_TIMEOUT` (env) | Server waiting for the backend reply 伺服器等待後端回覆 | **60000ms** | Server env, at daemon start daemon 啟動時的環境變數 | **HTTP/CLI path** (server-side; **not settable by HTTP clients**) HTTP/CLI 路徑(伺服器端;**HTTP 客戶端無法設定**) |
 | HTTP client request/read timeout 客戶端請求／讀取逾時 | The HTTP request itself (client ↔ daemon) HTTP 請求本身(客戶端↔daemon) | Set by the client (SDK default varies) 由客戶端設定 | The HTTP client 你的 HTTP 客戶端 | **HTTP/CLI path** HTTP/CLI 路徑 |
 
