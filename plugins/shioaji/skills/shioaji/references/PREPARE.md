@@ -401,7 +401,7 @@ curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install
 curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | CHANNEL=prerelease sh
 
 # Specific version
-curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | VERSION=v1.5.5 sh
+curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | VERSION=v1.5.6 sh
 ```
 
 **Windows (PowerShell):**
@@ -414,7 +414,7 @@ irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | 
 $env:CHANNEL="prerelease"; irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
 
 # Specific version
-$env:VERSION="v1.5.5"; irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
+$env:VERSION="v1.5.6"; irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
 ```
 
 ### Verify Installation 驗證安裝
@@ -530,6 +530,7 @@ api.login(
     contracts_cb: Callable = None,     # () once after all contracts, or (SecurityType) per type
     subscribe_trade: bool = True,      # Auto-subscribe to trade events
     receive_window: int = 30000,       # Token receive window (ms)
+    force_refresh: bool = False,       # True = request a fresh backend token; skip token-pool reuse
 ) -> List[Account]
 ```
 
@@ -541,10 +542,15 @@ await api.login(
     fetch_contract: bool = True,
     subscribe_trade: bool = True,
     receive_window: int = 30000,
+    force_refresh: bool = False,
 ) -> List[Account]
 ```
 
 Note: `contracts_timeout` and `contracts_cb` are only available in the sync client. The async client always loads contracts non-blocking.
+
+`receive_window` is the token-login receive window in milliseconds. Keep the default `30000` for normal use; increase it only when the machine clock is correct but token login is slow enough to hit backend signing/receive-window checks.
+
+`force_refresh=False` keeps the default token-pool behavior: a valid cached token may be reused after `auth/usage` verification. Use `force_refresh=True` when the login must bypass cached-token reuse and request a fresh token from the backend; the fresh token is cached afterward when a local token-pool slot is available. Locked slots owned by another live process are not invalidated.
 
 `contracts_cb` accepts either:
 

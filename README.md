@@ -100,7 +100,7 @@ curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install
 curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | CHANNEL=prerelease sh
 
 # Specific version
-curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | VERSION=v1.5.5 sh
+curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | VERSION=v1.5.6 sh
 ```
 
 **Windows (PowerShell):**

@@ -334,6 +334,43 @@ Contract files are time-sensitive. Use these update windows when diagnosing stal
 
 ## Connection 連線相關
 
+### Login reused a token that expires too soon 登入重用了快到期 token
+
+Python `login()` uses the local token pool by default. When `force_refresh=False`, the client looks for a reusable local token slot for the same API key, secret, simulation mode, and VPN mode. A slot is reusable only when it is not locked by a live process, the JWT `exp` is still in the future, and the token has at least 5 hours remaining. Before reuse, the client connects with the cached `client_name` and verifies the cached token with `auth/usage`; if that verification fails, the local slot is removed and login falls back to a fresh backend token request.
+Python `login()` 預設會使用 local token pool。`force_refresh=False` 時，client 會找同一組 API key、secret、simulation、VPN mode 的可重用 token slot。可重用條件是：沒有被其他 live process 鎖住、JWT `exp` 尚未過期、且至少還有 5 小時有效期。重用前 client 會用 cached `client_name` 連線，並透過 `auth/usage` 驗證 cached token；驗證失敗時會移除 local slot，改走 fresh backend token login。
+
+This means a successful `login()` does not always mean "a token freshly minted now". If the pool contains a valid cached token created earlier today, a new process can reuse it. For example, a token minted 18 hours ago still has about 6 hours left, so it passes the 5-hour local reuse threshold but expires in less than 8 hours from the new process start. That is expected token-pool behavior, not a backend 24-hour-token violation.
+這代表成功 `login()` 不一定等於「現在剛簽發的新 token」。如果 token pool 裡有今天稍早建立的有效 cached token，新 process 可能會重用它。例如 18 小時前簽發的 token 還剩約 6 小時，會通過本地 5 小時重用門檻，但從新 process 啟動時間算起不到 8 小時就會過期。這是 token-pool 行為，不是 backend 違反 24 小時 token 的規則。
+
+Another edge case is backend-side invalidation after a previous process disconnects normally. The local token file can still contain a JWT whose `exp` is within 24 hours, but the backend Solace monitor may have expired the server-side token/relay record after the disconnect. In that case the reuse probe should fail at `auth/usage`, the local slot is invalidated, and the client performs fresh login automatically. This is different from a temporary rate-limit ban, where the backend rejects even fresh login for the ban window.
+另一個邊界情境是前一個 process 正常斷線後的 backend-side invalidation。Local token file 仍可能保存一個 JWT `exp` 還在 24 小時內的 token，但 backend Solace monitor 可能已在斷線後讓 server-side token/relay record 過期。這種情況下，重用 probe 應該會在 `auth/usage` 失敗，client 會 invalidated local slot 並自動 fresh login。這和暫時 rate-limit ban 不同；ban 期間 backend 會連 fresh login 都拒絕。
+
+Use `force_refresh=True` when the requirement is: "after this login call succeeds, the session token should be a newly issued backend token with a fresh 24-hour lifetime" (except when the account/IP is temporarily banned or the credentials/version/IP/permission are rejected).
+當需求是「這次 `login()` 成功後，session token 必須是 backend 新簽發、從現在起有 fresh 24 小時效期的 token」時，使用 `force_refresh=True`（例外是帳號/IP 正在暫時 ban，或 credentials/version/IP/permission 被拒）。
+
+```python
+import shioaji as sj
+
+api = sj.Shioaji()
+accounts = api.login(
+    api_key="YOUR_KEY",
+    secret_key="YOUR_SECRET",
+    force_refresh=True,
+)
+```
+
+```python
+api = sj.ShioajiAsync()
+accounts = await api.login(
+    api_key="YOUR_KEY",
+    secret_key="YOUR_SECRET",
+    force_refresh=True,
+)
+```
+
+Use this for long-running jobs that must not inherit a token created by an earlier process. Do not use it as a retry loop for `操作異常，請1分鐘後再重新登入`; that message is a temporary backend ban. `force_refresh=True` bypasses token-pool reuse, but it still respects the login failure cache, so repeated calls during the cached ban window return locally instead of hitting the backend again. Wait first, then fix request rate or reconnect behavior.
+長時間執行的工作若不能繼承前一個 process 建立的 token，請用這個方式。不要把它用成 `操作異常，請1分鐘後再重新登入` 的重試迴圈；那是 backend 暫時 ban。`force_refresh=True` 會 bypass token-pool reuse，但仍會尊重 login failure cache，所以 cached ban window 內反覆呼叫會在本機直接回錯，不會再次打 backend。應先等待，再修正 request rate 或重連行為。
+
 ### 503 Response Triage: rate-limit ban vs yanked version
 
 Do not treat every 503 the same. First branch on the response detail/message.
