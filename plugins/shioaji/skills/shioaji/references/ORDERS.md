@@ -48,8 +48,8 @@ api.activate_ca(
 
 ## Stock Orders 股票下單
 
-Python order examples below assume login is complete and contract files are ready. For full scripts, load contracts with `contracts_timeout` (sync) or `fetch_contracts()` (async), choose simulation/production intentionally, activate CA for production orders, and always inspect `trade.status.status` after `place_order()`.
-以下 Python 下單範例假設已完成登入且商品檔已載入。完整程式請用 `contracts_timeout`（sync）或 `fetch_contracts()`（async）載入商品檔，明確選擇 simulation/production，正式下單前啟用 CA，並在 `place_order()` 後檢查 `trade.status.status`。
+Python order examples below assume login is complete. Resolve a Base contract through `api.contracts.get()` and pass that Base directly to `place_order()`; Info is needed only when pricing/risk logic reads fields such as reference prices or limits. Contract V2 loads the required data lazily. Choose simulation/production intentionally, activate CA for production orders, and always inspect `trade.status.status` after `place_order()`.
+以下 Python 下單範例假設已完成登入。請透過 `api.contracts.get()` 取得 Base contract，並直接傳給 `place_order()`；只有定價或風控需要參考價、漲跌停等欄位時才查 Info。Contract V2 會按需載入所需資料。請明確選擇 simulation/production，正式下單前啟用 CA，並在 `place_order()` 後檢查 `trade.status.status`。
 
 `place_order()` returns a `Trade`, but the first returned status can be `PendingSubmit` (`傳送中`). Treat `PendingSubmit` as an intermediate state, not a final exchange acknowledgement. To know whether the order became `Submitted`, `Filled`, `PartFilled`, `Failed`, or `Cancelled`, prefer waiting for active order/deal reports first: Python order callbacks or HTTP order-event SSE. Use `api.update_status(trade=trade)` / `api.update_status(account)` when callbacks/SSE are unavailable, were missed, or a reconciliation check is needed.
 `place_order()` 會回 `Trade`，但第一次回來的狀態可能是 `PendingSubmit`（傳送中）。請把 `PendingSubmit` 視為中間狀態，不是交易所最終確認。若要知道是否變成 `Submitted`、`Filled`、`PartFilled`、`Failed` 或 `Cancelled`，優先等待主動委託/成交回報：Python order callback 或 HTTP order-event SSE。只有在無法使用 callback/SSE、疑似漏回報或需要對帳補查時，才用 `api.update_status(trade=trade)` / `api.update_status(account)`。
@@ -57,7 +57,9 @@ Python order examples below assume login is complete and contract files are read
 ### Basic Stock Order 基本股票下單
 
 ```python
-contract = api.Contracts.Stocks["2330"]
+contract = api.contracts.get("2330")
+if contract is None:
+    raise LookupError("contract 2330 not found")
 
 order = sj.StockOrder(
     price=580,
@@ -223,7 +225,9 @@ order = sj.StockOrder(
 ### Basic Futures Order 基本期貨下單
 
 ```python
-contract = api.Contracts.Futures["TXFC0"]  # Current month 近月
+contract = api.contracts.get("TXFR1")  # Continuous near month 連續近月
+if contract is None:
+    raise LookupError("contract TXFR1 not found")
 
 order = sj.FuturesOrder(
     price=18000,
@@ -301,7 +305,9 @@ HTTP accepts both `"New"` and `"NewPosition"` for compatibility, but Python expo
 
 ```python
 # Buy call option 買進買權
-contract = api.Contracts.Options["TXO202401C18000"]
+contract = api.contracts.get("TXO202401C18000")
+if contract is None:
+    raise LookupError("option contract not found")
 
 order = sj.FuturesOrder(
     price=100,
@@ -320,7 +326,9 @@ trade = api.place_order(contract, order)
 
 ```python
 # Sell put option 賣出賣權
-contract = api.Contracts.Options["TXO202401P17000"]
+contract = api.contracts.get("TXO202401P17000")
+if contract is None:
+    raise LookupError("option contract not found")
 
 order = sj.FuturesOrder(
     price=50,

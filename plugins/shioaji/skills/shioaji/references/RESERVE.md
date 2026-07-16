@@ -182,7 +182,9 @@ Reserve a specific number of shares for a disposition stock.
 ### Python Usage Python 用法
 
 ```python
-contract = api.Contracts.Stocks["2890"]
+contract = api.contracts.get("2890")
+if contract is None:
+    raise LookupError("contract 2890 not found")
 
 # Reserve 1000 shares 預收 1000 股
 resp = api.reserve_stock(contract, 1000, account=api.stock_account)
@@ -279,7 +281,9 @@ Pre-pay cash when buying disposition stocks.
 ### Python Usage Python 用法
 
 ```python
-contract = api.Contracts.Stocks["2890"]
+contract = api.contracts.get("2890")
+if contract is None:
+    raise LookupError("contract 2890 not found")
 
 # Reserve with price 預收並指定價格
 resp = api.reserve_earmarking(contract, 1000, 15.15, account=api.stock_account)

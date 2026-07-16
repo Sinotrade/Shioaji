@@ -54,8 +54,10 @@ Fill these fields before sending a combo order:
 Use `ComboBase.from_contract()` when you have rich contract objects:
 
 ```python
-r1 = api.Contracts.Futures["TXFR1"]
-r2 = api.Contracts.Futures["TXFR2"]
+r1 = api.contracts.get("TXFR1")
+r2 = api.contracts.get("TXFR2")
+if r1 is None or r2 is None:
+    raise LookupError("continuous futures contract not found")
 
 combo_contract = sj.ComboContract(legs=[
     sj.ComboBase.from_contract(r1, action=sj.Action.Buy),
@@ -290,4 +292,3 @@ Endpoints:
 - `POST /api/v1/order/place_comboorder`: place a combo order.
 - `POST /api/v1/order/cancel_comboorder`: cancel by combo trade id.
 - `POST /api/v1/order/combotrades`: list cached combo trades.
-

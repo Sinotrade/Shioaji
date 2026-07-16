@@ -137,7 +137,9 @@ Get limit prices from contract:
 從合約取得漲跌停價：
 
 ```python
-contract = api.Contracts.Stocks["2330"]
+contract = api.contracts.get("2330")
+if contract is None:
+    raise LookupError("contract 2330 not found")
 
 # Limit up 漲停價
 price = contract.limit_up
@@ -186,10 +188,10 @@ api.login(api_key="YOUR_KEY", secret_key="YOUR_SECRET")
 def on_tick(tick):
     print(tick)
 
-api.subscribe(
-    api.Contracts.Stocks["2330"],
-    quote_type=sj.QuoteType.Tick
-)
+contract = api.contracts.get("2330")
+if contract is None:
+    raise LookupError("contract 2330 not found")
+api.subscribe(contract, quote_type=sj.QuoteType.Tick)
 
 # Keep program alive 保持程式運行
 Event().wait()
@@ -321,14 +323,14 @@ Contract files are time-sensitive. Use these update windows when diagnosing stal
 
 **Check 檢查項目:**
 
-1. If a contract is missing near an update window, reload contracts before changing code.
-   若商品在更新時段附近找不到，先重新載入商品檔，不要先改程式。
-2. Python can use `contracts_timeout`, `contracts_cb`, `fetch_contract=False`, and `api.fetch_contracts(contract_download=True)` to control or observe contract loading.
-   Python 可用 `contracts_timeout`、`contracts_cb`、`fetch_contract=False` 與 `api.fetch_contracts(contract_download=True)` 控制或觀察商品檔載入。
-3. HTTP/CLI/other language clients get contracts from the running server. Check `GET /api/v1/health` for `contract_count` and restart `shioaji server start` if the server loaded stale contracts.
-   HTTP/CLI/其他語言 client 使用執行中 server 的商品檔。用 `GET /api/v1/health` 檢查 `contract_count`；若 server 載入的是舊商品檔，重啟 `shioaji server start`。
-4. Expired concrete futures codes disappear from `api.Contracts`; use continuous contracts such as `TXFR1` / `TXFR2` for long historical futures queries.
-   到期的實際期貨代碼會從 `api.Contracts` 消失；長期歷史期貨查詢請用 `TXFR1` / `TXFR2` 這類連續合約。
+1. Near an update window, rerun the same narrow `api.contracts`/HTTP/CLI query. Contract V2 receives update events and refreshes dirty data on the next access; do not add a manual reload loop.
+   在更新時段附近，重新執行相同的 `api.contracts`／HTTP／CLI 窄查詢。Contract V2 收到事件後會在下一次存取更新過期資料，不要另寫手動 reload 迴圈。
+2. Verify the exchange/master code, `region`, and `security_type`. Taiwan's weighted index is `IX0001`, not the old `TSE001`.
+   確認交易所編碼、`region` 與 `security_type`；台灣加權指數使用 `IX0001`，不是舊的 `TSE001`。
+3. HTTP/CLI users can watch `/api/v1/stream/data/contract_event` or `shioaji contracts watch`, then rerun only the affected query. Python handles invalidation internally.
+   HTTP／CLI 可監聽 Contract event 後重查受影響資料；Python 會在內部自動處理 invalidation。
+4. Expired concrete futures codes leave the current Base list; use continuous contracts such as `TXFR1` / `TXFR2` for long historical futures queries.
+   到期的實際期貨代碼會離開目前 Base 清單；長期歷史期貨查詢請用 `TXFR1`／`TXFR2` 這類連續合約。
 
 ---
 

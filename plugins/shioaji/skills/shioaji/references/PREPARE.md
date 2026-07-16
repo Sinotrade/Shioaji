@@ -52,15 +52,15 @@ The stock/futures signing pages are **not** API Key application pages. Do not la
 Never ask users to paste API Key, Secret Key, CA password, or certificate contents into chat. The correct handoff is: ask them to save the Secret Key locally when it is shown, then later create a placeholder `.env` and ask them to edit it on their machine.
 絕對不要要求使用者把 API Key、Secret Key、CA 密碼或憑證內容貼到對話。正確交接方式是:提醒使用者在 Secret Key 顯示當下自行保存;後續到本機設定階段時,先建立 placeholder `.env`,請使用者在本機編輯。
 
-For account opening, use the official Shioaji campaign open-account URL: <https://www.sinotrade.com.tw/openact?strProd=0254&strWeb=0684&s=013211&utm_source=shioaji>. Do not replace it with the generic SinoPac home page (`https://www.sinotrade.com.tw/`) or a broad "SinoPac Securities" link.
-開戶請使用 Shioaji 指定開戶連結: <https://www.sinotrade.com.tw/openact?strProd=0254&strWeb=0684&s=013211&utm_source=shioaji>。不要改成永豐首頁(`https://www.sinotrade.com.tw/`)或泛稱「永豐金證券」連結。
+For account opening, use the official Shioaji campaign open-account URL: <https://www.sinotrade.com.tw/openact?strProd=0254&strWeb=0684&s=013299&utm_source=shioaji>. Do not replace it with the generic SinoPac home page (`https://www.sinotrade.com.tw/`) or a broad "SinoPac Securities" link.
+開戶請使用 Shioaji 指定開戶連結: <https://www.sinotrade.com.tw/openact?strProd=0254&strWeb=0684&s=013299&utm_source=shioaji>。不要改成永豐首頁(`https://www.sinotrade.com.tw/`)或泛稱「永豐金證券」連結。
 
 Use these step responses instead of inventing a new order:
 依使用者回報狀態照下面接續,不要自己換順序:
 
 | User says 使用者說 | Next response 下一步 |
 |---|---|
-| "I do not have an account yet" / 「還沒開戶」 | "第一步先開立永豐帳戶。請使用這個開戶頁: <https://www.sinotrade.com.tw/openact?strProd=0254&strWeb=0684&s=013211&utm_source=shioaji>。完成後回來告訴我「開好戶了」,我再帶你做 API Key。" |
+| "I do not have an account yet" / 「還沒開戶」 | "第一步先開立永豐帳戶。請使用這個開戶頁: <https://www.sinotrade.com.tw/openact?strProd=0254&strWeb=0684&s=013299&utm_source=shioaji>。完成後回來告訴我「開好戶了」,我再帶你做 API Key。" |
 | "I opened the account" / 「開好戶了」 | "很好,下一步是建立 API Key / Secret Key。請到 API 管理頁 <https://www.sinotrade.com.tw/newweb/PythonAPIKey/> 新增 API KEY。這一步不是去證券/期貨簽署頁。完成後請確認你已經在本機安全保存 Secret Key;不要貼到對話。" |
 | "I created API Key" / 「金鑰建好了」 | "下一步是簽署對應商品的 API 約定書。證券: <https://www.sinotrade.com.tw/newweb/signCenter/S_openAPI/>;期貨/選擇權: <https://www.sinotrade.com.tw/newweb/signCenter/F_openApi/>。完成後告訴我你簽了哪些商品。" |
 | "I signed" / 「簽署好了」 | "很好。請先確認你已經有 API Key / Secret Key 並已安全保存。接下來是模擬登入/下單測試,不是 CA。你要建立新的入門專案,還是只在目前資料夾跑一次性測試?" |
@@ -72,7 +72,7 @@ If presenting onboarding steps as a table/list, use these exact URLs and never w
 
 | Step 步驟 | URL |
 |---|---|
-| SinoPac account opening 開立永豐帳戶 | <https://www.sinotrade.com.tw/openact?strProd=0254&strWeb=0684&s=013211&utm_source=shioaji> |
+| SinoPac account opening 開立永豐帳戶 | <https://www.sinotrade.com.tw/openact?strProd=0254&strWeb=0684&s=013299&utm_source=shioaji> |
 | API Key / Secret Key creation 建立金鑰 | <https://www.sinotrade.com.tw/newweb/PythonAPIKey/> |
 | Stock API signing 證券 API 簽署 | <https://www.sinotrade.com.tw/newweb/signCenter/S_openAPI/> |
 | Futures/options API signing 期貨/選擇權 API 簽署 | <https://www.sinotrade.com.tw/newweb/signCenter/F_openApi/> |
@@ -130,7 +130,7 @@ When running Python scripts in a uv-managed project, prefer `uv run python path/
 
 ### Step 1 — Open a SinoPac account 開立永豐證券帳戶
 
-Tutorial 教學: <https://sinotrade.github.io/tutor/prepare/open_account/> · Open account 開戶: <https://www.sinotrade.com.tw/openact?strProd=0254&strWeb=0684&s=013211&utm_source=shioaji>
+Tutorial 教學: <https://sinotrade.github.io/tutor/prepare/open_account/> · Open account 開戶: <https://www.sinotrade.com.tw/openact?strProd=0254&strWeb=0684&s=013299&utm_source=shioaji>
 
 - You need a **Bank SinoPac account** as the delivery (交割) account. If you don't have one, choose **「我要開 DAWHO + 大戶投」** on the open-account page to open the bank and securities accounts together.
 - 需要一個**永豐銀行帳戶**作為交割帳戶;若無,於開戶頁選「我要開 DAWHO + 大戶投」一次開立銀行 + 證券帳戶。
@@ -203,9 +203,14 @@ accounts = api.login(os.environ["SJ_API_KEY"], os.environ["SJ_SEC_KEY"])
 print(accounts)                                         # login test 登入測試
 
 # Stock order test 證券下單測試
-sc = api.Contracts.Stocks["2890"]
-st = api.place_order(sc, sj.StockOrder(
-    price=sc.reference,                                 # reference = 平盤價
+sc_base = api.contracts.get("2890")
+if sc_base is None:
+    raise LookupError("contract 2890 not found")
+sc_info = api.contracts.info(sc_base)                   # Only for test price
+if sc_info is None:
+    raise LookupError("contract info 2890 not found")
+st = api.place_order(sc_base, sj.StockOrder(
+    price=sc_info.reference,                            # reference = 平盤價
     quantity=1,
     action=sj.Action.Buy,
     price_type=sj.StockPriceType.LMT,
@@ -218,9 +223,14 @@ print(st.status.status)                                 # PendingSubmit / Submit
 time.sleep(1.1)                                         # ≥ 1s between stock & futures tests
 
 # Futures order test 期貨下單測試
-fc = api.Contracts.Futures["TXFR1"]
-ft = api.place_order(fc, sj.FuturesOrder(
-    price=fc.reference,
+fc_base = api.contracts.get("TXFR1")
+if fc_base is None:
+    raise LookupError("contract TXFR1 not found")
+fc_info = api.contracts.info(fc_base)                   # Only for test price
+if fc_info is None:
+    raise LookupError("contract info TXFR1 not found")
+ft = api.place_order(fc_base, sj.FuturesOrder(
+    price=fc_info.reference,
     quantity=1,
     action=sj.Action.Buy,
     price_type=sj.FuturesPriceType.LMT,
@@ -520,14 +530,11 @@ accounts = api.login(
 print(accounts)
 ```
 
-**Sync login signature:**
+**Recommended sync login parameters:**
 ```python
 api.login(
     api_key: str,
     secret_key: str,
-    fetch_contract: bool = True,       # Auto-fetch contracts after login
-    contracts_timeout: int = 0,        # 0 = async (background), >0 = blocking (ms)
-    contracts_cb: Callable = None,     # () once after all contracts, or (SecurityType) per type
     subscribe_trade: bool = True,      # Auto-subscribe to trade events
     receive_window: int = 30000,       # Token receive window (ms)
     force_refresh: bool = False,       # True = request a fresh backend token; skip token-pool reuse
@@ -539,25 +546,17 @@ api.login(
 await api.login(
     api_key: str,
     secret_key: str,
-    fetch_contract: bool = True,
     subscribe_trade: bool = True,
     receive_window: int = 30000,
     force_refresh: bool = False,
 ) -> List[Account]
 ```
 
-Note: `contracts_timeout` and `contracts_cb` are only available in the sync client. The async client always loads contracts non-blocking.
+Contract V2 is queried through `api.contracts` after login. It downloads the required type or shard on first access and reuses its cache; normal applications do not control contract download from `login()`.
 
 `receive_window` is the token-login receive window in milliseconds. Keep the default `30000` for normal use; increase it only when the machine clock is correct but token login is slow enough to hit backend signing/receive-window checks.
 
 `force_refresh=False` keeps the default token-pool behavior: a valid cached token may be reused after `auth/usage` verification. Use `force_refresh=True` when the login must bypass cached-token reuse and request a fresh token from the backend; the fresh token is cached afterward when a local token-pool slot is available. Locked slots owned by another live process are not invalidated.
-
-`contracts_cb` accepts either:
-
-- `callback()` -- called once after all contract types finish loading.
-- `callback(security_type)` -- called after each contract type finishes loading. The argument is a `SecurityType` enum such as `SecurityType.Stock`, `SecurityType.Future`, `SecurityType.Option`, or `SecurityType.Index`.
-
-Callbacks with more than one parameter raise `ShioajiTypeError`.
 
 ### CLI / Server: Environment Variables
 
@@ -588,7 +587,7 @@ Use this section before deciding whether the server is ready, whether login/acco
 
 | Check | Response shape | Agent decision |
 |---|---|---|
-| `GET /api/v1/health` / `shioaji server check` | `HealthResponse { status, version, timestamp, token_expires_in_seconds?, token_stale?, contract_count?, last_maintenance?, next_maintenance?, last_maintenance_error?, ca_expires_in_days?, ca_expired? }` | If unavailable, start the server or diagnose bind/daemon issues. If `token_stale=true`, re-login/restart before trading. If `contract_count` is low or zero, wait for contracts or check contract download. If `ca_expired=true`, renew/replace CA before production orders. |
+| `GET /api/v1/health` / `shioaji server check` | `HealthResponse { status, version, timestamp, token_expires_in_seconds?, token_stale?, contract_count?, last_maintenance?, next_maintenance?, last_maintenance_error?, ca_expires_in_days?, ca_expired? }` | If unavailable, start the server or diagnose bind/daemon issues. If `token_stale=true`, re-login/restart before trading. `contract_count` is an observation of currently loaded/cached data, not a Contract V2 readiness gate; run the required narrow contract query. If `ca_expired=true`, renew/replace CA before production orders. |
 | `GET /api/v1/info` | `ApiInfoResponse { name, version, description, protocols, simulation }` | Use `simulation` to decide whether to warn before real trading. Never assume production from server availability alone. |
 
 ### Accounts / Usage / CA
@@ -622,14 +621,13 @@ Standard synchronous client. Methods block until complete.
 import shioaji as sj
 
 api = sj.Shioaji(simulation=True)
-accounts = api.login(
-    api_key="xxx",
-    secret_key="yyy",
-    contracts_timeout=10000,  # Wait before using api.Contracts immediately
-)
+accounts = api.login(api_key="xxx", secret_key="yyy")
 
 # All methods are blocking 所有方法都是阻塞的
-snapshots = api.snapshots([api.Contracts.Stocks["2330"]])
+contract = api.contracts.get("2330")
+if contract is None:
+    raise LookupError("contract 2330 not found")
+snapshots = api.snapshots([contract])
 ```
 
 ### `ShioajiAsync` (Async 異步)
@@ -644,10 +642,12 @@ import uvloop
 async def main():
     api = sj.ShioajiAsync(simulation=True)
     accounts = await api.login(api_key="xxx", secret_key="yyy")
-    await api.fetch_contracts(contract_download=True)
 
     # All I/O methods are async 所有 I/O 方法都是異步的
-    snapshots = await api.snapshots([api.Contracts.Stocks["2330"]])
+    contract = await api.contracts.get("2330")
+    if contract is None:
+        raise LookupError("contract 2330 not found")
+    snapshots = await api.snapshots([contract])
 
     # Async callbacks for streaming data 串流資料的異步回呼
     async def on_tick(tick):
@@ -667,7 +667,7 @@ This example uses [uvloop](https://pypi.org/project/uvloop/) (`pip install uvloo
 |---|---|---|
 | Method calls 方法呼叫 | Blocking 阻塞 | `await` / `Awaitable` |
 | Callbacks 回呼 | Regular functions 一般函式 | `async def` coroutines 協程 |
-| Login extra params 登入額外參數 | `contracts_timeout`, `contracts_cb` | (none) |
+| Contract V2 lookup 商品檔查詢 | `api.contracts.*` | `await api.contracts.*` |
 | Data reception 資料接收 | Callback or Receiver | Callback or Receiver |
 | Runtime model 執行模式 | Blocking wrapper | Awaitable wrapper |
 

@@ -141,17 +141,13 @@ export interface ApiInfoResponse {
   simulation: boolean;
 }
 
-/** Contract lookup response | 商品查詢回應 */
-export interface ContractRecord extends ContractRequest {
-  symbol?: string;
-  name?: string;
-  category?: string;
-  currency?: string;
-  delivery_month?: string;
-  delivery_date?: string;
-  strike_price?: number;
-  option_right?: string;
-  target_code?: string;
+/** Contract V2 Base lookup response | Contract V2 Base 查詢回應 */
+export interface BaseContractRecord {
+  security_type: "STK" | "IND" | "FUT" | "OPT" | "WRT";
+  region: "TW" | "US" | "HK" | "JP";
+  exchange: string;
+  code: string;
+  target_code: string | null;
 }
 
 /** 帳戶 | Account */
@@ -357,8 +353,8 @@ export class ShioajiClient {
   async getContract(
     code: string,
     securityType: ContractRequest["security_type"]
-  ): Promise<ContractRecord> {
-    return this.request<ContractRecord>(
+  ): Promise<BaseContractRecord> {
+    return this.request<BaseContractRecord>(
       "GET",
       `/data/contracts/${encodeURIComponent(code)}?security_type=${encodeURIComponent(securityType)}`
     );

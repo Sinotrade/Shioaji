@@ -37,14 +37,18 @@
    - [data credit-enquire](#data-credit-enquire)
    - [data short-stock-sources](#data-short-stock-sources)
    - [data regulatory](#data-regulatory)
-10. [order -- Order Management / 委託管理](#order----order-management--委託管理)
+10. [contracts -- Contract V2 / 商品檔](#contracts----contract-v2--商品檔)
+    - [contracts list/get/info](#contracts-listgetinfo)
+    - [contracts futures/options/warrants](#contracts-futuresoptionswarrants)
+    - [contracts discovery/tick-bands/watch](#contracts-discoverytick-bandswatch)
+11. [order -- Order Management / 委託管理](#order----order-management--委託管理)
    - [order place](#order-place)
    - [order cancel](#order-cancel)
    - [order list](#order-list)
    - [order update-price](#order-update-price)
    - [order update-qty](#order-update-qty)
    - [order events](#order-events)
-11. [portfolio -- Portfolio Queries / 投資組合查詢](#portfolio----portfolio-queries--投資組合查詢)
+12. [portfolio -- Portfolio Queries / 投資組合查詢](#portfolio----portfolio-queries--投資組合查詢)
     - [portfolio balance](#portfolio-balance)
     - [portfolio positions](#portfolio-positions)
     - [portfolio margin](#portfolio-margin)
@@ -54,13 +58,13 @@
     - [portfolio profit-loss-summary](#portfolio-profit-loss-summary)
     - [portfolio trading-limits](#portfolio-trading-limits)
     - [portfolio settlements](#portfolio-settlements)
-12. [reserve -- Stock Reserve & Earmarking / 股票預收券款](#reserve----stock-reserve--earmarking--股票預收券款)
+13. [reserve -- Stock Reserve & Earmarking / 股票預收券款](#reserve----stock-reserve--earmarking--股票預收券款)
     - [reserve summary](#reserve-summary)
     - [reserve detail](#reserve-detail)
     - [reserve stock](#reserve-stock)
     - [reserve earmarking-detail](#reserve-earmarking-detail)
     - [reserve earmarking](#reserve-earmarking)
-13. [watchlist -- Watchlist Management / 自選股管理](#watchlist----watchlist-management--自選股管理)
+14. [watchlist -- Watchlist Management / 自選股管理](#watchlist----watchlist-management--自選股管理)
     - [watchlist list](#watchlist-list)
     - [watchlist create](#watchlist-create)
     - [watchlist show](#watchlist-show)
@@ -68,17 +72,17 @@
     - [watchlist delete](#watchlist-delete)
     - [watchlist add](#watchlist-add)
     - [watchlist remove](#watchlist-remove)
-14. [utils -- Utility Commands / 工具指令](#utils----utility-commands--工具指令)
+15. [utils -- Utility Commands / 工具指令](#utils----utility-commands--工具指令)
     - [utils token list](#utils-token-list)
     - [utils token show](#utils-token-show)
     - [utils token status](#utils-token-status)
     - [utils token clean](#utils-token-clean)
     - [utils api check](#utils-api-check)
-15. [tree -- Show Command Tree / 顯示指令樹](#tree----show-command-tree--顯示指令樹)
-16. [completions -- Shell Completions / Shell 自動完成](#completions----shell-completions--shell-自動完成)
-17. [version -- Print Version / 顯示版本](#version----print-version--顯示版本)
-18. [Daemon Architecture / 背景服務架構](#daemon-architecture--背景服務架構)
-19. [UDS Support / Unix Domain Socket 支援](#uds-support--unix-domain-socket-支援)
+16. [tree -- Show Command Tree / 顯示指令樹](#tree----show-command-tree--顯示指令樹)
+17. [completions -- Shell Completions / Shell 自動完成](#completions----shell-completions--shell-自動完成)
+18. [version -- Print Version / 顯示版本](#version----print-version--顯示版本)
+19. [Daemon Architecture / 背景服務架構](#daemon-architecture--背景服務架構)
+20. [UDS Support / Unix Domain Socket 支援](#uds-support--unix-domain-socket-支援)
 
 ---
 
@@ -88,7 +92,7 @@ The `shioaji` binary is a single CLI that doubles as:
 - **A command-line client** for querying market data, placing orders, and managing portfolios.
 - **A daemon server** (`shioaji server start`) that hosts the HTTP API.
 
-All data-path commands (`auth`, `apps`, `data`, `order`, `portfolio`, `reserve`, `watchlist`) communicate with the daemon via HTTP (preferring UDS on Unix). If no daemon is running, the CLI auto-starts one (`ensure_daemon`).
+All data-path commands (`auth`, `apps`, `data`, `contracts`, `order`, `portfolio`, `reserve`, `watchlist`) communicate with the daemon via HTTP (preferring UDS on Unix). If no daemon is running, the CLI auto-starts one (`ensure_daemon`).
 Use the matching functional reference when an agent needs to reason about the response objects behind CLI output; `toon` is the default output format.
 
 Binary name: `shioaji`
@@ -191,6 +195,18 @@ shioaji
 │   ├── credit-enquire --codes <CODES> [--security-type STK] [--exchange TSE]
 │   ├── short-stock-sources --codes <CODES> [--security-type STK] [--exchange TSE]
 │   └── regulatory  [--type punish]
+├── contracts
+│   ├── list        --type <TYPE> [--region TW] [--page] [--page-size]
+│   ├── get         <CODE> [--type <TYPE>] [--region TW]
+│   ├── info        <CODE> [--type <TYPE>] [--region TW]
+│   ├── futures     [--root <ROOT> | --underlying <CODE>] [--region TW]
+│   ├── options     --root <ROOT> [--month] [--right C|P] [--strike-min] [--strike-max] [--expiry-weekday] [--region TW]
+│   ├── warrants    --underlying <CODE> [--code] [--call-put C|P] [--strike-min] [--strike-max] [--expiry-from] [--expiry-to] [--region TW]
+│   ├── futures-roots [--region TW]
+│   ├── option-roots [--region TW]
+│   ├── warrant-underlyings [--include-name] [--region TW]
+│   ├── tick-bands  <RULE> --type FUT|OPT [--region TW]
+│   └── watch       [--region TW] [--type <TYPE>]
 ├── order
 │   ├── place       --code <CODE> --action <ACTION> --quantity <QTY> [--price 0] [--price-type lmt] [--order-type rod] [--order-lot] [--order-cond] [--octype] [--account] [--security-type STK] [--no-wait]
 │   ├── cancel      --id <ID> [--no-wait]
@@ -515,6 +531,7 @@ Stream real-time market data via SSE. Press Ctrl+C to stop.
 shioaji data stream --code 2330
 shioaji data stream --code 2330 --quote-type bid_ask
 shioaji data stream --code TXFR1 --security-type FUT --quote-type quote
+shioaji data stream --code IX0001 --security-type IND --quote-type quote
 shioaji data stream --code 2330 --intraday-odd
 ```
 
@@ -526,6 +543,8 @@ shioaji data stream --code 2330 --intraday-odd
 | `--intraday-odd` | false | Include intraday odd lot trades |
 
 The CLI resolves the contract code, subscribes to the appropriate SSE endpoint, streams data lines to stdout, and unsubscribes on exit.
+
+Indices support only the `quote` type — pass `--quote-type quote` explicitly; the default `tick` is rejected with `Error: index contracts only support quote streaming`.
 
 For continuous-month futures such as `TXFR1` / `TXFR2`, the CLI resolves the contract first and forwards the contract `target_code` when subscribing. CLI users should pass `--code TXFR1 --security-type FUT`; HTTP clients must include `target_code` themselves when the resolved contract requires it.
 
@@ -612,6 +631,68 @@ shioaji data regulatory --type notice -f json
 
 JSON output follows the HTTP `PunishResp` / `NoticeResp` column-oriented schemas; non-JSON formats transpose to per-stock rows.
 JSON 輸出沿用 HTTP `PunishResp` / `NoticeResp` 欄位導向格式；非 JSON 格式會轉置為逐檔列。
+
+---
+
+## contracts -- Contract V2 / 商品檔
+
+```
+shioaji contracts <SUBCOMMAND>
+```
+
+Contract commands use the daemon's lazy Contract V2 cache. They do not preload or reload every product file. See [CONTRACTS.md](CONTRACTS.md) for Base versus Info semantics, WRT shard rules, continuous futures, and update behavior.
+
+### contracts list/get/info
+
+```bash
+# All STK Base records; add pagination for a large UI.
+shioaji contracts list --type STK
+shioaji contracts list --type STK --page 1 --page-size 500
+
+# Exact Base lookup and flat typed Info.
+shioaji contracts get 2330 --type STK
+shioaji contracts info IX0001 --type IND
+```
+
+| Command | Required | Optional | Meaning |
+|---------|----------|----------|---------|
+| `list` | `--type STK\|IND\|FUT\|OPT\|WRT` | `--region`, `--page`, `--page-size` | All Base rows for one type unless pagination is supplied |
+| `get` | positional `CODE` | `--type`, `--region` | One Base by exchange/master code; omitting type performs generic lookup |
+| `info` | positional `CODE` | `--type`, `--region` | Flat typed Info; WRT must use `warrants` |
+
+`--region` defaults to `TW`. `--page-size` without `--page` implies page 1. There is no command that aggregates every security type.
+
+### contracts futures/options/warrants
+
+```bash
+shioaji contracts futures --root TXF
+shioaji contracts futures --underlying IX0001
+
+shioaji contracts options --root TXO --month 202607 --right C \
+  --strike-min 20000 --strike-max 30000
+
+shioaji contracts warrants --underlying 2330 --call-put C \
+  --expiry-from 2026-07-01 --expiry-to 2026-12-31
+```
+
+- `futures` accepts optional `--root` or `--underlying`, never both.
+- `options` requires `--root`; optional filters are `--month`, `--right C|P`, `--strike-min`, `--strike-max`, and `--expiry-weekday`.
+- `warrants` requires `--underlying`; optional filters are `--code`, `--call-put C|P`, strike range, and expiry range.
+- Every command accepts optional `--region` (default `TW`) and returns flat typed Info rows.
+
+### contracts discovery/tick-bands/watch
+
+```bash
+shioaji contracts futures-roots
+shioaji contracts option-roots
+shioaji contracts warrant-underlyings --include-name
+shioaji contracts tick-bands <RULE> --type FUT
+
+# Passive change notifications; Ctrl+C to stop.
+shioaji contracts watch --region TW --type STK
+```
+
+`watch` streams logical Contract V2 change events. Treat each event as a signal and rerun the narrow query the application needs. Both filters are optional, but omit them only when all changes are useful.
 
 ---
 
@@ -1251,7 +1332,7 @@ Print the installed CLI version. Available in two forms:
 ```bash
 shioaji --version
 shioaji -V
-# → shioaji 1.5.9
+# → shioaji 1.7.0
 ```
 
 ### `version` subcommand (structured output)
@@ -1262,14 +1343,14 @@ be parsed in scripts:
 ```bash
 shioaji version
 # → name: shioaji
-#   version: "1.5.9"
+#   version: "1.7.0"
 
 shioaji version --format json
-# → {"name":"shioaji","version":"1.5.9"}
+# → {"name":"shioaji","version":"1.7.0"}
 
 shioaji version --format human
 # → name: shioaji
-#   version: "1.5.9"
+#   version: "1.7.0"
 ```
 
 Use the flag for a one-liner, the subcommand when you need machine-readable output (e.g. CI pipelines that pin a minimum CLI version).

@@ -5,7 +5,7 @@ description: |
   broad order/trading requests where Shioaji may apply. Covers Python sync/async
   bindings, `shioaji` CLI, HTTP API, SSE streaming, dashboard embedding, and
   JS/TS, Go, C/C++, C#, Rust, Java/Kotlin HTTP clients. Covers TWSE/TPEX/TAIFEX
-  orders, quotes, market data, accounts, watchlists, reserve orders, setup,
+  orders, quotes, Contract V2 lazy lookup/update events, market data, accounts, watchlists, reserve orders, setup,
   migration, and troubleshooting. Trigger keywords include shioaji, sj, sinopac,
   永豐金, 台股, 下單, 交易, 即時行情, shioaji server, and SSE streaming.
   For first-time users, start with account/API onboarding gates before local
@@ -30,7 +30,7 @@ Three access layers / 三種存取層：
 
 ## How to Use References / 如何使用參考文件
 
-Answer users directly from the bundled references. Do not route users to external documentation pages as a substitute for answering. This skill uses Shioaji 1.5 as the baseline; use [MIGRATION.md](references/MIGRATION.md) only for legacy/deprecated idioms. Response handling always belongs in the matching functional reference. When an exact command flag, request field, or response schema must be confirmed, use installed CLI `--help` or the running server's `/openapi.json`.
+Answer users directly from the bundled references. Do not route users to external documentation pages as a substitute for answering. The stable 1.5 API remains the compatibility baseline, while 1.7 features that intentionally change the interface—especially Contract V2—must follow their functional reference. Use [MIGRATION.md](references/MIGRATION.md) only for legacy/deprecated idioms. Response handling always belongs in the matching functional reference. When an exact command flag, request field, or response schema must be confirmed, use installed CLI `--help` or the running server's `/openapi.json`.
 
 **First-time-user response / 首次使用者回應：**
 
@@ -40,7 +40,7 @@ Answer users directly from the bundled references. Do not route users to externa
 - Before the user answers the first onboarding question, do not run commands, inspect files, mention Python versions, mention existing projects, or discuss local environments. The first step is not "check the folder"; it is "check whether the user can open/use SinoPac API at all."
 - The first substantive response must check the basic gates before any technical setup: SinoPac securities/futures account, desired market access (stock / futures-options / both), API key/secret, direct API agreement signing, simulation login/order test, CA for production, and production-readiness check.
 - Onboarding order matters: after account opening, confirm/create API Key and Secret Key at `https://www.sinotrade.com.tw/newweb/PythonAPIKey/`; signing pages do not issue API keys. After signing, do not jump straight to CA; confirm API credentials and run the required simulation login/order tests first. CA download is from the API management page, not the signing pages.
-- When presenting onboarding steps as a table/list, write the explicit correct URL for each web step. Never use the generic SinoPac home page as the account-opening URL. Open account uses `https://www.sinotrade.com.tw/openact?strProd=0254&strWeb=0684&s=013211&utm_source=shioaji`; API Key and CA use `https://www.sinotrade.com.tw/newweb/PythonAPIKey/`; stock signing uses `https://www.sinotrade.com.tw/newweb/signCenter/S_openAPI/`; futures/options signing uses `https://www.sinotrade.com.tw/newweb/signCenter/F_openApi/`. Never write "same page"/"同上頁面" for API Key or CA when the previous row is a signing page.
+- When presenting onboarding steps as a table/list, write the explicit correct URL for each web step. Never use the generic SinoPac home page as the account-opening URL. Open account uses `https://www.sinotrade.com.tw/openact?strProd=0254&strWeb=0684&s=013299&utm_source=shioaji`; API Key and CA use `https://www.sinotrade.com.tw/newweb/PythonAPIKey/`; stock signing uses `https://www.sinotrade.com.tw/newweb/signCenter/S_openAPI/`; futures/options signing uses `https://www.sinotrade.com.tw/newweb/signCenter/F_openApi/`. Never write "same page"/"同上頁面" for API Key or CA when the previous row is a signing page.
 - Never describe the stock/futures signing pages as places to apply for API Key / Secret Key. Those pages are only for agreement signing; key creation happens only on the API management page.
 - Never ask the user to paste API Key, Secret Key, CA password, or certificate contents into chat, even "temporarily" or "for this conversation". Ask them to save/edit secrets locally instead.
 - Do **not** move into installation, project setup, `.env`, `.venv`, `uv sync`, code examples, local file inspection, or order examples until the user confirms the relevant onboarding gates are done or explicitly asks for that technical step.
@@ -78,11 +78,11 @@ Routing rule: choose the functional reference first, then add the access-method 
 | Migrate legacy code or fix deprecated Shioaji idioms | [MIGRATION.md](references/MIGRATION.md) |
 | Install, login, API keys, CA cert, simulation, env vars, constants | [PREPARE.md](references/PREPARE.md) |
 | Install this Shioaji plugin/skill into Claude, Codex, Cursor, or another agent environment | [AGENTS.md](references/AGENTS.md) |
-| Look up contract codes, attributes, security types | [CONTRACTS.md](references/CONTRACTS.md) |
+| Contract V2 lookup, typed info, lazy cache behavior, update events, or 1.5 `api.Contracts` compatibility | [CONTRACTS.md](references/CONTRACTS.md) (+ [CONTRACT_FIELDS.md](references/CONTRACT_FIELDS.md) for full Info field lists) |
 | Place, modify, cancel regular stock/futures/options orders; `order_deal_event` active order/deal reports (Python callbacks, HTTP order-event SSE) | [ORDERS.md](references/ORDERS.md) |
 | Place, cancel, price, validate, or troubleshoot combo orders; combo legs, net price, `combo_type`, TAIFEX combo order conditions, `update_combostatus` / `list_combotrades` | [COMBO_ORDERS.md](references/COMBO_ORDERS.md) |
 | Reserve shares for disposition/attention stocks | [RESERVE.md](references/RESERVE.md) |
-| Subscribe real-time quotes, tick/bidask/quote callbacks, SSE streams | [STREAMING.md](references/STREAMING.md) |
+| Subscribe real-time quotes, tick/bidask/quote/index callbacks, SSE streams | [STREAMING.md](references/STREAMING.md) |
 | Historical ticks, K-bars, snapshots, scanners, credit enquiry | [MARKET_DATA.md](references/MARKET_DATA.md) |
 | Account balance, margin, positions, P&L, settlements, limits | [ACCOUNTING.md](references/ACCOUNTING.md) |
 | Manage watchlists (CRUD, add/remove contracts) | [WATCHLIST.md](references/WATCHLIST.md) |

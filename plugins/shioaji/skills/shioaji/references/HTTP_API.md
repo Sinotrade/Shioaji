@@ -163,8 +163,16 @@ All paths are prefixed with `/api/v1/` unless otherwise noted.
 | GET | `/api/v1/data/regulatory_punish` | Yes | Get regulatory punish data |
 | GET | `/api/v1/data/regulatory_notice` | Yes | Get regulatory notice data |
 | POST | `/api/v1/data/short_stock_sources` | Yes | Get short stock sources |
-| POST | `/api/v1/data/contracts` | Yes | Query contracts with pagination |
-| GET | `/api/v1/data/contracts/{code}?security_type=<TYPE>` | Yes | Look up a single contract by code |
+| GET | `/api/v1/data/contracts?security_type=<TYPE>` | Yes | List Base contracts for one type; optional pagination |
+| GET | `/api/v1/data/contracts/{code}` | Yes | Look up one Base contract; `security_type` is optional |
+| GET | `/api/v1/data/contracts/{code}/info` | Yes | Get flat typed STK/IND/FUT/OPT info |
+| GET | `/api/v1/data/contracts/futures` | Yes | Query futures by root or underlying |
+| GET | `/api/v1/data/contracts/options?root=<ROOT>` | Yes | Query one option-root shard |
+| GET | `/api/v1/data/contracts/warrants?underlying_code=<CODE>` | Yes | Query one warrant-underlying shard |
+| GET | `/api/v1/data/contracts/futures/roots` | Yes | List futures roots |
+| GET | `/api/v1/data/contracts/options/roots` | Yes | List option roots |
+| GET | `/api/v1/data/contracts/warrants/underlyings` | Yes | List warrant underlying keys |
+| GET | `/api/v1/data/contracts/tick-bands/{rule}?security_type=FUT` | Yes | Get a FUT/OPT tick-band rule (`security_type` required) |
 
 ### Order / 委託
 
@@ -217,7 +225,9 @@ All stream data endpoints use Server-Sent Events (SSE). Connect with `Accept: te
 | GET | `/api/v1/stream/data/bidask_fop` | Yes | Futures/options bid/ask data stream |
 | GET | `/api/v1/stream/data/quote_stk` | Yes | Stock quote data stream |
 | GET | `/api/v1/stream/data/quote_fop` | Yes | Futures/options quote data stream |
+| GET | `/api/v1/stream/data/quote_idx` | Yes | Index quote data stream |
 | GET | `/api/v1/stream/data/order_event` | Yes | Order event data stream |
+| GET | `/api/v1/stream/data/contract_event` | Yes | Contract V2 change notifications; optional region/type filters |
 
 ### Watchlist / 自選清單
 
@@ -258,7 +268,7 @@ Returns health status. Public, no auth required.
 ```json
 {
   "status": "healthy",
-  "version": "0.6.0",
+  "version": "1.7.0",
   "timestamp": "2024-01-15T08:30:00Z",
   "token_expires_in_seconds": 86000,
   "token_stale": false,
@@ -269,7 +279,7 @@ Returns health status. Public, no auth required.
 }
 ```
 
-For health/auth readiness decisions, see [PREPARE.md](PREPARE.md).
+`contract_count` reflects currently loaded/cached contracts and can change with lazy Contract V2 access; do not wait for a fixed full-market count. For health/auth readiness decisions, see [PREPARE.md](PREPARE.md).
 
 #### GET `/api/v1/info`
 
@@ -278,7 +288,7 @@ Returns API server information including simulation mode.
 ```json
 {
   "name": "Shioaji API Server",
-  "version": "0.6.0",
+  "version": "1.7.0",
   "description": "SinoPac Shioaji Cross-Platform Trading API HTTP Adaptor",
   "protocols": ["HTTP"],
   "simulation": true
@@ -443,23 +453,80 @@ Get short stock sources for contracts.
 }
 ```
 
-#### POST `/api/v1/data/contracts`
+### Contract V2 Endpoints
 
-Query contracts with pagination.
+All Contract V2 queries use `GET` and default `region` to `TW`. They load only the requested type or shard and reuse the server's cache; there is no public reload, preload, or status endpoint.
 
-```json
-{
-  "security_type": "STK",
-  "page": 1,
-  "page_size": 1000
-}
+#### GET `/api/v1/data/contracts?security_type=<TYPE>`
+
+List Base contracts for exactly one required `security_type`: `STK`, `IND`, `FUT`, `OPT`, or `WRT`.
+
+```bash
+# All Base records for one type
+curl "http://localhost:8080/api/v1/data/contracts?security_type=STK&region=TW"
+
+# One-based pagination for a large UI
+curl "http://localhost:8080/api/v1/data/contracts?security_type=STK&region=TW&page=1&page_size=500"
 ```
 
-Use `"page": -1` to return all records. Response includes `contracts`, `page`, `page_size`, `max_page`, `total`.
+Omit both `page` and `page_size` to return all Base records for the selected type. Supplying either enables pagination; `page_size` alone implies page 1. The response always contains `contracts`, `security_type`, `region`, and `total`; `page`, `page_size`, and `max_page` appear only for paged requests. There is no mixed-type aggregate response.
 
-#### GET `/api/v1/data/contracts/{code}?security_type=<TYPE>`
+#### GET `/api/v1/data/contracts/{code}`
 
-Look up a single contract by code. The `security_type` query parameter is required.
+Look up one Base contract by exchange/master code. Optional query parameters are `region` and `security_type`. When `security_type` is omitted, the server searches types in that region; provide it when the code is ambiguous or the caller requires an exact type.
+
+```bash
+curl "http://localhost:8080/api/v1/data/contracts/IX0001?region=TW&security_type=IND"
+```
+
+#### GET `/api/v1/data/contracts/{code}/info`
+
+Return flat typed Info for STK, IND, FUT, or OPT. The optional `security_type` has the same narrowing behavior as Base lookup. `security_type` is the OpenAPI discriminator, and Base fields are flattened beside type-specific fields—there is no nested `base` object. WRT requires an underlying and must use the warrants collection below.
+
+```bash
+curl "http://localhost:8080/api/v1/data/contracts/2330/info?region=TW&security_type=STK"
+```
+
+For TW stocks, a missing source currency is normalized to `TWD`. Boolean and integer fields are emitted as JSON booleans and numbers, not strings.
+
+#### Type-specific collections
+
+| Endpoint | Required and optional filters |
+|----------|-------------------------------|
+| `GET /api/v1/data/contracts/futures` | Optional `root` or `underlying_code` (mutually exclusive), `delivery_month`, `region` |
+| `GET /api/v1/data/contracts/options` | Required `root`; optional `delivery_month`, `option_right=C\|P`, `strike_min`, `strike_max`, `expiry_weekday`, `region` |
+| `GET /api/v1/data/contracts/warrants` | Required `underlying_code`; optional `code`, `call_put=C\|P`, `strike_min`, `strike_max`, `expiry_from`, `expiry_to`, `region` |
+
+```bash
+curl "http://localhost:8080/api/v1/data/contracts/futures?root=TXF&region=TW"
+curl "http://localhost:8080/api/v1/data/contracts/options?root=TXO&option_right=C&region=TW"
+curl "http://localhost:8080/api/v1/data/contracts/warrants?underlying_code=2330&region=TW"
+```
+
+These return flat typed Info arrays. Use a shard-aware collection instead of listing every Base record when the task needs one futures root, option root, or warrant underlying.
+
+#### Discovery and tick bands
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/v1/data/contracts/futures/roots?region=TW` | Futures root/name pairs |
+| `GET /api/v1/data/contracts/options/roots?region=TW` | Option root/name pairs without downloading option Info shards |
+| `GET /api/v1/data/contracts/warrants/underlyings?region=TW&include_name=true` | Warrant underlying keys, optional names, and counts |
+| `GET /api/v1/data/contracts/tick-bands/{rule}?security_type=FUT&region=TW` | One FUT/OPT tick-band rule; `security_type` must be `FUT` or `OPT` |
+
+Do not hard-code tick sizes. Fetch the rule referenced by `tick_rule`, because exchange bands can change.
+
+#### GET `/api/v1/stream/data/contract_event`
+
+Receive passive Contract V2 change notifications over SSE. Optional `region` and `security_type` filters reduce the stream. The event is a change signal; query the relevant Contract endpoint again for current data.
+
+```bash
+curl -N "http://localhost:8080/api/v1/stream/data/contract_event?region=TW&security_type=STK"
+```
+
+The SSE name is `contract_event`, the SSE `id` is the logical `event_id`, and JSON fields are `event_id`, `action`, `region`, `security_type`, `published_at`, `base_changed`, `info_changed`, `info_scope`, and `info_shards`. Internal hashes and chunk-transport fields are intentionally omitted.
+
+See [CONTRACTS.md](CONTRACTS.md) for lazy cache semantics, Python behavior, continuous-futures `target_code`, and WRT rules.
 
 ### Order Endpoints
 
@@ -764,6 +831,7 @@ data: {"code":"2330","close":"2235","volume":100,"intraday_odd":true, ...}
 **GET `/api/v1/stream/data`** -- All data types merged into one SSE connection. Events are tagged:
 - `tick_stk`, `bidask_stk`, `quote_stk` -- stock data
 - `tick_fop`, `bidask_fop`, `quote_fop` -- futures/options data
+- `quote_idx` -- index data (QUO-only, exchange/master contract code)
 - `order_event` -- order and deal events
 - `heartbeat` -- keep-alive
 
@@ -777,7 +845,9 @@ data: {"code":"2330","close":"2235","volume":100,"intraday_odd":true, ...}
 | `/api/v1/stream/data/bidask_fop` | `bidask_fop` | Futures/options bid/ask data |
 | `/api/v1/stream/data/quote_stk` | `quote_stk` | Stock quote data |
 | `/api/v1/stream/data/quote_fop` | `quote_fop` | Futures/options quote data |
+| `/api/v1/stream/data/quote_idx` | `quote_idx` | Index quote data |
 | `/api/v1/stream/data/order_event` | `order_event` | Order/deal events |
+| `/api/v1/stream/data/contract_event` | `contract_event` | Contract V2 change notification; re-query for current data |
 
 #### Connection management / 連線管理
 

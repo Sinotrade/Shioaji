@@ -88,16 +88,14 @@ Get current snapshot for multiple contracts (max 500 per request).
 import shioaji as sj
 
 api = sj.Shioaji()
-api.login(
-    api_key="YOUR_KEY",
-    secret_key="YOUR_SECRET",
-    contracts_timeout=10000,  # Wait before using api.Contracts immediately
-)
+api.login(api_key="YOUR_KEY", secret_key="YOUR_SECRET")
 
 contracts = [
-    api.Contracts.Stocks["2330"],
-    api.Contracts.Stocks["2317"],
+    api.contracts.get("2330"),
+    api.contracts.get("2317"),
 ]
+if any(contract is None for contract in contracts):
+    raise LookupError("snapshot contract not found")
 
 snapshots = api.snapshots(contracts)
 
@@ -177,14 +175,17 @@ HTTP client 收到的是 server JSON schema，時間欄位是 `datetime`。
 Query historical tick data by date, time range, or last count.
 依日期、時間區間或筆數查詢歷史逐筆資料。
 
-The examples below assume `api.Contracts` is ready. If the script logs in and immediately queries data, use `contracts_timeout` during login or check contract loading first.
-以下範例假設 `api.Contracts` 已載入完成。若程式登入後立刻查資料，請在 login 使用 `contracts_timeout`，或先確認商品檔已完成載入。
+The examples below use Contract V2. Resolve each Base through `api.contracts`; the required dataset is loaded lazily on first access.
+以下範例使用 Contract V2。請透過 `api.contracts` 解析 Base contract；第一次存取時會按需載入所需資料。
 
 ### By Date 依日期
 
 ```python
+contract = api.contracts.get("2330")
+if contract is None:
+    raise LookupError("contract 2330 not found")
 ticks = api.ticks(
-    contract=api.Contracts.Stocks["2330"],
+    contract=contract,
     date="2023-01-16",
 )
 ```
@@ -193,7 +194,7 @@ ticks = api.ticks(
 
 ```python
 ticks = api.ticks(
-    contract=api.Contracts.Stocks["2330"],
+    contract=contract,
     date="2023-01-16",
     query_type=sj.TicksQueryType.RangeTime,
     time_start="09:00:00",
@@ -205,7 +206,7 @@ ticks = api.ticks(
 
 ```python
 ticks = api.ticks(
-    contract=api.Contracts.Stocks["2330"],
+    contract=contract,
     date="2023-01-16",
     query_type=sj.TicksQueryType.LastCount,
     last_cnt=100,
@@ -282,8 +283,11 @@ Query historical 1-minute K-bar data.
 ### Python
 
 ```python
+contract = api.contracts.get("2330")
+if contract is None:
+    raise LookupError("contract 2330 not found")
 kbars = api.kbars(
-    contract=api.Contracts.Stocks["2330"],
+    contract=contract,
     start="2023-01-15",
     end="2023-01-16",
 )
@@ -380,7 +384,9 @@ def refresh_today_kbars(api, contract, manager: KBarDataManager):
 
 
 manager = KBarDataManager("./market-data/kbars")
-contract = api.Contracts.Stocks["2330"]
+contract = api.contracts.get("2330")
+if contract is None:
+    raise LookupError("contract 2330 not found")
 
 # Backfill historical partitions in chunks.
 backfill_kbars(api, contract, "2024-01-01", "2024-12-31", manager)
@@ -459,10 +465,12 @@ import datetime as dt
 import polars as pl
 
 date = "2025-01-06"
-contract = api.Contracts.Stocks["2330"]
+contract = api.contracts.get("2330")
+if contract is None:
+    raise LookupError("contract 2330 not found")
 
 # For futures day session, use a futures contract and switch these settings:
-# contract = api.Contracts.Futures.TXF.TXFR1
+# contract = api.contracts.get("TXFR1")
 # session_start = dt.datetime.fromisoformat(f"{date} 08:45:00")
 # session_close = dt.datetime.fromisoformat(f"{date} 13:45:00")
 # amount_multiplier = 1
@@ -676,13 +684,16 @@ it belongs to.
 
 ```python
 # Continuous near-month futures 連續近月期貨
+contract = api.contracts.get("TXFR1")
+if contract is None:
+    raise LookupError("contract TXFR1 not found")
 ticks = api.ticks(
-    contract=api.Contracts.Futures.TXF.TXFR1,
+    contract=contract,
     date="2023-01-16",
 )
 
 kbars = api.kbars(
-    contract=api.Contracts.Futures.TXF.TXFR1,
+    contract=contract,
     start="2023-01-15",
     end="2023-01-16",
 )
@@ -707,9 +718,11 @@ Query margin and short unit information for stocks.
 
 ```python
 contracts = [
-    api.Contracts.Stocks["2330"],
-    api.Contracts.Stocks["2890"],
+    api.contracts.get("2330"),
+    api.contracts.get("2890"),
 ]
+if any(contract is None for contract in contracts):
+    raise LookupError("credit-enquiry contract not found")
 
 credit_enquires = api.credit_enquires(contracts)
 ```
@@ -756,9 +769,11 @@ Query available short stock sources.
 
 ```python
 contracts = [
-    api.Contracts.Stocks["2330"],
-    api.Contracts.Stocks["2317"],
+    api.contracts.get("2330"),
+    api.contracts.get("2317"),
 ]
+if any(contract is None for contract in contracts):
+    raise LookupError("short-source contract not found")
 
 short_sources = api.short_stock_sources(contracts)
 ```

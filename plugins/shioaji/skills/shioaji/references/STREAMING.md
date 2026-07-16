@@ -54,43 +54,64 @@ def on_tick(tick):
     else:
         print(f"[一般] {tick.code} close={tick.close} vol={tick.volume}")
 
+stock = api.contracts.get("2330")
+future = api.contracts.get("TXFR1")
+if stock is None or future is None:
+    raise LookupError("quote contract not found")
+
 # Subscribe tick data 訂閱逐筆成交
 api.subscribe(
-    api.Contracts.Stocks["2330"],
+    stock,
     quote_type=sj.QuoteType.Tick,
 )
 
 # Subscribe bidask data 訂閱五檔
 api.subscribe(
-    api.Contracts.Stocks["2330"],
+    stock,
     quote_type=sj.QuoteType.BidAsk,
 )
 
 # Subscribe futures tick 訂閱期貨 Tick
 api.subscribe(
-    api.Contracts.Futures["TXFC0"],
+    future,
     quote_type=sj.QuoteType.Tick,
 )
 
 # Intraday odd lot 盤中零股 - Tick
 api.subscribe(
-    api.Contracts.Stocks["2330"],
+    stock,
     quote_type=sj.QuoteType.Tick,
     intraday_odd=True,
 )
 
 # Intraday odd lot 盤中零股 - BidAsk (五檔)
 api.subscribe(
-    api.Contracts.Stocks["2330"],
+    stock,
     quote_type=sj.QuoteType.BidAsk,
     intraday_odd=True,
 )
 
 # Unsubscribe 取消訂閱
 api.unsubscribe(
-    api.Contracts.Stocks["2330"],
+    stock,
     quote_type=sj.QuoteType.Tick,
 )
+```
+
+Index products use the exchange/master contract code directly. All index quote
+types subscribe to the same QUO-only topic `QUO/v1/IND/*/{exchange}/{code}`
+(e.g. `QUO/v1/IND/*/TSE/IX0001`, where `{exchange}` is the index's real exchange
+such as TSE or OTC); there is no index TIC stream.
+
+指數商品直接使用交易所/master 商品代碼。所有指數 quote type 都訂閱同一個
+QUO-only topic `QUO/v1/IND/*/{exchange}/{code}`（例如 `QUO/v1/IND/*/TSE/IX0001`，
+`{exchange}` 為該指數的真實交易所如 TSE 或 OTC），沒有指數 TIC stream。
+
+```python
+index = api.contracts.get("IX0001")
+if index is None:
+    raise LookupError("index IX0001 not found")
+api.subscribe(index, quote_type=sj.QuoteType.Quote)
 ```
 
 ### HTTP: Subscribe / Unsubscribe
@@ -123,10 +144,12 @@ curl -X POST http://localhost:8080/api/v1/stream/unsubscribe \
 
 ```python
 contracts = [
-    api.Contracts.Stocks["2330"],
-    api.Contracts.Stocks["2317"],
-    api.Contracts.Stocks["2454"],
+    api.contracts.get("2330"),
+    api.contracts.get("2317"),
+    api.contracts.get("2454"),
 ]
+if any(contract is None for contract in contracts):
+    raise LookupError("one or more quote contracts were not found")
 
 for contract in contracts:
     api.subscribe(contract, quote_type=sj.QuoteType.Tick)
@@ -288,7 +311,10 @@ Callbacks are the normal Python path. Receivers are lower-level public APIs for 
 Callbacks 是一般 Python 使用路徑。Receivers 是較底層的 public API，給想自行拉取事件的 Python consumer 使用。這是 Python-only，和 HTTP SSE 不同；HTTP client 應使用 `/api/v1/stream/data/*`。
 
 ```python
-api.subscribe(api.Contracts.Stocks["2330"], quote_type=sj.QuoteType.Tick)
+contract = api.contracts.get("2330")
+if contract is None:
+    raise LookupError("contract 2330 not found")
+api.subscribe(contract, quote_type=sj.QuoteType.Tick)
 
 receiver = api.get_tick_stk_v1_receiver()
 tick = await receiver.recv()       # async wait
@@ -379,39 +405,95 @@ bidask.ask_price       # List[Decimal]: Ask prices (5 levels)
 bidask.ask_volume      # List[int]: Ask volumes (5 levels)
 ```
 
+### QuoteIdxV1 Attributes 指數報價屬性
+
+Only the standard fields are guaranteed. Fields marked `broad-market only` are
+present only for broad-market indices (e.g. TAIEX `IX0001`); a regular index
+such as `EMP88` carries only the standard fields, with the rest `None`.
+`repr()` shows a summary: `code, date, time, close, high, low`.
+只有標準欄位保證存在；標記 `broad-market only` 的欄位僅大盤指數（如加權指數
+`IX0001`）才有，一般指數（如 `EMP88`）僅標準欄位、其餘為 `None`。
+
+```python
+# Standard fields 標準欄位（所有指數皆有）
+quote.code             # str: Index code 指數代碼
+quote.exchange         # Exchange: Exchange 交易所
+quote.date             # date: Date 日期
+quote.time             # time: Time 時間
+quote.datetime         # datetime: Timestamp 時間戳
+quote.reference        # Decimal: Previous close 昨收
+quote.open             # Decimal: Open 今開
+quote.high             # Decimal: High 今高
+quote.low              # Decimal: Low 今低
+quote.close            # Decimal: Latest index value 最新指數
+
+# Derived fields 衍生欄位
+quote.amount_sum       # Decimal: Cumulative turnover 累計成交金額(元)
+quote.amount           # Decimal: Turnover 成交金額(元)
+quote.volume           # int: Volume 成交股數(張)
+quote.vol_sum          # int: Cumulative volume 累計成交股數(張)
+quote.count            # int: Cumulative trade count 累計成交筆數
+quote.count_sum        # int: Cumulative trade count 累計成交筆數
+quote.prev_date        # date: Previous trading day 前一個交易日
+quote.prev_amount_sum  # Decimal: Previous-day total turnover 前交易日總額(元)
+
+# Up/down counts 漲跌家數（商品數）
+quote.no_trade         # int: Not traded 未成交
+quote.limit_up_count   # int: Limit up 漲停
+quote.raise_count      # int: Up 漲
+quote.flat_count       # int: Unchanged 平
+quote.fall_count       # int: Down 跌
+quote.limit_down_count # int: Limit down 跌停
+
+# Trade statistics 成交統計（broad-market only 僅大盤）
+quote.fund_amount      # Decimal: Fund turnover 基金成交總額(元)
+quote.fund_volume      # int: Fund volume 基金成交總股(張)
+quote.fund_count       # int: Fund trade count 基金成交總筆數
+quote.stock_amount     # Decimal: Stock turnover 股票成交總額(元)
+quote.stock_volume     # int: Stock volume 股票成交總張數
+quote.stock_count      # int: Stock trade count 股票成交總筆數
+quote.bull_amount      # Decimal: Call warrant turnover 認購權證成交總額(元)
+quote.bull_volume      # int: Call warrant volume 認購權證成交總張數
+quote.bull_count       # int: Call warrant trade count 認購權證成交總筆數
+quote.bear_amount      # Decimal: Put warrant turnover 認售權證成交總額(元)
+quote.bear_volume      # int: Put warrant volume 認售權證成交總張數
+quote.bear_count       # int: Put warrant trade count 認售權證成交總筆數
+quote.tib_amount       # Decimal: Innovation board turnover 創新板成交總額(元)
+quote.tib_volume       # int: Innovation board volume 創新板成交總張數
+quote.tib_count        # int: Innovation board trade count 創新板成交總筆數
+quote.fixed_amount     # Decimal: After-hours fixed-price turnover 盤後定價成交總額(元)
+quote.fixed_volume     # int: After-hours fixed-price volume 盤後定價成交總張數
+quote.fixed_count      # int: After-hours fixed-price trade count 盤後定價成交筆數
+
+# Estimate 預估量（broad-market only 僅大盤）
+quote.estimate_amount_sum  # Decimal: Estimated closing turnover 預估收盤總額(元)
+```
+
 ---
 
 ## System Callbacks 系統回調
 
-### set_on_quote_callback 設定報價回調
+### Typed index quote callback 型別化指數報價回調
 
-Legacy quote callback for index tick/bidask data:
-指數 tick/bidask 資料的舊式報價回調：
-
-```python
-def quote_cb(topic, msg):
-    print(f"Topic: {topic}, Message: {msg}")
-
-api.set_on_quote_callback(quote_cb)
-
-# Clear 清除
-api.clear_on_quote_callback()
-```
-
-### set_contract_event_callback 設定商品檔更新事件回調
-
-`set_contract_event_callback` is a Python-only system callback for `SYS/CONTRACT` update events. It is different from login-time `contracts_cb`: `contracts_cb` notifies that contract files finished loading, while contract event callbacks notify that an upstream contract update event arrived and the client reloaded contracts.
-`set_contract_event_callback` 是 Python-only 的 `SYS/CONTRACT` 商品檔更新事件 callback。它和登入時的 `contracts_cb` 不同：`contracts_cb` 通知商品檔下載完成；contract event callback 則通知上游商品檔更新事件到達，且 client 已重新載入商品檔。
+Index quotes use the typed `QuoteIdxV1` callback. The generic `on_quote` /
+`set_on_quote_callback` API has been removed. HTTP clients use the `quote_idx`
+SSE channel.
+指數報價使用 typed `QuoteIdxV1` callback。generic `on_quote` /
+`set_on_quote_callback` API 已移除；HTTP client 使用 `quote_idx` SSE channel。
 
 ```python
-def on_contract_event(event):
-    print(event.action)
-    print(event.security_type)
+def quote_idx_cb(quote):
+    print(quote.code, quote.close)
 
-api.set_contract_event_callback(on_contract_event)
+api.set_on_quote_idx_v1_callback(quote_idx_cb)
+
+# Decorator syntax 裝飾器語法
+@api.on_quote_idx_v1()
+def quote_idx_cb(quote):
+    print(quote.code, quote.close)
 
 # Clear 清除
-api.clear_contract_event_callback()
+api.clear_on_quote_idx_v1_callback()
 ```
 
 ### set_session_down_callback 設定斷線回調
@@ -442,10 +524,10 @@ async def on_down():
 
 api.set_session_down_callback(on_down)  # Must be async for ShioajiAsync
 
-async def quote_cb(topic, msg):
-    print(f"Topic: {topic}")
+async def quote_idx_cb(quote):
+    print(quote.code, quote.close)
 
-api.set_on_quote_callback(quote_cb)
+api.set_on_quote_idx_v1_callback(quote_idx_cb)
 ```
 
 ---
@@ -466,6 +548,7 @@ Shioaji HTTP 伺服器透過 Server-Sent Events (SSE) 提供即時資料串流�
 | Futures bidask 期貨五檔 | `bidask_fop` | `/api/v1/stream/data/bidask_fop` |
 | Stock quote 股票報價 | `quote_stk` | `/api/v1/stream/data/quote_stk` |
 | Futures quote 期貨報價 | `quote_fop` | `/api/v1/stream/data/quote_fop` |
+| Index quote 指數報價 | `quote_idx` | `/api/v1/stream/data/quote_idx` |
 | Order events 委託事件 | `order_event` | `/api/v1/stream/data/order_event` |
 
 ### SSE Flow SSE 使用流程
@@ -481,6 +564,11 @@ Market data and trade events use the same explicit-subscribe pattern:
 curl -X POST http://localhost:8080/api/v1/stream/subscribe \
   -H "Content-Type: application/json" \
   -d '{"security_type":"STK","exchange":"TSE","code":"2330","quote_type":"Tick"}'
+
+# Index: use the exchange/master code. Tick/BidAsk/Quote all map to QUO/v1/IND.
+curl -X POST http://localhost:8080/api/v1/stream/subscribe \
+  -H "Content-Type: application/json" \
+  -d '{"security_type":"IND","exchange":"TSE","code":"IX0001","quote_type":"Quote"}'
 
 # Futures continuous-month aliases via HTTP, such as TXFR1/TXFR2,
 # require target_code from contract lookup. Regular futures codes do not.
@@ -505,6 +593,7 @@ curl -N http://localhost:8080/api/v1/stream/data
 
 # Or connect to a specific channel 或連接特定頻道
 curl -N http://localhost:8080/api/v1/stream/data/tick_stk
+curl -N http://localhost:8080/api/v1/stream/data/quote_idx
 curl -N http://localhost:8080/api/v1/stream/data/order_event
 ```
 
@@ -525,7 +614,14 @@ data: {"type":"heartbeat","timestamp":"2026-03-31T01:00:30Z","connection_id":"42
 
 event: order_event
 data: {"operation":{"op_type":"New","op_code":"00","op_msg":""},"order":{...},...}
+
+event: quote_idx
+data: {"exchange":"TSE","code":"IX0001","Date":"2026-07-14","Time":"09:00:01","Reference":"...","Open":"...","High":"...","Low":"...","Close":"..."}
 ```
+
+Index SSE preserves the upstream typed index field names (`Date`, `Time`,
+`Reference`, `Open`, `High`, `Low`, `Close`, and optional fields) and adds
+lowercase `exchange` and `code` identity fields parsed from the Solace topic.
 
 > **Important — Decimal fields are JSON strings / Decimal 欄位為 JSON 字串**
 >
