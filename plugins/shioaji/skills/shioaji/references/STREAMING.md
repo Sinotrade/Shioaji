@@ -91,6 +91,12 @@ api.subscribe(
     intraday_odd=True,
 )
 
+# Realtime 1-min KBar 即時K棒（stocks only 僅股票；intraday_odd not supported）
+api.subscribe(
+    stock,
+    quote_type=sj.QuoteType.KBar,
+)
+
 # Unsubscribe 取消訂閱
 api.unsubscribe(
     stock,
@@ -155,6 +161,28 @@ for contract in contracts:
     api.subscribe(contract, quote_type=sj.QuoteType.Tick)
 ```
 
+### Realtime KBar 即時K棒（Stocks 股票）
+
+Regular per-stock streaming: one complete 1-minute bar pushed at each minute close; `time` is the bar's start. Stock contracts only (index/futures/options not yet). NOT historical `api.kbars()` — that is a date-range query in [MARKET_DATA.md](MARKET_DATA.md).
+
+一般證券即時行情的一部分：每分鐘收線推送一根完整 1 分 K，`time` 為該根起始時間。僅支援股票合約（指數／期貨／選擇權未支援）。不是歷史 `api.kbars()`（區間查詢，見 [MARKET_DATA.md](MARKET_DATA.md)）。
+
+```python
+api.subscribe(api.contracts.get("2330"), quote_type=sj.QuoteType.KBar)
+# consume: default print / set_on_kbar_callback / @api.on_kbar() / get_kbar_receiver()
+```
+
+- `intraday_odd` / `version` rejected; CLI `shioaji data stream` does not support KBar. Attributes → [KBar Attributes](#kbar-attributes-即時k棒屬性).
+  `intraday_odd`／`version` 一律拒絕；CLI 不支援 KBar。欄位見回調參考。
+- HTTP is a **dedicated route** (not the generic `/stream/subscribe`): `POST /api/v1/stream/subscribe/kbars` with `{"stocks":[{"security_type":"STK","exchange":"TSE","code":"2330","target_code":null},…]}` (multi-stock), response `{success, message}` without `subscription`; SSE `GET /api/v1/stream/data/kbar`; unsubscribe same body to `/stream/unsubscribe/kbars`.
+  HTTP 走專屬路由（非通用 `/stream/subscribe`），body 的 `stocks` 陣列可一次多檔，回應沒有 `subscription` 欄位。
+
+### Enriched and Signal Products 即時加值與市場訊號
+
+Enriched index products (calculated index, index/industry contribution) → [STREAMING_ENRICHED.md](STREAMING_ENRICHED.md). Market-wide signal alerts (`subscribe_scanner`) → [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md). The subscription-object API once drafted here (`CalculatedIndexSubscription`, `KBarSubscription`, `QuoteFilter`, …) never shipped — do not generate it.
+
+指數加值產品（自算指數、指數／產業貢獻）見 [STREAMING_ENRICHED.md](STREAMING_ENRICHED.md)；全市場訊號（`subscribe_scanner`）見 [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md)。舊草稿的 subscription 物件 API（`CalculatedIndexSubscription` 等）從未出貨，不要生成。
+
 ---
 
 ## Streaming Response and Decision Summary 即時串流回應與決策摘要
@@ -165,6 +193,7 @@ Use this table before generating client code. Python receives typed callback obj
 | Operation | Python return | HTTP response | CLI output | Agent decision |
 |-----------|---------------|---------------|------------|----------------|
 | Subscribe market data | `api.subscribe(contract, quote_type=..., intraday_odd=...)`; normal use relies on callbacks/receivers, not a JSON response | `POST /api/v1/stream/subscribe` returns `SubscriptionResponse { success, message, subscription }` | Stream commands subscribe before opening SSE; `--format json` follows HTTP JSON where available | If `success=false` or the POST errors, do not open SSE as if subscribed. Check contract, `quote_type`, `intraday_odd`, and HTTP body. |
+| Subscribe realtime KBar | `api.subscribe(contract, quote_type=sj.QuoteType.KBar)` — stocks only; `intraday_odd`/`version` rejected; default-prints unless a callback/receiver is attached | **Dedicated route** `POST /api/v1/stream/subscribe/kbars` `{"stocks":[<contract>,…]}` returns `{success, message}` **without `subscription`**; SSE `GET /api/v1/stream/data/kbar`; unsubscribe same body to `/stream/unsubscribe/kbars` | `shioaji data stream` does NOT support KBar | Do not send KBar through the generic `/stream/subscribe`, and do not expect a `subscription` field in the response. A quiet channel with a live subscription usually means market closed. |
 | Unsubscribe market data | `api.unsubscribe(contract, quote_type=...)` | `POST /api/v1/stream/unsubscribe` returns `SubscriptionResponse { success, message, subscription }` | Stream commands unsubscribe on exit when they created the subscription | Treat `success=true` as accepted. If it errors, report the failed unsubscribe; do not invent a remaining subscription state. |
 | Market-data SSE | Python callbacks receive `TickSTKv1`, `BidAskSTKv1`, `TickFOPv1`, `BidAskFOPv1`, quote objects, or receiver values | `GET /api/v1/stream/data/*` is SSE. Each event has `event:` and JSON `data:`; heartbeat events are keep-alive only | CLI stream prints events from the SSE channel after subscribe | Parse `event:` first, then decode `data:` for that channel. A heartbeat means the connection is alive, not that market data arrived. |
 | Stock/FOP tick and bidask payloads | Python object fields include Python-native `datetime` and Decimal-like values; `.to_dict(raw=True)` is useful when exact raw fields are needed | SSE JSON uses server field names such as `date`, `time`, `total_volume`, `price_chg`, `pct_chg`; Decimal price/amount fields are strings | Same as HTTP/SSE for non-Python languages | Do not copy Python-only field names or types into HTTP clients. Convert string prices to decimal/float in the client language. |
@@ -202,7 +231,7 @@ shioaji auth unsubscribe-trade --account 9A95-9816502 # stop receiving 取消訂
 ### Decorator Syntax 裝飾器語法
 
 ```python
-from shioaji import TickSTKv1, BidAskSTKv1, TickFOPv1, BidAskFOPv1
+from shioaji import TickSTKv1, BidAskSTKv1, TickFOPv1, BidAskFOPv1, KBar
 
 # Stock tick 股票 Tick
 @api.on_tick_stk_v1()
@@ -233,6 +262,11 @@ def on_quote_stk(quote):
 @api.on_quote_fop_v1()
 def on_quote_fop(quote):
     print(f"Quote FOP: {quote}")
+
+# Stock realtime KBar 股票即時K棒
+@api.on_kbar()
+def on_kbar(kbar: KBar):
+    print(f"Code: {kbar.code}, Time: {kbar.time}, Close: {kbar.close}")
 ```
 
 ### Setter Syntax 設定器語法
@@ -245,6 +279,7 @@ api.set_on_tick_fop_v1_callback(on_fop_tick)
 api.set_on_bidask_fop_v1_callback(on_fop_bidask)
 api.set_on_quote_stk_v1_callback(on_quote_stk)
 api.set_on_quote_fop_v1_callback(on_quote_fop)
+api.set_on_kbar_callback(on_kbar)
 ```
 
 ### Clear Callbacks 清除回調
@@ -256,6 +291,7 @@ api.clear_on_tick_fop_v1_callback()
 api.clear_on_bidask_fop_v1_callback()
 api.clear_on_quote_stk_v1_callback()
 api.clear_on_quote_fop_v1_callback()
+api.clear_on_kbar_callback()
 ```
 
 ### Context Binding 綁定上下文
@@ -298,6 +334,11 @@ api.set_on_tick_fop_v1_callback(some_async_callback)
 
 # Same clear methods 相同的清除方法
 api.clear_on_tick_stk_v1_callback()
+
+# Realtime KBar has the same async forms 即時K棒同樣有 async 版本
+@api.on_kbar()
+async def on_kbar(kbar):
+    print(f"Code: {kbar.code}, Close: {kbar.close}")
 ```
 
 > **Performance (Python only) 效能（限 Python）**: for high-throughput streaming with `ShioajiAsync`, run it on uvloop for a faster event loop. See [PREPARE.md → Why uvloop](PREPARE.md#why-uvloop-為什麼用-uvloop).
@@ -330,6 +371,7 @@ api.get_bidask_stk_v1_receiver()
 api.get_tick_fop_v1_receiver()
 api.get_bidask_fop_v1_receiver()
 api.get_order_event_receiver()
+api.get_kbar_receiver()
 ```
 
 Callback setters prepare the required event handling automatically. Do not ask users to call private `start_*_handler()` helpers; they are not part of the normal Python API surface.
@@ -362,6 +404,21 @@ tick.ask_side_total_vol  # int: Total ask volume 賣方總量
 tick.bid_side_total_cnt  # int: Total bid count 買方筆數
 tick.ask_side_total_cnt  # int: Total ask count 賣方筆數
 tick.intraday_odd        # bool: True 表示盤中零股流 (`TIC/v1/ODD/...`), 否則 False
+```
+
+### KBar Attributes 即時K棒屬性
+
+```python
+kbar.code              # str: Stock code 股票代碼
+kbar.date              # str: Date 日期 "YYYY/MM/DD"
+kbar.time              # str: Bar start time 該根起始時間 "HH:MM:SS.ffffff"
+kbar.open              # float: Open price 開盤價
+kbar.high              # float: High price 最高價
+kbar.low               # float: Low price 最低價
+kbar.close             # float: Close price 收盤價
+kbar.volume            # int: Volume 成交量 (張)
+kbar.amount            # int: Turnover 成交金額 (NTD)
+kbar.tick_count        # int: Number of trades 成交筆數
 ```
 
 ### BidAskSTKv1 Attributes 股票五檔屬性
@@ -549,6 +606,7 @@ Shioaji HTTP 伺服器透過 Server-Sent Events (SSE) 提供即時資料串流�
 | Stock quote 股票報價 | `quote_stk` | `/api/v1/stream/data/quote_stk` |
 | Futures quote 期貨報價 | `quote_fop` | `/api/v1/stream/data/quote_fop` |
 | Index quote 指數報價 | `quote_idx` | `/api/v1/stream/data/quote_idx` |
+| Stock realtime KBar 股票即時K棒 | `kbar` | `/api/v1/stream/data/kbar` |
 | Order events 委託事件 | `order_event` | `/api/v1/stream/data/order_event` |
 
 ### SSE Flow SSE 使用流程

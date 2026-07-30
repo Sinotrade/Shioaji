@@ -280,6 +280,9 @@ df = pl.DataFrame({**ticks}).with_columns(
 Query historical 1-minute K-bar data.
 查詢歷史 1 分鐘 K 棒資料。
 
+> Realtime KBar push (`QuoteType.KBar` subscription, SSE `stream/data/kbar`) is different — see [STREAMING.md](STREAMING.md).
+> 即時 K 棒推送是另一回事（`QuoteType.KBar` 訂閱），見 [STREAMING.md](STREAMING.md)。
+
 ### Python
 
 ```python
@@ -816,6 +819,9 @@ source.ts                 # int: Timestamp 時間戳
 
 Get market rankings by various criteria.
 依各種條件取得市場排行。
+
+> Realtime signal push (`subscribe_scanner`: price-limit/rapid-move/volume-burst/simtrade alerts) is different — see [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md).
+> 即時訊號推送是另一回事（`subscribe_scanner`：漲跌停／急變／爆量／試撮），見 [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md)。
 
 ### Scanner Types 掃描器類型
 

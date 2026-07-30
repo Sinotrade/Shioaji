@@ -214,8 +214,18 @@ All stream data endpoints use Server-Sent Events (SSE). Connect with `Accept: te
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/api/v1/stream/subscribe` | Yes | Subscribe to market data |
+| POST | `/api/v1/stream/subscribe` | Yes | Subscribe to market data (tick/bidask/quote) |
 | POST | `/api/v1/stream/unsubscribe` | Yes | Unsubscribe from market data |
+| POST | `/api/v1/stream/subscribe/kbars` | Yes | Subscribe realtime KBar, multi-stock body — [STREAMING.md](STREAMING.md) |
+| POST | `/api/v1/stream/unsubscribe/kbars` | Yes | Unsubscribe realtime KBar |
+| POST | `/api/v1/stream/subscribe/calculated_index` | Yes | Subscribe calculated index — [STREAMING_ENRICHED.md](STREAMING_ENRICHED.md) |
+| POST | `/api/v1/stream/unsubscribe/calculated_index` | Yes | Unsubscribe calculated index |
+| POST | `/api/v1/stream/subscribe/index_contribution` | Yes | Subscribe index contribution (body needs `ranking`) |
+| POST | `/api/v1/stream/unsubscribe/index_contribution` | Yes | Unsubscribe index contribution |
+| POST | `/api/v1/stream/subscribe/industry_contribution` | Yes | Subscribe industry contribution |
+| POST | `/api/v1/stream/unsubscribe/industry_contribution` | Yes | Unsubscribe industry contribution |
+| POST | `/api/v1/stream/subscribe/scanner` | Yes | Subscribe market signal — [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md) |
+| POST | `/api/v1/stream/unsubscribe/scanner` | Yes | Unsubscribe market signal |
 | GET | `/api/v1/stream/receivers` | Yes | Get receiver info |
 | GET | `/api/v1/stream/status` | Yes | Get connection status |
 | GET | `/api/v1/stream/data` | Yes | All market data streams (combined SSE) |
@@ -226,6 +236,11 @@ All stream data endpoints use Server-Sent Events (SSE). Connect with `Accept: te
 | GET | `/api/v1/stream/data/quote_stk` | Yes | Stock quote data stream |
 | GET | `/api/v1/stream/data/quote_fop` | Yes | Futures/options quote data stream |
 | GET | `/api/v1/stream/data/quote_idx` | Yes | Index quote data stream |
+| GET | `/api/v1/stream/data/kbar` | Yes | Realtime KBar stream |
+| GET | `/api/v1/stream/data/calculated_index` | Yes | Calculated index stream |
+| GET | `/api/v1/stream/data/index_contribution` | Yes | Index contribution stream |
+| GET | `/api/v1/stream/data/industry_contribution` | Yes | Industry contribution stream |
+| GET | `/api/v1/stream/data/scanner` | Yes | Market signal stream |
 | GET | `/api/v1/stream/data/order_event` | Yes | Order event data stream |
 | GET | `/api/v1/stream/data/contract_event` | Yes | Contract V2 change notifications; optional region/type filters |
 

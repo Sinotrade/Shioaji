@@ -544,6 +544,9 @@ shioaji data stream --code 2330 --intraday-odd
 
 The CLI resolves the contract code, subscribes to the appropriate SSE endpoint, streams data lines to stdout, and unsubscribes on exit.
 
+> `--quote-type` only accepts tick/bid_ask/quote. Realtime KBar, enriched index data, and market signals are NOT available via the CLI stream command — use Python or HTTP ([STREAMING.md](STREAMING.md) / [STREAMING_ENRICHED.md](STREAMING_ENRICHED.md) / [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md)).
+> `--quote-type` 僅接受 tick/bid_ask/quote。即時K棒、即時加值資料與市場訊號 CLI 不支援，請用 Python 或 HTTP。
+
 Indices support only the `quote` type — pass `--quote-type quote` explicitly; the default `tick` is rejected with `Error: index contracts only support quote streaming`.
 
 For continuous-month futures such as `TXFR1` / `TXFR2`, the CLI resolves the contract first and forwards the contract `target_code` when subscribing. CLI users should pass `--code TXFR1 --security-type FUT`; HTTP clients must include `target_code` themselves when the resolved contract requires it.
