@@ -140,7 +140,7 @@ pub struct StockOrder {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub order_lot: Option<String>, // "Common", "Odd", "IntradayOdd"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub order_cond: Option<String>, // "Cash", "MarginTrading", "ShortSelling"
+    pub order_cond: Option<String>, // Cash, MarginTrading, ShortSelling, SBLShort, SBLShortPriceExempt
 }
 
 #[derive(Debug, Serialize)]

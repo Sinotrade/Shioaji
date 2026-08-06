@@ -117,7 +117,7 @@ curl -X POST http://localhost:8080/api/v1/order/place_order \
 | `price_type` | PriceType | LMT/MKT/MKP 限價/市價/範圍市價 |
 | `order_type` | OrderType | ROD/IOC/FOK 委託條件 |
 | `order_lot` | OrderLot | Common/Odd/IntradayOdd/Fixing 交易單位 |
-| `order_cond` | OrderCond | Cash/MarginTrading/ShortSelling 信用條件 |
+| `order_cond` | OrderCond | Cash/MarginTrading/ShortSelling/SBLShort/SBLShortPriceExempt 信用條件 |
 | `account` | Account | Trading account 交易帳戶 |
 | `custom_field` | str | Memo (max 6 chars) 備註（最多6字元）|
 
@@ -166,7 +166,7 @@ order = sj.StockOrder(
 **Note 注意:** IntradayOdd orders cannot update price, only reduce quantity.
 盤中零股委託不能改價，只能減量。
 
-### Margin Trading 融資融券
+### Margin, Short Selling, and Securities Borrowing 融資、融券與借券
 
 ```python
 # Margin buy 融資買進
@@ -190,7 +190,43 @@ order = sj.StockOrder(
     order_cond=sj.StockOrderCond.ShortSelling,
     account=api.stock_account,
 )
+
+# Securities borrowing sell 借券賣出
+order = sj.StockOrder(
+    price=580,
+    quantity=1,
+    action=sj.Action.Sell,
+    price_type=sj.StockPriceType.LMT,
+    order_type=sj.OrderType.ROD,
+    order_cond=sj.StockOrderCond.SBLShort,
+    account=api.stock_account,
+)
+
+# Price-exempt securities borrowing sell 價格豁免借券賣出
+exempt_order = sj.StockOrder(
+    price=580,
+    quantity=1,
+    action=sj.Action.Sell,
+    price_type=sj.StockPriceType.LMT,
+    order_type=sj.OrderType.ROD,
+    order_cond=sj.StockOrderCond.SBLShortPriceExempt,
+    account=api.stock_account,
+)
 ```
+
+`SBLShort` is order type 5 (general strategic securities-borrowing and
+lending short sale). `SBLShortPriceExempt` is order type 6 (price-exempt
+SBL short sale for eligible special financial products). Both are distinct
+from `ShortSelling`, which means a margin short sale (融券賣出), and from the
+quote field `avail_borrowing` (available shares to borrow). Use them with
+`Action.Sell`; account eligibility, borrow position, product eligibility, and
+order validity are confirmed by the backend/exchange.
+
+`SBLShort` 是委託類別 5（一般策略性借券賣出）；
+`SBLShortPriceExempt` 是委託類別 6（適用特殊金融商品的價格豁免
+借券賣出）。兩者都不同於 `ShortSelling`（融券賣出），也不是行情欄位
+`avail_borrowing`（可借券數量）。請搭配 `Action.Sell`；帳戶資格、借券
+部位、商品資格與委託是否合法由後端／交易所確認。
 
 ### Day Trading 現股當沖
 

@@ -93,6 +93,7 @@ Routing rule: choose the functional reference first, then add the access-method 
 | Account balance, margin, positions, P&L, settlements, limits | [ACCOUNTING.md](references/ACCOUNTING.md) |
 | Manage watchlists (CRUD, add/remove contracts) | [WATCHLIST.md](references/WATCHLIST.md) |
 | Non-blocking mode, quote binding, stop orders, advanced patterns | [ADVANCED.md](references/ADVANCED.md) |
+| Interpret an error code / error message the user received, order rejection reasons | [ERROR_CODES.md](references/ERROR_CODES.md) (+ [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md)) |
 | Errors, connection issues, troubleshooting | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md) |
 
 **Common confusions 容易混淆（選檔前先看）:**

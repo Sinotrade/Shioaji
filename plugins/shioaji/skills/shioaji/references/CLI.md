@@ -157,6 +157,14 @@ shioaji data ticks --code 2330 -f toon
 | `SJ_HTTP_CORS` | Enable CORS (default: true) |
 | `SJ_HTTP_TIMEOUT` | HTTP request timeout in seconds (default: 30) |
 | `SJ_HTTP_LOG` | Enable HTTP request logging (default: true) |
+| `SJ_HTTP_TLS_CERT` | PEM certificate path; set with `SJ_HTTP_TLS_KEY` to enable HTTPS and HTTP/2 |
+| `SJ_HTTP_TLS_KEY` | PEM private-key path; set with `SJ_HTTP_TLS_CERT` |
+| `SJ_HTTP3` | Enable HTTP/3 over QUIC (default: false); requires static TLS or ACME |
+| `SJ_HTTP_ACME_DOMAINS` | Comma-separated public DNS names; enables ACME TLS-ALPN-01 |
+| `SJ_HTTP_ACME_CONTACTS` | Comma-separated ACME contact emails or URIs |
+| `SJ_HTTP_ACME_CACHE` | Persistent owner-only ACME cache directory; required in ACME mode |
+| `SJ_HTTP_ACME_DIRECTORY_NAME` | Custom ACME directory namespace; set with the directory URL |
+| `SJ_HTTP_ACME_DIRECTORY_URL` | Custom HTTPS ACME directory URL; set with the directory name |
 
 ### UDS / Unix Domain Socket
 | Variable | Description |
@@ -308,6 +316,29 @@ shioaji server start --no-open     # do not auto-open browser
 |------|-------------|
 | `--production` / `--prod` | Run in production mode (default: simulation). Also settable via `SJ_PRODUCTION` env var |
 | `--no-open` | Do not auto-open the dashboard/API docs browser window |
+
+TLS and protocol selection are configured through environment variables, not
+additional `server start` flags. Static TLS enables HTTPS with HTTP/2 and
+HTTP/1.1; `SJ_HTTP3=true` adds QUIC on the same numeric UDP port.
+
+```bash
+# Local HTTPS/HTTP2 (generate a trusted localhost certificate with mkcert first)
+SJ_HTTP_TLS_CERT="$HOME/.shioaji/tls/localhost.pem" \
+SJ_HTTP_TLS_KEY="$HOME/.shioaji/tls/localhost-key.pem" \
+shioaji server start --no-open
+
+# Also serve HTTP/3; keep the TCP and UDP bind port reachable.
+SJ_HTTP_TLS_CERT="$HOME/.shioaji/tls/localhost.pem" \
+SJ_HTTP_TLS_KEY="$HOME/.shioaji/tls/localhost-key.pem" \
+SJ_HTTP3=true \
+shioaji server start --no-open
+```
+
+Use static TLS for localhost. ACME requires a public DNS name, non-loopback
+bind, contact, owner-only persistent cache directory, and public TCP 443; it is
+mutually exclusive with `SJ_HTTP_TLS_CERT` / `SJ_HTTP_TLS_KEY`. See
+[HTTP_API.md](HTTP_API.md) for mkcert, ACME staging, port/firewall, browser,
+and verification examples.
 
 ### server check
 

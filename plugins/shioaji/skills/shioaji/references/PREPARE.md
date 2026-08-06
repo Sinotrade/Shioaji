@@ -819,6 +819,8 @@ StockOrderCond.Cash           # Cash 現股
 StockOrderCond.Netting        # Netting 沖銷
 StockOrderCond.MarginTrading  # Margin trading 融資
 StockOrderCond.ShortSelling   # Short selling 融券
+StockOrderCond.SBLShort # General strategic SBL short sale 一般策略性借券賣出（碼 5）
+StockOrderCond.SBLShortPriceExempt # Price-exempt SBL short sale 價格豁免借券賣出（碼 6）
 StockOrderCond.Emerging       # Emerging market 興櫃
 ```
 

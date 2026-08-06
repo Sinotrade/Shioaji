@@ -7,6 +7,25 @@ Use [MIGRATION.md](MIGRATION.md) when an error comes from deprecated Python idio
 
 ---
 
+## Error Triage 錯誤判讀
+
+When the user pastes an error message, exception, or a failed `Trade`, identify the form first, then look it up in [ERROR_CODES.md](ERROR_CODES.md):
+使用者貼出錯誤訊息、exception 或失敗的 `Trade` 時，先判斷錯誤形式，再到 [ERROR_CODES.md](ERROR_CODES.md) 查對照：
+
+- Exception / HTTP error JSON (e.g. `TokenError: StatusCode: 401, Detail: ...`) — API request rejected: login, query, cancel/update, bad parameters.
+  Exception 或 HTTP error JSON — API 請求被拒：登入、查詢、刪改單、參數錯誤。
+- `Trade` with `status.status = Failed` — order rejected by the backend; **no exception is raised**, read `trade.status.msg`.
+  `Trade` 的 `status.status = Failed` — 下單被後台拒絕；**不會拋例外**，讀 `trade.status.msg`。
+- Order callback with `operation.op_code != "00"` — operation failed at exchange/backoffice, read `op_msg`.
+  委託回報 `operation.op_code != "00"` — 操作在交易所／後台失敗，讀 `op_msg`。
+- HTTP 200 with empty data or `status: false` — silent failure: check usage quota first (Market Data section below), or the reserve `info` field.
+  HTTP 200 但回空資料或 `status: false` — 靜默失敗：先查流量用量（見下方行情資料節），預收券款則看回應 `info` 欄位。
+
+After a timeout or a `處理中` message on any order operation, always run `update_status()` and check the trade state before re-sending — never blindly retry an order.
+下單類操作遇到逾時或「處理中」訊息，重送前務必先 `update_status()` 確認委託狀態，絕不直接重送。
+
+---
+
 ## Market Data 行情資料相關
 
 ### Historical data returns empty 歷史行情回傳空資料
@@ -527,6 +546,55 @@ curl -H "Authorization: Bearer YOUR_API_KEY:YOUR_SECRET_KEY" \
    伺服器啟動時必須設定 `SJ_API_KEY` 和 `SJ_SEC_KEY`；正式下單也需要 `SJ_CA_PATH` 和 `SJ_CA_PASSWD`
 4. **Public endpoints 公開端點** — `/api/v1/health` and `/api/v1/info` bypass auth even on non-localhost
    即使在非 localhost，`/api/v1/health` 和 `/api/v1/info` 也不需認證
+
+### HTTPS, HTTP/2, HTTP/3, and ACME Issues / HTTPS、HTTP/2、HTTP/3、ACME 問題
+
+**The browser still reports HTTP/1.1 / 瀏覽器仍顯示 HTTP/1.1:**
+
+- The default plaintext `http://` listener is HTTP/1.1. Configure
+  `SJ_HTTP_TLS_CERT` and `SJ_HTTP_TLS_KEY`, then use the matching `https://`
+  hostname. Browsers do not select Shioaji HTTP/2 over plaintext h2c.
+- For local development, create a trusted localhost certificate with mkcert;
+  do not use ACME for localhost.
+- Verify outside the app with
+  `curl --http2 -sS -o /dev/null -w 'HTTP %{http_version}\n' https://localhost:8080/api/v1/health`.
+
+**The browser rejects local HTTPS / 瀏覽器拒絕本機 HTTPS:**
+
+- Generate the certificate for every hostname/IP the client actually uses,
+  and open the URL with a matching name. A certificate for `localhost` does
+  not validate `https://192.168.x.x`.
+- Run `mkcert -install` in the same OS/browser trust environment. Container,
+  simulator, and physical-device clients may need that CA installed in their
+  own trust store.
+- Never work around a production certificate error by disabling certificate
+  verification.
+
+**`SJ_HTTP3=true` fails startup or the browser never uses HTTP/3:**
+
+- HTTP/3 requires static TLS or ACME; it is rejected with plaintext HTTP.
+- Expose the configured port for both TCP and UDP. HTTP/2/HTTP/1.1 use TCP;
+  QUIC uses the same numeric UDP port.
+- First verify the TCP HTTPS response contains `Alt-Svc`, then test with a curl
+  build that supports `--http3-only`. Browser upgrade is automatic and may
+  occur after the first HTTPS response.
+- A proxy/load balancer must forward UDP/QUIC explicitly; forwarding TCP alone
+  cannot carry HTTP/3.
+
+**ACME mode fails validation or certificate issuance:**
+
+- Use public DNS names only: no localhost, IP literal, or wildcard.
+- Bind to a publicly reachable non-loopback address and expose TCP 443 for the
+  TLS-ALPN-01 challenge.
+- Set at least one contact and `SJ_HTTP_ACME_CACHE`. The cache must be a real
+  non-symlink directory with owner-only `0700` permissions.
+- Do not combine ACME variables with static TLS certificate/key variables.
+- Set `SJ_HTTP_ACME_DIRECTORY_NAME` and `SJ_HTTP_ACME_DIRECTORY_URL` together;
+  use the Let's Encrypt staging directory before production issuance.
+- First-start issuance is asynchronous, so HTTPS may be temporarily pending.
+
+See [HTTP_API.md](HTTP_API.md) for complete mkcert, static-TLS, HTTP/3, ACME,
+and browser `EventSource` examples.
 
 ### Unix Domain Socket (UDS) Issues Unix Domain Socket 問題
 

@@ -598,7 +598,7 @@ Shioaji HTTP 伺服器透過 Server-Sent Events (SSE) 提供即時資料串流�
 
 | Channel 頻道 | SSE Event Name | Description 說明 |
 |--------------|----------------|------------------|
-| All data 全部資料 | (mixed) | `/api/v1/stream/data` |
+| All data 全部資料 | named events below plus Contract V2, enriched data, scanner, and heartbeat | `/api/v1/stream/data` |
 | Stock tick 股票逐筆 | `tick_stk` | `/api/v1/stream/data/tick_stk` |
 | Stock bidask 股票五檔 | `bidask_stk` | `/api/v1/stream/data/bidask_stk` |
 | Futures tick 期貨逐筆 | `tick_fop` | `/api/v1/stream/data/tick_fop` |
@@ -607,7 +607,25 @@ Shioaji HTTP 伺服器透過 Server-Sent Events (SSE) 提供即時資料串流�
 | Futures quote 期貨報價 | `quote_fop` | `/api/v1/stream/data/quote_fop` |
 | Index quote 指數報價 | `quote_idx` | `/api/v1/stream/data/quote_idx` |
 | Stock realtime KBar 股票即時K棒 | `kbar` | `/api/v1/stream/data/kbar` |
+| Calculated index 自算指數 | `calculated_index` | `/api/v1/stream/data/calculated_index` |
+| Index contribution 指數貢獻 | `index_contribution` | `/api/v1/stream/data/index_contribution` |
+| Industry contribution 產業貢獻 | `industry_contribution` | `/api/v1/stream/data/industry_contribution` |
+| Market signals 市場訊號 | `scanner` | `/api/v1/stream/data/scanner` |
 | Order events 委託事件 | `order_event` | `/api/v1/stream/data/order_event` |
+| Contract V2 changes 商品檔異動 | `contract_event` | `/api/v1/stream/data/contract_event` |
+
+Choose the aggregate endpoint when one client needs several event families:
+it carries all named events with one heartbeat and counts as one SSE
+connection. Choose a dedicated endpoint when the client needs only one family
+or requires an independent lifecycle for that stream. The subscription POSTs
+do not change: generic quotes, KBar, enriched data, scanner, and production
+trade events still use their respective subscribe endpoints.
+
+The aggregate endpoint accepts optional `region` and `security_type` query
+parameters, but they filter `contract_event` only. Other event families on the
+same connection remain unfiltered. Derived broadcast loss is observable as a
+named `<event_name>_gap` event with a dropped count; reconnect or gap handlers
+should reconcile snapshot-based state through REST.
 
 ### SSE Flow SSE 使用流程
 
@@ -646,8 +664,8 @@ curl -X POST http://localhost:8080/api/v1/auth/subscribe_trade \
   -H "Content-Type: application/json" \
   -d '{"broker_id":"9A95","account_id":"1234567","account_type":"S"}'
 
-# Connect to SSE (all channels) 連接全部頻道
-curl -N http://localhost:8080/api/v1/stream/data
+# Connect to SSE (all channels). These filters affect contract_event only.
+curl -N "http://localhost:8080/api/v1/stream/data?region=TW&security_type=STK"
 
 # Or connect to a specific channel 或連接特定頻道
 curl -N http://localhost:8080/api/v1/stream/data/tick_stk
@@ -675,6 +693,9 @@ data: {"operation":{"op_type":"New","op_code":"00","op_msg":""},"order":{...},..
 
 event: quote_idx
 data: {"exchange":"TSE","code":"IX0001","Date":"2026-07-14","Time":"09:00:01","Reference":"...","Open":"...","High":"...","Low":"...","Close":"..."}
+
+event: calculated_index_gap
+data: {"type":"lagged","dropped":3}
 ```
 
 Index SSE preserves the upstream typed index field names (`Date`, `Time`,
@@ -715,7 +736,7 @@ Response:
 ### JavaScript SSE Client Example
 
 ```javascript
-const es = new EventSource("http://localhost:8080/api/v1/stream/data/tick_stk");
+const es = new EventSource("http://localhost:8080/api/v1/stream/data?region=TW");
 
 es.addEventListener("tick_stk", (event) => {
   const tick = JSON.parse(event.data);
