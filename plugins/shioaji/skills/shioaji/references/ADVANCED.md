@@ -199,10 +199,7 @@ class QuoteManager:
 
 # Usage 使用方式
 qm = QuoteManager(api)
-contract = api.contracts.get("2330")
-if contract is None:
-    raise LookupError("contract 2330 not found")
-api.subscribe(contract, quote_type=sj.QuoteType.Tick)
+api.subscribe(api.Contracts.Stocks["2330"], quote_type=sj.QuoteType.Tick)
 
 # Later... 稍後...
 df = qm.get_kbars("5m")
@@ -310,9 +307,7 @@ api.login(api_key="YOUR_KEY", secret_key="YOUR_SECRET")
 soe = StopOrderExecutor(api)
 
 # Define contract and order 定義合約和訂單
-contract = api.contracts.get("TXFR1")
-if contract is None:
-    raise LookupError("contract TXFR1 not found")
+contract = api.Contracts.Futures["TXFC0"]
 order = sj.FuturesOrder(
     action=sj.Action.Buy,
     price=18000,
@@ -353,19 +348,15 @@ After a stop executor calls `place_order`, use the same order-decision rules as 
 ```python
 import shioaji as sj
 
-contract = api.contracts.get("2330")
-if contract is None:
-    raise LookupError("contract 2330 not found")
-
 # Full day ticks 全天 Ticks
 ticks = api.ticks(
-    contract=contract,
+    contract=api.Contracts.Stocks["2330"],
     date="2024-01-16"
 )
 
 # Time range 時間區段
 ticks = api.ticks(
-    contract=contract,
+    contract=api.Contracts.Stocks["2330"],
     date="2024-01-16",
     query_type=sj.TicksQueryType.RangeTime,
     time_start="09:00:00",
@@ -374,7 +365,7 @@ ticks = api.ticks(
 
 # Last N ticks 最後 N 筆
 ticks = api.ticks(
-    contract=contract,
+    contract=api.Contracts.Stocks["2330"],
     query_type=sj.TicksQueryType.LastCount,
     last_cnt=100
 )
@@ -418,11 +409,8 @@ df = pl.DataFrame({
 ### Query Kbars 查詢 K 線
 
 ```python
-contract = api.contracts.get("2330")
-if contract is None:
-    raise LookupError("contract 2330 not found")
 kbars = api.kbars(
-    contract=contract,
+    contract=api.Contracts.Stocks["2330"],
     start="2024-01-15",
     end="2024-01-16"
 )
@@ -466,14 +454,11 @@ Use R1 (near month), R2 (next month) for continuous data:
 
 ```python
 # Near month continuous contract 近月連續合約
-near = api.contracts.get("TXFR1")
-next_ = api.contracts.get("TXFR2")
-if near is None or next_ is None:
-    raise LookupError("continuous futures contract not found")
-kbars = api.kbars(near, start="2024-01-15", end="2024-01-16")
+contract = api.Contracts.Futures.TXF.TXFR1
+kbars = api.kbars(contract, start="2024-01-15", end="2024-01-16")
 
 # Next month 次月
-kbars_next = api.kbars(next_, start="2024-01-15", end="2024-01-16")
+contract = api.Contracts.Futures.TXF.TXFR2
 ```
 
 ### Data History 資料歷史
@@ -492,12 +477,10 @@ Get current market data for multiple contracts:
 
 ```python
 contracts = [
-    api.contracts.get("2330"),
-    api.contracts.get("2317"),
-    api.contracts.get("TXFR1"),
+    api.Contracts.Stocks["2330"],
+    api.Contracts.Stocks["2317"],
+    api.Contracts.Futures["TXFC0"],
 ]
-if any(contract is None for contract in contracts):
-    raise LookupError("one or more snapshot contracts were not found")
 
 # Max 500 contracts 最多 500 個合約
 snapshots = api.snapshots(contracts)
@@ -742,9 +725,7 @@ def analyze_kbars(symbols: list) -> pl.DataFrame:
     all_data = []
 
     for symbol in symbols:
-        contract = api.contracts.get(symbol)
-        if contract is None:
-            continue
+        contract = api.Contracts.Stocks[symbol]
         kbars = api.kbars(contract, start="2024-01-01", end="2024-01-31")
 
         df = pl.DataFrame({

@@ -54,70 +54,43 @@ def on_tick(tick):
     else:
         print(f"[一般] {tick.code} close={tick.close} vol={tick.volume}")
 
-stock = api.contracts.get("2330")
-future = api.contracts.get("TXFR1")
-if stock is None or future is None:
-    raise LookupError("quote contract not found")
-
 # Subscribe tick data 訂閱逐筆成交
 api.subscribe(
-    stock,
+    api.Contracts.Stocks["2330"],
     quote_type=sj.QuoteType.Tick,
 )
 
 # Subscribe bidask data 訂閱五檔
 api.subscribe(
-    stock,
+    api.Contracts.Stocks["2330"],
     quote_type=sj.QuoteType.BidAsk,
 )
 
 # Subscribe futures tick 訂閱期貨 Tick
 api.subscribe(
-    future,
+    api.Contracts.Futures["TXFC0"],
     quote_type=sj.QuoteType.Tick,
 )
 
 # Intraday odd lot 盤中零股 - Tick
 api.subscribe(
-    stock,
+    api.Contracts.Stocks["2330"],
     quote_type=sj.QuoteType.Tick,
     intraday_odd=True,
 )
 
 # Intraday odd lot 盤中零股 - BidAsk (五檔)
 api.subscribe(
-    stock,
+    api.Contracts.Stocks["2330"],
     quote_type=sj.QuoteType.BidAsk,
     intraday_odd=True,
 )
 
-# Realtime 1-min KBar 即時K棒（stocks only 僅股票；intraday_odd not supported）
-api.subscribe(
-    stock,
-    quote_type=sj.QuoteType.KBar,
-)
-
 # Unsubscribe 取消訂閱
 api.unsubscribe(
-    stock,
+    api.Contracts.Stocks["2330"],
     quote_type=sj.QuoteType.Tick,
 )
-```
-
-Index products use the exchange/master contract code directly. All index quote
-types subscribe to the same QUO-only topic `QUO/v1/IND/*/{exchange}/{code}`
-(e.g. `QUO/v1/IND/*/TSE/IX0001`, where `{exchange}` is the index's real exchange
-such as TSE or OTC); there is no index TIC stream.
-
-指數商品直接使用交易所/master 商品代碼。所有指數 quote type 都訂閱同一個
-QUO-only topic `QUO/v1/IND/*/{exchange}/{code}`（例如 `QUO/v1/IND/*/TSE/IX0001`，
-`{exchange}` 為該指數的真實交易所如 TSE 或 OTC），沒有指數 TIC stream。
-
-```python
-index = api.contracts.get("IX0001")
-if index is None:
-    raise LookupError("index IX0001 not found")
-api.subscribe(index, quote_type=sj.QuoteType.Quote)
 ```
 
 ### HTTP: Subscribe / Unsubscribe
@@ -150,38 +123,14 @@ curl -X POST http://localhost:8080/api/v1/stream/unsubscribe \
 
 ```python
 contracts = [
-    api.contracts.get("2330"),
-    api.contracts.get("2317"),
-    api.contracts.get("2454"),
+    api.Contracts.Stocks["2330"],
+    api.Contracts.Stocks["2317"],
+    api.Contracts.Stocks["2454"],
 ]
-if any(contract is None for contract in contracts):
-    raise LookupError("one or more quote contracts were not found")
 
 for contract in contracts:
     api.subscribe(contract, quote_type=sj.QuoteType.Tick)
 ```
-
-### Realtime KBar 即時K棒（Stocks 股票）
-
-Regular per-stock streaming: one complete 1-minute bar pushed at each minute close; `time` is the bar's start. Stock contracts only (index/futures/options not yet). NOT historical `api.kbars()` — that is a date-range query in [MARKET_DATA.md](MARKET_DATA.md).
-
-一般證券即時行情的一部分：每分鐘收線推送一根完整 1 分 K，`time` 為該根起始時間。僅支援股票合約（指數／期貨／選擇權未支援）。不是歷史 `api.kbars()`（區間查詢，見 [MARKET_DATA.md](MARKET_DATA.md)）。
-
-```python
-api.subscribe(api.contracts.get("2330"), quote_type=sj.QuoteType.KBar)
-# consume: default print / set_on_kbar_callback / @api.on_kbar() / get_kbar_receiver()
-```
-
-- `intraday_odd` / `version` rejected; CLI `shioaji data stream` does not support KBar. Attributes → [KBar Attributes](#kbar-attributes-即時k棒屬性).
-  `intraday_odd`／`version` 一律拒絕；CLI 不支援 KBar。欄位見回調參考。
-- HTTP is a **dedicated route** (not the generic `/stream/subscribe`): `POST /api/v1/stream/subscribe/kbars` with `{"stocks":[{"security_type":"STK","exchange":"TSE","code":"2330","target_code":null},…]}` (multi-stock), response `{success, message}` without `subscription`; SSE `GET /api/v1/stream/data/kbar`; unsubscribe same body to `/stream/unsubscribe/kbars`.
-  HTTP 走專屬路由（非通用 `/stream/subscribe`），body 的 `stocks` 陣列可一次多檔，回應沒有 `subscription` 欄位。
-
-### Enriched and Signal Products 即時加值與市場訊號
-
-Enriched index products (calculated index, index/industry contribution) → [STREAMING_ENRICHED.md](STREAMING_ENRICHED.md). Market-wide signal alerts (`subscribe_scanner`) → [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md). The subscription-object API once drafted here (`CalculatedIndexSubscription`, `KBarSubscription`, `QuoteFilter`, …) never shipped — do not generate it.
-
-指數加值產品（自算指數、指數／產業貢獻）見 [STREAMING_ENRICHED.md](STREAMING_ENRICHED.md)；全市場訊號（`subscribe_scanner`）見 [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md)。舊草稿的 subscription 物件 API（`CalculatedIndexSubscription` 等）從未出貨，不要生成。
 
 ---
 
@@ -193,7 +142,6 @@ Use this table before generating client code. Python receives typed callback obj
 | Operation | Python return | HTTP response | CLI output | Agent decision |
 |-----------|---------------|---------------|------------|----------------|
 | Subscribe market data | `api.subscribe(contract, quote_type=..., intraday_odd=...)`; normal use relies on callbacks/receivers, not a JSON response | `POST /api/v1/stream/subscribe` returns `SubscriptionResponse { success, message, subscription }` | Stream commands subscribe before opening SSE; `--format json` follows HTTP JSON where available | If `success=false` or the POST errors, do not open SSE as if subscribed. Check contract, `quote_type`, `intraday_odd`, and HTTP body. |
-| Subscribe realtime KBar | `api.subscribe(contract, quote_type=sj.QuoteType.KBar)` — stocks only; `intraday_odd`/`version` rejected; default-prints unless a callback/receiver is attached | **Dedicated route** `POST /api/v1/stream/subscribe/kbars` `{"stocks":[<contract>,…]}` returns `{success, message}` **without `subscription`**; SSE `GET /api/v1/stream/data/kbar`; unsubscribe same body to `/stream/unsubscribe/kbars` | `shioaji data stream` does NOT support KBar | Do not send KBar through the generic `/stream/subscribe`, and do not expect a `subscription` field in the response. A quiet channel with a live subscription usually means market closed. |
 | Unsubscribe market data | `api.unsubscribe(contract, quote_type=...)` | `POST /api/v1/stream/unsubscribe` returns `SubscriptionResponse { success, message, subscription }` | Stream commands unsubscribe on exit when they created the subscription | Treat `success=true` as accepted. If it errors, report the failed unsubscribe; do not invent a remaining subscription state. |
 | Market-data SSE | Python callbacks receive `TickSTKv1`, `BidAskSTKv1`, `TickFOPv1`, `BidAskFOPv1`, quote objects, or receiver values | `GET /api/v1/stream/data/*` is SSE. Each event has `event:` and JSON `data:`; heartbeat events are keep-alive only | CLI stream prints events from the SSE channel after subscribe | Parse `event:` first, then decode `data:` for that channel. A heartbeat means the connection is alive, not that market data arrived. |
 | Stock/FOP tick and bidask payloads | Python object fields include Python-native `datetime` and Decimal-like values; `.to_dict(raw=True)` is useful when exact raw fields are needed | SSE JSON uses server field names such as `date`, `time`, `total_volume`, `price_chg`, `pct_chg`; Decimal price/amount fields are strings | Same as HTTP/SSE for non-Python languages | Do not copy Python-only field names or types into HTTP clients. Convert string prices to decimal/float in the client language. |
@@ -231,7 +179,7 @@ shioaji auth unsubscribe-trade --account 9A95-9816502 # stop receiving 取消訂
 ### Decorator Syntax 裝飾器語法
 
 ```python
-from shioaji import TickSTKv1, BidAskSTKv1, TickFOPv1, BidAskFOPv1, KBar
+from shioaji import TickSTKv1, BidAskSTKv1, TickFOPv1, BidAskFOPv1
 
 # Stock tick 股票 Tick
 @api.on_tick_stk_v1()
@@ -262,11 +210,6 @@ def on_quote_stk(quote):
 @api.on_quote_fop_v1()
 def on_quote_fop(quote):
     print(f"Quote FOP: {quote}")
-
-# Stock realtime KBar 股票即時K棒
-@api.on_kbar()
-def on_kbar(kbar: KBar):
-    print(f"Code: {kbar.code}, Time: {kbar.time}, Close: {kbar.close}")
 ```
 
 ### Setter Syntax 設定器語法
@@ -279,7 +222,6 @@ api.set_on_tick_fop_v1_callback(on_fop_tick)
 api.set_on_bidask_fop_v1_callback(on_fop_bidask)
 api.set_on_quote_stk_v1_callback(on_quote_stk)
 api.set_on_quote_fop_v1_callback(on_quote_fop)
-api.set_on_kbar_callback(on_kbar)
 ```
 
 ### Clear Callbacks 清除回調
@@ -291,7 +233,6 @@ api.clear_on_tick_fop_v1_callback()
 api.clear_on_bidask_fop_v1_callback()
 api.clear_on_quote_stk_v1_callback()
 api.clear_on_quote_fop_v1_callback()
-api.clear_on_kbar_callback()
 ```
 
 ### Context Binding 綁定上下文
@@ -334,11 +275,6 @@ api.set_on_tick_fop_v1_callback(some_async_callback)
 
 # Same clear methods 相同的清除方法
 api.clear_on_tick_stk_v1_callback()
-
-# Realtime KBar has the same async forms 即時K棒同樣有 async 版本
-@api.on_kbar()
-async def on_kbar(kbar):
-    print(f"Code: {kbar.code}, Close: {kbar.close}")
 ```
 
 > **Performance (Python only) 效能（限 Python）**: for high-throughput streaming with `ShioajiAsync`, run it on uvloop for a faster event loop. See [PREPARE.md → Why uvloop](PREPARE.md#why-uvloop-為什麼用-uvloop).
@@ -352,10 +288,7 @@ Callbacks are the normal Python path. Receivers are lower-level public APIs for 
 Callbacks 是一般 Python 使用路徑。Receivers 是較底層的 public API，給想自行拉取事件的 Python consumer 使用。這是 Python-only，和 HTTP SSE 不同；HTTP client 應使用 `/api/v1/stream/data/*`。
 
 ```python
-contract = api.contracts.get("2330")
-if contract is None:
-    raise LookupError("contract 2330 not found")
-api.subscribe(contract, quote_type=sj.QuoteType.Tick)
+api.subscribe(api.Contracts.Stocks["2330"], quote_type=sj.QuoteType.Tick)
 
 receiver = api.get_tick_stk_v1_receiver()
 tick = await receiver.recv()       # async wait
@@ -371,7 +304,6 @@ api.get_bidask_stk_v1_receiver()
 api.get_tick_fop_v1_receiver()
 api.get_bidask_fop_v1_receiver()
 api.get_order_event_receiver()
-api.get_kbar_receiver()
 ```
 
 Callback setters prepare the required event handling automatically. Do not ask users to call private `start_*_handler()` helpers; they are not part of the normal Python API surface.
@@ -404,21 +336,6 @@ tick.ask_side_total_vol  # int: Total ask volume 賣方總量
 tick.bid_side_total_cnt  # int: Total bid count 買方筆數
 tick.ask_side_total_cnt  # int: Total ask count 賣方筆數
 tick.intraday_odd        # bool: True 表示盤中零股流 (`TIC/v1/ODD/...`), 否則 False
-```
-
-### KBar Attributes 即時K棒屬性
-
-```python
-kbar.code              # str: Stock code 股票代碼
-kbar.date              # str: Date 日期 "YYYY/MM/DD"
-kbar.time              # str: Bar start time 該根起始時間 "HH:MM:SS.ffffff"
-kbar.open              # float: Open price 開盤價
-kbar.high              # float: High price 最高價
-kbar.low               # float: Low price 最低價
-kbar.close             # float: Close price 收盤價
-kbar.volume            # int: Volume 成交量 (張)
-kbar.amount            # int: Turnover 成交金額 (NTD)
-kbar.tick_count        # int: Number of trades 成交筆數
 ```
 
 ### BidAskSTKv1 Attributes 股票五檔屬性
@@ -462,95 +379,39 @@ bidask.ask_price       # List[Decimal]: Ask prices (5 levels)
 bidask.ask_volume      # List[int]: Ask volumes (5 levels)
 ```
 
-### QuoteIdxV1 Attributes 指數報價屬性
-
-Only the standard fields are guaranteed. Fields marked `broad-market only` are
-present only for broad-market indices (e.g. TAIEX `IX0001`); a regular index
-such as `EMP88` carries only the standard fields, with the rest `None`.
-`repr()` shows a summary: `code, date, time, close, high, low`.
-只有標準欄位保證存在；標記 `broad-market only` 的欄位僅大盤指數（如加權指數
-`IX0001`）才有，一般指數（如 `EMP88`）僅標準欄位、其餘為 `None`。
-
-```python
-# Standard fields 標準欄位（所有指數皆有）
-quote.code             # str: Index code 指數代碼
-quote.exchange         # Exchange: Exchange 交易所
-quote.date             # date: Date 日期
-quote.time             # time: Time 時間
-quote.datetime         # datetime: Timestamp 時間戳
-quote.reference        # Decimal: Previous close 昨收
-quote.open             # Decimal: Open 今開
-quote.high             # Decimal: High 今高
-quote.low              # Decimal: Low 今低
-quote.close            # Decimal: Latest index value 最新指數
-
-# Derived fields 衍生欄位
-quote.amount_sum       # Decimal: Cumulative turnover 累計成交金額(元)
-quote.amount           # Decimal: Turnover 成交金額(元)
-quote.volume           # int: Volume 成交股數(張)
-quote.vol_sum          # int: Cumulative volume 累計成交股數(張)
-quote.count            # int: Cumulative trade count 累計成交筆數
-quote.count_sum        # int: Cumulative trade count 累計成交筆數
-quote.prev_date        # date: Previous trading day 前一個交易日
-quote.prev_amount_sum  # Decimal: Previous-day total turnover 前交易日總額(元)
-
-# Up/down counts 漲跌家數（商品數）
-quote.no_trade         # int: Not traded 未成交
-quote.limit_up_count   # int: Limit up 漲停
-quote.raise_count      # int: Up 漲
-quote.flat_count       # int: Unchanged 平
-quote.fall_count       # int: Down 跌
-quote.limit_down_count # int: Limit down 跌停
-
-# Trade statistics 成交統計（broad-market only 僅大盤）
-quote.fund_amount      # Decimal: Fund turnover 基金成交總額(元)
-quote.fund_volume      # int: Fund volume 基金成交總股(張)
-quote.fund_count       # int: Fund trade count 基金成交總筆數
-quote.stock_amount     # Decimal: Stock turnover 股票成交總額(元)
-quote.stock_volume     # int: Stock volume 股票成交總張數
-quote.stock_count      # int: Stock trade count 股票成交總筆數
-quote.bull_amount      # Decimal: Call warrant turnover 認購權證成交總額(元)
-quote.bull_volume      # int: Call warrant volume 認購權證成交總張數
-quote.bull_count       # int: Call warrant trade count 認購權證成交總筆數
-quote.bear_amount      # Decimal: Put warrant turnover 認售權證成交總額(元)
-quote.bear_volume      # int: Put warrant volume 認售權證成交總張數
-quote.bear_count       # int: Put warrant trade count 認售權證成交總筆數
-quote.tib_amount       # Decimal: Innovation board turnover 創新板成交總額(元)
-quote.tib_volume       # int: Innovation board volume 創新板成交總張數
-quote.tib_count        # int: Innovation board trade count 創新板成交總筆數
-quote.fixed_amount     # Decimal: After-hours fixed-price turnover 盤後定價成交總額(元)
-quote.fixed_volume     # int: After-hours fixed-price volume 盤後定價成交總張數
-quote.fixed_count      # int: After-hours fixed-price trade count 盤後定價成交筆數
-
-# Estimate 預估量（broad-market only 僅大盤）
-quote.estimate_amount_sum  # Decimal: Estimated closing turnover 預估收盤總額(元)
-```
-
 ---
 
 ## System Callbacks 系統回調
 
-### Typed index quote callback 型別化指數報價回調
+### set_on_quote_callback 設定報價回調
 
-Index quotes use the typed `QuoteIdxV1` callback. The generic `on_quote` /
-`set_on_quote_callback` API has been removed. HTTP clients use the `quote_idx`
-SSE channel.
-指數報價使用 typed `QuoteIdxV1` callback。generic `on_quote` /
-`set_on_quote_callback` API 已移除；HTTP client 使用 `quote_idx` SSE channel。
+Legacy quote callback for index tick/bidask data:
+指數 tick/bidask 資料的舊式報價回調：
 
 ```python
-def quote_idx_cb(quote):
-    print(quote.code, quote.close)
+def quote_cb(topic, msg):
+    print(f"Topic: {topic}, Message: {msg}")
 
-api.set_on_quote_idx_v1_callback(quote_idx_cb)
-
-# Decorator syntax 裝飾器語法
-@api.on_quote_idx_v1()
-def quote_idx_cb(quote):
-    print(quote.code, quote.close)
+api.set_on_quote_callback(quote_cb)
 
 # Clear 清除
-api.clear_on_quote_idx_v1_callback()
+api.clear_on_quote_callback()
+```
+
+### set_contract_event_callback 設定商品檔更新事件回調
+
+`set_contract_event_callback` is a Python-only system callback for `SYS/CONTRACT` update events. It is different from login-time `contracts_cb`: `contracts_cb` notifies that contract files finished loading, while contract event callbacks notify that an upstream contract update event arrived and the client reloaded contracts.
+`set_contract_event_callback` 是 Python-only 的 `SYS/CONTRACT` 商品檔更新事件 callback。它和登入時的 `contracts_cb` 不同：`contracts_cb` 通知商品檔下載完成；contract event callback 則通知上游商品檔更新事件到達，且 client 已重新載入商品檔。
+
+```python
+def on_contract_event(event):
+    print(event.action)
+    print(event.security_type)
+
+api.set_contract_event_callback(on_contract_event)
+
+# Clear 清除
+api.clear_contract_event_callback()
 ```
 
 ### set_session_down_callback 設定斷線回調
@@ -581,10 +442,10 @@ async def on_down():
 
 api.set_session_down_callback(on_down)  # Must be async for ShioajiAsync
 
-async def quote_idx_cb(quote):
-    print(quote.code, quote.close)
+async def quote_cb(topic, msg):
+    print(f"Topic: {topic}")
 
-api.set_on_quote_idx_v1_callback(quote_idx_cb)
+api.set_on_quote_callback(quote_cb)
 ```
 
 ---
@@ -598,34 +459,14 @@ Shioaji HTTP 伺服器透過 Server-Sent Events (SSE) 提供即時資料串流�
 
 | Channel 頻道 | SSE Event Name | Description 說明 |
 |--------------|----------------|------------------|
-| All data 全部資料 | named events below plus Contract V2, enriched data, scanner, and heartbeat | `/api/v1/stream/data` |
+| All data 全部資料 | (mixed) | `/api/v1/stream/data` |
 | Stock tick 股票逐筆 | `tick_stk` | `/api/v1/stream/data/tick_stk` |
 | Stock bidask 股票五檔 | `bidask_stk` | `/api/v1/stream/data/bidask_stk` |
 | Futures tick 期貨逐筆 | `tick_fop` | `/api/v1/stream/data/tick_fop` |
 | Futures bidask 期貨五檔 | `bidask_fop` | `/api/v1/stream/data/bidask_fop` |
 | Stock quote 股票報價 | `quote_stk` | `/api/v1/stream/data/quote_stk` |
 | Futures quote 期貨報價 | `quote_fop` | `/api/v1/stream/data/quote_fop` |
-| Index quote 指數報價 | `quote_idx` | `/api/v1/stream/data/quote_idx` |
-| Stock realtime KBar 股票即時K棒 | `kbar` | `/api/v1/stream/data/kbar` |
-| Calculated index 自算指數 | `calculated_index` | `/api/v1/stream/data/calculated_index` |
-| Index contribution 指數貢獻 | `index_contribution` | `/api/v1/stream/data/index_contribution` |
-| Industry contribution 產業貢獻 | `industry_contribution` | `/api/v1/stream/data/industry_contribution` |
-| Market signals 市場訊號 | `scanner` | `/api/v1/stream/data/scanner` |
 | Order events 委託事件 | `order_event` | `/api/v1/stream/data/order_event` |
-| Contract V2 changes 商品檔異動 | `contract_event` | `/api/v1/stream/data/contract_event` |
-
-Choose the aggregate endpoint when one client needs several event families:
-it carries all named events with one heartbeat and counts as one SSE
-connection. Choose a dedicated endpoint when the client needs only one family
-or requires an independent lifecycle for that stream. The subscription POSTs
-do not change: generic quotes, KBar, enriched data, scanner, and production
-trade events still use their respective subscribe endpoints.
-
-The aggregate endpoint accepts optional `region` and `security_type` query
-parameters, but they filter `contract_event` only. Other event families on the
-same connection remain unfiltered. Derived broadcast loss is observable as a
-named `<event_name>_gap` event with a dropped count; reconnect or gap handlers
-should reconcile snapshot-based state through REST.
 
 ### SSE Flow SSE 使用流程
 
@@ -640,11 +481,6 @@ Market data and trade events use the same explicit-subscribe pattern:
 curl -X POST http://localhost:8080/api/v1/stream/subscribe \
   -H "Content-Type: application/json" \
   -d '{"security_type":"STK","exchange":"TSE","code":"2330","quote_type":"Tick"}'
-
-# Index: use the exchange/master code. Tick/BidAsk/Quote all map to QUO/v1/IND.
-curl -X POST http://localhost:8080/api/v1/stream/subscribe \
-  -H "Content-Type: application/json" \
-  -d '{"security_type":"IND","exchange":"TSE","code":"IX0001","quote_type":"Quote"}'
 
 # Futures continuous-month aliases via HTTP, such as TXFR1/TXFR2,
 # require target_code from contract lookup. Regular futures codes do not.
@@ -664,12 +500,11 @@ curl -X POST http://localhost:8080/api/v1/auth/subscribe_trade \
   -H "Content-Type: application/json" \
   -d '{"broker_id":"9A95","account_id":"1234567","account_type":"S"}'
 
-# Connect to SSE (all channels). These filters affect contract_event only.
-curl -N "http://localhost:8080/api/v1/stream/data?region=TW&security_type=STK"
+# Connect to SSE (all channels) 連接全部頻道
+curl -N http://localhost:8080/api/v1/stream/data
 
 # Or connect to a specific channel 或連接特定頻道
 curl -N http://localhost:8080/api/v1/stream/data/tick_stk
-curl -N http://localhost:8080/api/v1/stream/data/quote_idx
 curl -N http://localhost:8080/api/v1/stream/data/order_event
 ```
 
@@ -690,17 +525,7 @@ data: {"type":"heartbeat","timestamp":"2026-03-31T01:00:30Z","connection_id":"42
 
 event: order_event
 data: {"operation":{"op_type":"New","op_code":"00","op_msg":""},"order":{...},...}
-
-event: quote_idx
-data: {"exchange":"TSE","code":"IX0001","Date":"2026-07-14","Time":"09:00:01","Reference":"...","Open":"...","High":"...","Low":"...","Close":"..."}
-
-event: calculated_index_gap
-data: {"type":"lagged","dropped":3}
 ```
-
-Index SSE preserves the upstream typed index field names (`Date`, `Time`,
-`Reference`, `Open`, `High`, `Low`, `Close`, and optional fields) and adds
-lowercase `exchange` and `code` identity fields parsed from the Solace topic.
 
 > **Important — Decimal fields are JSON strings / Decimal 欄位為 JSON 字串**
 >
@@ -736,7 +561,7 @@ Response:
 ### JavaScript SSE Client Example
 
 ```javascript
-const es = new EventSource("http://localhost:8080/api/v1/stream/data?region=TW");
+const es = new EventSource("http://localhost:8080/api/v1/stream/data/tick_stk");
 
 es.addEventListener("tick_stk", (event) => {
   const tick = JSON.parse(event.data);
