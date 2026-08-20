@@ -159,7 +159,7 @@ type StockOrder struct {
 	PriceType     string  `json:"price_type"`                // LMT, MKT
 	OrderType     string  `json:"order_type"`                // ROD, IOC, FOK
 	OrderLot      *string `json:"order_lot,omitempty"`       // Common, Odd, IntradayOdd
-	OrderCond     *string `json:"order_cond,omitempty"`      // Cash, MarginTrading, ShortSelling
+	OrderCond     *string `json:"order_cond,omitempty"`      // Cash, MarginTrading, ShortSelling, SBLShort, SBLShortPriceExempt
 	DaytradeShort *bool   `json:"daytrade_short,omitempty"`
 	CustomField   *string `json:"custom_field,omitempty"`
 }

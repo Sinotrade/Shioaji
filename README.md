@@ -100,7 +100,7 @@ curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install
 curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | CHANNEL=prerelease sh
 
 # Specific version
-curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | VERSION=v1.5.7 sh
+curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | VERSION=v1.5.6 sh
 ```
 
 **Windows (PowerShell):**
@@ -197,6 +197,10 @@ Once the server is running, the following entry points are available:
 
 
 Open `/docs` to browse all endpoints, inspect request/response schemas, generate code samples in multiple languages, and test directly from the browser.
+
+For agent-facing deployments, the optional [`agent_harness`](docs/agent-harness.md)
+middleware can require short-lived, payload-bound, one-time capabilities on
+broker mutations without adding work to read-only routes.
 
 ### Custom Web Apps
 

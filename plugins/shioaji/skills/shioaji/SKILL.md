@@ -5,7 +5,11 @@ description: |
   broad order/trading requests where Shioaji may apply. Covers Python sync/async
   bindings, `shioaji` CLI, HTTP API, SSE streaming, dashboard embedding, and
   JS/TS, Go, C/C++, C#, Rust, Java/Kotlin HTTP clients. Covers TWSE/TPEX/TAIFEX
-  orders, quotes, market data, accounts, watchlists, reserve orders, setup,
+  orders, quotes, Contract V2 lazy lookup/update events, market data, realtime
+  KBar 即時K棒, enriched index data 即時加值資料 (calculated index 自算指數,
+  index/industry contribution 指數貢獻/產業貢獻), market signals 市場訊號
+  (price-limit/rapid-move/volume-burst alerts 漲跌停/急拉急殺/爆量, simtrade
+  試撮 filter), accounts, watchlists, reserve orders, setup,
   migration, and troubleshooting. Trigger keywords include shioaji, sj, sinopac,
   永豐金, 台股, 下單, 交易, 即時行情, shioaji server, and SSE streaming.
   For first-time users, start with account/API onboarding gates before local
@@ -30,7 +34,7 @@ Three access layers / 三種存取層：
 
 ## How to Use References / 如何使用參考文件
 
-Answer users directly from the bundled references. Do not route users to external documentation pages as a substitute for answering. This skill uses Shioaji 1.5 as the baseline; use [MIGRATION.md](references/MIGRATION.md) only for legacy/deprecated idioms. Response handling always belongs in the matching functional reference. When an exact command flag, request field, or response schema must be confirmed, use installed CLI `--help` or the running server's `/openapi.json`.
+Answer users directly from the bundled references. Do not route users to external documentation pages as a substitute for answering. The stable 1.5 API remains the compatibility baseline, while 1.7 features that intentionally change the interface—especially Contract V2—must follow their functional reference. Use [MIGRATION.md](references/MIGRATION.md) only for legacy/deprecated idioms. Response handling always belongs in the matching functional reference. When an exact command flag, request field, or response schema must be confirmed, use installed CLI `--help` or the running server's `/openapi.json`.
 
 **First-time-user response / 首次使用者回應：**
 
@@ -78,16 +82,28 @@ Routing rule: choose the functional reference first, then add the access-method 
 | Migrate legacy code or fix deprecated Shioaji idioms | [MIGRATION.md](references/MIGRATION.md) |
 | Install, login, API keys, CA cert, simulation, env vars, constants | [PREPARE.md](references/PREPARE.md) |
 | Install this Shioaji plugin/skill into Claude, Codex, Cursor, or another agent environment | [AGENTS.md](references/AGENTS.md) |
-| Look up contract codes, attributes, security types | [CONTRACTS.md](references/CONTRACTS.md) |
+| Use or troubleshoot `agent_harness`, approval capabilities, protected HTTP mutations, `X-Shioaji-Agent-Capability`, or mutation `403` responses | [AGENT_HARNESS.md](references/AGENT_HARNESS.md) + the matching order/reserve reference |
+| Contract V2 lookup, typed info, lazy cache behavior, update events, or 1.5 `api.Contracts` compatibility | [CONTRACTS.md](references/CONTRACTS.md) (+ [CONTRACT_FIELDS.md](references/CONTRACT_FIELDS.md) for full Info field lists) |
 | Place, modify, cancel regular stock/futures/options orders; `order_deal_event` active order/deal reports (Python callbacks, HTTP order-event SSE) | [ORDERS.md](references/ORDERS.md) |
-| Place, cancel, price, validate, or troubleshoot combo orders; combo legs, net price, `combo_type`, TAIFEX combo order conditions, `update_combostatus` / `list_combotrades` | [COMBO_ORDERS.md](references/COMBO_ORDERS.md) |
+| Build or enumerate combo contracts with `api.contracts.combo_futures`; validate managed `BaseContract` vs legacy directed `ComboBase` legs; subscribe/query futures combo market data; place, price, cancel, or troubleshoot combo orders; derive canonical leg order/actions and `combo_type`; use `update_combostatus` / `list_combotrades` | [COMBO_ORDERS.md](references/COMBO_ORDERS.md) |
 | Reserve shares for disposition/attention stocks | [RESERVE.md](references/RESERVE.md) |
-| Subscribe real-time quotes, tick/bidask/quote callbacks, SSE streams | [STREAMING.md](references/STREAMING.md) |
-| Historical ticks, K-bars, snapshots, scanners, credit enquiry | [MARKET_DATA.md](references/MARKET_DATA.md) |
+| Subscribe real-time quotes, tick/bidask/quote/index callbacks, realtime KBar 即時K棒, SSE streams | [STREAMING.md](references/STREAMING.md) |
+| Subscribe enriched index data 即時加值資料: calculated index 自算指數, index/industry contribution 大盤/指數/產業貢獻 | [STREAMING_ENRICHED.md](references/STREAMING_ENRICHED.md) |
+| Subscribe market signals 市場訊號: price-limit alerts 漲跌停訊號, rapid price moves 急拉急殺, volume burst 爆量大單, simtrade/suspend status filter 試撮/暫停 | [STREAMING_SIGNALS.md](references/STREAMING_SIGNALS.md) |
+| **Historical** ticks, K-bars (date-range query 歷史K棒區間查詢), snapshots, ranking scanners 盤後排行 `api.scanners`, credit enquiry | [MARKET_DATA.md](references/MARKET_DATA.md) |
 | Account balance, margin, positions, P&L, settlements, limits | [ACCOUNTING.md](references/ACCOUNTING.md) |
 | Manage watchlists (CRUD, add/remove contracts) | [WATCHLIST.md](references/WATCHLIST.md) |
 | Non-blocking mode, quote binding, stop orders, advanced patterns | [ADVANCED.md](references/ADVANCED.md) |
+| Interpret an error code / error message the user received, order rejection reasons | [ERROR_CODES.md](references/ERROR_CODES.md) (+ [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md)) |
 | Errors, connection issues, troubleshooting | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md) |
+
+**Common confusions 容易混淆（選檔前先看）:**
+
+| Want 要的 | Not 不是 | Load |
+|---|---|---|
+| Realtime KBar push 即時K棒推送 (`QuoteType.KBar`, SSE `stream/data/kbar`) | Historical K-bars 歷史K棒查詢 (`api.kbars()`, `POST /api/v1/data/kbars`) | [STREAMING.md](references/STREAMING.md); historical → [MARKET_DATA.md](references/MARKET_DATA.md) |
+| Realtime signal push 即時訊號推送 (`subscribe_scanner`: 漲跌停/急變/爆量/試撮) | Ranking query 盤後排行查詢 (`api.scanners(ScannerType…)`) | [STREAMING_SIGNALS.md](references/STREAMING_SIGNALS.md); ranking → [MARKET_DATA.md](references/MARKET_DATA.md) |
+| KBar/enriched dedicated HTTP routes 專屬端點 (`/stream/subscribe/kbars`, `/stream/subscribe/calculated_index`, …) | Generic 通用 `/stream/subscribe` (tick/bidask/quote only) | [STREAMING.md](references/STREAMING.md) / [STREAMING_ENRICHED.md](references/STREAMING_ENRICHED.md) |
 
 ### Axis 2: What language/access method? / 語言或存取方式
 

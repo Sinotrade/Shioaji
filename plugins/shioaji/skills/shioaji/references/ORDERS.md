@@ -31,6 +31,13 @@ rules and `ComboTrade` status handling live in
 Before placing **production** orders, ensure CA is activated. Simulation orders skip CA signing automatically.
 正式環境下單前請確認已啟用憑證；模擬下單會自動跳過 CA 簽章。
 
+For HTTP orders, first inspect `/api/v1/info`. If
+`agent_harness.enabled=true`, follow
+[AGENT_HARNESS.md](AGENT_HARNESS.md) before place/update/cancel: serialize the
+body once, obtain approval from the trusted native broker, and send those exact
+bytes with its one-time capability. Capability acceptance does not replace the
+order-status reconciliation described below.
+
 ```python
 import shioaji as sj
 
@@ -48,8 +55,8 @@ api.activate_ca(
 
 ## Stock Orders 股票下單
 
-Python order examples below assume login is complete and contract files are ready. For full scripts, load contracts with `contracts_timeout` (sync) or `fetch_contracts()` (async), choose simulation/production intentionally, activate CA for production orders, and always inspect `trade.status.status` after `place_order()`.
-以下 Python 下單範例假設已完成登入且商品檔已載入。完整程式請用 `contracts_timeout`（sync）或 `fetch_contracts()`（async）載入商品檔，明確選擇 simulation/production，正式下單前啟用 CA，並在 `place_order()` 後檢查 `trade.status.status`。
+Python order examples below assume login is complete. Resolve a Base contract through `api.contracts.get()` and pass that Base directly to `place_order()`; Info is needed only when pricing/risk logic reads fields such as reference prices or limits. Contract V2 loads the required data lazily. Choose simulation/production intentionally, activate CA for production orders, and always inspect `trade.status.status` after `place_order()`.
+以下 Python 下單範例假設已完成登入。請透過 `api.contracts.get()` 取得 Base contract，並直接傳給 `place_order()`；只有定價或風控需要參考價、漲跌停等欄位時才查 Info。Contract V2 會按需載入所需資料。請明確選擇 simulation/production，正式下單前啟用 CA，並在 `place_order()` 後檢查 `trade.status.status`。
 
 `place_order()` returns a `Trade`, but the first returned status can be `PendingSubmit` (`傳送中`). Treat `PendingSubmit` as an intermediate state, not a final exchange acknowledgement. To know whether the order became `Submitted`, `Filled`, `PartFilled`, `Failed`, or `Cancelled`, prefer waiting for active order/deal reports first: Python order callbacks or HTTP order-event SSE. Use `api.update_status(trade=trade)` / `api.update_status(account)` when callbacks/SSE are unavailable, were missed, or a reconciliation check is needed.
 `place_order()` 會回 `Trade`，但第一次回來的狀態可能是 `PendingSubmit`（傳送中）。請把 `PendingSubmit` 視為中間狀態，不是交易所最終確認。若要知道是否變成 `Submitted`、`Filled`、`PartFilled`、`Failed` 或 `Cancelled`，優先等待主動委託/成交回報：Python order callback 或 HTTP order-event SSE。只有在無法使用 callback/SSE、疑似漏回報或需要對帳補查時，才用 `api.update_status(trade=trade)` / `api.update_status(account)`。
@@ -57,7 +64,9 @@ Python order examples below assume login is complete and contract files are read
 ### Basic Stock Order 基本股票下單
 
 ```python
-contract = api.Contracts.Stocks["2330"]
+contract = api.contracts.get("2330")
+if contract is None:
+    raise LookupError("contract 2330 not found")
 
 order = sj.StockOrder(
     price=580,
@@ -115,7 +124,7 @@ curl -X POST http://localhost:8080/api/v1/order/place_order \
 | `price_type` | PriceType | LMT/MKT/MKP 限價/市價/範圍市價 |
 | `order_type` | OrderType | ROD/IOC/FOK 委託條件 |
 | `order_lot` | OrderLot | Common/Odd/IntradayOdd/Fixing 交易單位 |
-| `order_cond` | OrderCond | Cash/MarginTrading/ShortSelling 信用條件 |
+| `order_cond` | OrderCond | Cash/MarginTrading/ShortSelling/SBLShort/SBLShortPriceExempt 信用條件 |
 | `account` | Account | Trading account 交易帳戶 |
 | `custom_field` | str | Memo (max 6 chars) 備註（最多6字元）|
 
@@ -164,7 +173,7 @@ order = sj.StockOrder(
 **Note 注意:** IntradayOdd orders cannot update price, only reduce quantity.
 盤中零股委託不能改價，只能減量。
 
-### Margin Trading 融資融券
+### Margin, Short Selling, and Securities Borrowing 融資、融券與借券
 
 ```python
 # Margin buy 融資買進
@@ -188,7 +197,43 @@ order = sj.StockOrder(
     order_cond=sj.StockOrderCond.ShortSelling,
     account=api.stock_account,
 )
+
+# Securities borrowing sell 借券賣出
+order = sj.StockOrder(
+    price=580,
+    quantity=1,
+    action=sj.Action.Sell,
+    price_type=sj.StockPriceType.LMT,
+    order_type=sj.OrderType.ROD,
+    order_cond=sj.StockOrderCond.SBLShort,
+    account=api.stock_account,
+)
+
+# Price-exempt securities borrowing sell 價格豁免借券賣出
+exempt_order = sj.StockOrder(
+    price=580,
+    quantity=1,
+    action=sj.Action.Sell,
+    price_type=sj.StockPriceType.LMT,
+    order_type=sj.OrderType.ROD,
+    order_cond=sj.StockOrderCond.SBLShortPriceExempt,
+    account=api.stock_account,
+)
 ```
+
+`SBLShort` is order type 5 (general strategic securities-borrowing and
+lending short sale). `SBLShortPriceExempt` is order type 6 (price-exempt
+SBL short sale for eligible special financial products). Both are distinct
+from `ShortSelling`, which means a margin short sale (融券賣出), and from the
+quote field `avail_borrowing` (available shares to borrow). Use them with
+`Action.Sell`; account eligibility, borrow position, product eligibility, and
+order validity are confirmed by the backend/exchange.
+
+`SBLShort` 是委託類別 5（一般策略性借券賣出）；
+`SBLShortPriceExempt` 是委託類別 6（適用特殊金融商品的價格豁免
+借券賣出）。兩者都不同於 `ShortSelling`（融券賣出），也不是行情欄位
+`avail_borrowing`（可借券數量）。請搭配 `Action.Sell`；帳戶資格、借券
+部位、商品資格與委託是否合法由後端／交易所確認。
 
 ### Day Trading 現股當沖
 
@@ -223,7 +268,9 @@ order = sj.StockOrder(
 ### Basic Futures Order 基本期貨下單
 
 ```python
-contract = api.Contracts.Futures["TXFC0"]  # Current month 近月
+contract = api.contracts.get("TXFR1")  # Continuous near month 連續近月
+if contract is None:
+    raise LookupError("contract TXFR1 not found")
 
 order = sj.FuturesOrder(
     price=18000,
@@ -301,7 +348,9 @@ HTTP accepts both `"New"` and `"NewPosition"` for compatibility, but Python expo
 
 ```python
 # Buy call option 買進買權
-contract = api.Contracts.Options["TXO202401C18000"]
+contract = api.contracts.get("TXO202401C18000")
+if contract is None:
+    raise LookupError("option contract not found")
 
 order = sj.FuturesOrder(
     price=100,
@@ -320,7 +369,9 @@ trade = api.place_order(contract, order)
 
 ```python
 # Sell put option 賣出賣權
-contract = api.Contracts.Options["TXO202401P17000"]
+contract = api.contracts.get("TXO202401P17000")
+if contract is None:
+    raise LookupError("option contract not found")
 
 order = sj.FuturesOrder(
     price=50,
