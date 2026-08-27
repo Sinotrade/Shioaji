@@ -578,7 +578,8 @@ that intentionally consumes only one event family.
 
 ```typescript
 declare function refreshAffectedContracts(change: unknown): Promise<void>;
-declare function refreshCalculatedIndexSnapshot(): Promise<void>;
+// Fetch the official index through POST /api/v1/data/snapshots.
+declare function refreshOfficialIndexSnapshot(): Promise<void>;
 
 // region/security_type filter contract_event only; market and derived events
 // on this same connection are unaffected.
@@ -604,7 +605,7 @@ es.addEventListener("contract_event", async (e) => {
 es.addEventListener("calculated_index_gap", async (e) => {
   const gap = JSON.parse(e.data);
   console.warn(`Dropped ${gap.dropped} calculated-index events`);
-  await refreshCalculatedIndexSnapshot();
+  await refreshOfficialIndexSnapshot();
 });
 
 es.addEventListener("heartbeat", (e) => {

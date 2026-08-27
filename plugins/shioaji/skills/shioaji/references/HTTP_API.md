@@ -292,6 +292,7 @@ All paths are prefixed with `/api/v1/` unless otherwise noted.
 | POST | `/api/v1/data/daily_quotes` | Yes | Get daily quotes |
 | POST | `/api/v1/data/credit_enquire` | Yes | Get credit enquiry data |
 | POST | `/api/v1/data/scanner` | Yes | Get scanner ranking data |
+| POST | `/api/v1/data/index_components` | Yes | Query authoritative full index-components state — [STREAMING_ENRICHED.md](STREAMING_ENRICHED.md) |
 | GET | `/api/v1/data/regulatory_punish` | Yes | Get regulatory punish data |
 | GET | `/api/v1/data/regulatory_notice` | Yes | Get regulatory notice data |
 | POST | `/api/v1/data/short_stock_sources` | Yes | Get short stock sources |
@@ -358,6 +359,8 @@ All stream data endpoints use Server-Sent Events (SSE). Connect with `Accept: te
 | POST | `/api/v1/stream/unsubscribe/index_contribution` | Yes | Unsubscribe index contribution |
 | POST | `/api/v1/stream/subscribe/industry_contribution` | Yes | Subscribe industry contribution |
 | POST | `/api/v1/stream/unsubscribe/industry_contribution` | Yes | Unsubscribe industry contribution |
+| POST | `/api/v1/stream/subscribe/index_components` | Yes | Subscribe one index-components projection — [STREAMING_ENRICHED.md](STREAMING_ENRICHED.md) |
+| POST | `/api/v1/stream/unsubscribe/index_components` | Yes | Unsubscribe the same index/projection pair |
 | POST | `/api/v1/stream/subscribe/scanner` | Yes | Subscribe market signal — [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md) |
 | POST | `/api/v1/stream/unsubscribe/scanner` | Yes | Unsubscribe market signal |
 | GET | `/api/v1/stream/receivers` | Yes | Get receiver info |
@@ -374,6 +377,7 @@ All stream data endpoints use Server-Sent Events (SSE). Connect with `Accept: te
 | GET | `/api/v1/stream/data/calculated_index` | Yes | Calculated index stream |
 | GET | `/api/v1/stream/data/index_contribution` | Yes | Index contribution stream |
 | GET | `/api/v1/stream/data/industry_contribution` | Yes | Industry contribution stream |
+| GET | `/api/v1/stream/data/index_components` | Yes | Typed index-components projection stream |
 | GET | `/api/v1/stream/data/scanner` | Yes | Market signal stream |
 | GET | `/api/v1/stream/data/order_event` | Yes | Order event data stream |
 | GET | `/api/v1/stream/data/contract_event` | Yes | Contract V2 change notifications; optional region/type filters |
@@ -1100,7 +1104,7 @@ data: {"code":"2330","close":"2235","volume":100,"intraday_odd":true, ...}
 - `tick_stk`, `bidask_stk`, `quote_stk` -- stock data
 - `tick_fop`, `bidask_fop`, `quote_fop` -- futures/options data
 - `quote_idx` -- index data (QUO-only, exchange/master contract code)
-- `calculated_index`, `index_contribution`, `industry_contribution` -- enriched index data
+- `calculated_index`, `index_contribution`, `industry_contribution`, `index_components` -- enriched index data
 - `kbar` -- realtime stock KBar
 - `scanner` -- market signals
 - `order_event` -- order and deal events
@@ -1141,6 +1145,7 @@ a change signal: re-query the relevant Contract V2 endpoint for current data.
 | `/api/v1/stream/data/calculated_index` | `calculated_index` | Calculated index data |
 | `/api/v1/stream/data/index_contribution` | `index_contribution` | Index contribution data |
 | `/api/v1/stream/data/industry_contribution` | `industry_contribution` | Industry contribution data |
+| `/api/v1/stream/data/index_components` | `index_components` | Index-components projection data |
 | `/api/v1/stream/data/kbar` | `kbar` | Realtime stock KBar data |
 | `/api/v1/stream/data/scanner` | `scanner` | Market signal data |
 | `/api/v1/stream/data/order_event` | `order_event` | Order/deal events |

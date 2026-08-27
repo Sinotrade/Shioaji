@@ -7,7 +7,9 @@ description: |
   JS/TS, Go, C/C++, C#, Rust, Java/Kotlin HTTP clients. Covers TWSE/TPEX/TAIFEX
   orders, quotes, Contract V2 lazy lookup/update events, market data, realtime
   KBar 即時K棒, enriched index data 即時加值資料 (calculated index 自算指數,
-  index/industry contribution 指數貢獻/產業貢獻), market signals 市場訊號
+  authoritative index components 指數成分查詢, index-components rankings/group
+  projections 成分股排行與產業群組投影, legacy index/industry contribution
+  指數貢獻/產業貢獻), market signals 市場訊號
   (price-limit/rapid-move/volume-burst alerts 漲跌停/急拉急殺/爆量, simtrade
   試撮 filter), accounts, watchlists, reserve orders, setup,
   migration, and troubleshooting. Trigger keywords include shioaji, sj, sinopac,
@@ -88,7 +90,7 @@ Routing rule: choose the functional reference first, then add the access-method 
 | Build or enumerate combo contracts with `api.contracts.combo_futures`; validate managed `BaseContract` vs legacy directed `ComboBase` legs; subscribe/query futures combo market data; place, price, cancel, or troubleshoot combo orders; derive canonical leg order/actions and `combo_type`; use `update_combostatus` / `list_combotrades` | [COMBO_ORDERS.md](references/COMBO_ORDERS.md) |
 | Reserve shares for disposition/attention stocks | [RESERVE.md](references/RESERVE.md) |
 | Subscribe real-time quotes, tick/bidask/quote/index callbacks, realtime KBar 即時K棒, SSE streams | [STREAMING.md](references/STREAMING.md) |
-| Subscribe enriched index data 即時加值資料: calculated index 自算指數, index/industry contribution 大盤/指數/產業貢獻 | [STREAMING_ENRICHED.md](references/STREAMING_ENRICHED.md) |
+| Query authoritative index components or subscribe enriched index data 即時加值資料: calculated index 自算指數, index-components rankings/group projections 成分股排行與產業群組投影, legacy index/industry contribution | [STREAMING_ENRICHED.md](references/STREAMING_ENRICHED.md) |
 | Subscribe market signals 市場訊號: price-limit alerts 漲跌停訊號, rapid price moves 急拉急殺, volume burst 爆量大單, simtrade/suspend status filter 試撮/暫停 | [STREAMING_SIGNALS.md](references/STREAMING_SIGNALS.md) |
 | **Historical** ticks, K-bars (date-range query 歷史K棒區間查詢), snapshots, ranking scanners 盤後排行 `api.scanners`, credit enquiry | [MARKET_DATA.md](references/MARKET_DATA.md) |
 | Account balance, margin, positions, P&L, settlements, limits | [ACCOUNTING.md](references/ACCOUNTING.md) |

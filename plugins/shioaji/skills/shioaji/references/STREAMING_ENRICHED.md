@@ -1,155 +1,310 @@
 # Enriched Market Data 即時加值資料
 
-Enriched market data is computed in real time by the quote engine from raw index/constituent feeds. It reuses the regular streaming subscription call — `api.subscribe(contract, quote_type=...)` — with dedicated `QuoteType` values. Without a callback, each event default-prints its repr; otherwise register a per-type callback (decorator or traditional) or pull from a receiver. HTTP uses **dedicated lifecycle routes per capability**, not the generic `/stream/subscribe`.
+Enriched market data is computed from raw index and constituent feeds. Use
+`api.index_components(index)` for the authoritative constituents query. For a
+point-in-time official index value, use the existing `api.snapshots([index])`
+query. Realtime enriched values reuse `api.subscribe(contract, quote_type=...)`
+with dedicated `QuoteType` values. HTTP uses dedicated query and lifecycle
+routes, not generic `/stream/subscribe`.
 
-即時加值資料是行情引擎依原始指數／成分股行情即時運算的加值產物，沿用一般即時行情的 `api.subscribe(contract, quote_type=...)`，各有專屬 `QuoteType`。未設 callback 時事件以 repr 預設印出；否則用各型別的 callback（decorator 或傳統式）或 receiver 接收。HTTP 走**各能力專屬的 lifecycle 路由**，不是通用 `/stream/subscribe`。
+即時加值資料由指數與成分股行情運算而成。成分股權威狀態使用
+`api.index_components(index)`；指數當下值使用既有
+`api.snapshots([index])` 官方報價查詢。即時加值資料沿用
+`api.subscribe(contract, quote_type=...)`。HTTP 使用各能力專屬的查詢與生命週期路由。
 
-> Realtime `QuoteType.KBar` is regular per-stock streaming — see [STREAMING.md](STREAMING.md). Market-wide signal alerts are [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md).
-> 即時 KBar 屬一般證券即時行情，見 [STREAMING.md](STREAMING.md)；全市場訊號見 [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md)。
-
-## Table of Contents 目錄
-
-- [Capability Matrix 能力矩陣](#capability-matrix-能力矩陣)
-- [Delivery Matrix 接收管道](#delivery-matrix-接收管道)
-- [Constraints 約束規則](#constraints-約束規則產生程式前必查)
-- [Minimal Examples 最小範例](#minimal-examples-最小範例)
-- [Python Callbacks 行情回調](#python-callbacks-行情回調)
-- [Attributes Reference 屬性參考](#attributes-reference-屬性參考)
-- [Response and Decision Summary 回應與決策摘要](#response-and-decision-summary-回應與決策摘要)
+> Realtime `QuoteType.KBar` is regular per-stock streaming; see
+> [STREAMING.md](STREAMING.md). Market-wide signals are in
+> [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md).
 
 ## Capability Matrix 能力矩陣
 
-| QuoteType | Contract target 訂閱標的（強制檢查） | Supported scope 支援範圍 | Cadence 推送頻率 |
+| QuoteType | Required target | Supported scope | Cadence |
 |---|---|---|---|
-| `CalculatedIndex` | Index 指數 | only `IX0001` 加權, `IX0043` 櫃買 | multiple per second 一秒可多筆 |
-| `IndexContribution` | Index 指數 | only `IX0001`, `IX0043` | once per second 每秒一次 |
-| `IndustryContribution` | Index 指數 | only `IX0001`, `IX0043` | once per second 每秒一次 |
+| `CalculatedIndex` | Index | `IX0001/TSE`, `IX0043/OTC` | multiple per second |
+| `IndexContribution` | Index | `IX0001/TSE`, `IX0043/OTC` | 1 second |
+| `IndustryContribution` | Index | `IX0001/TSE`, `IX0043/OTC` | 1 second |
+| `IndexComponents` | Index | `IX0001/TSE`, `IX0043/OTC` | market/group 1 second; within-group ranking 5 seconds |
 
-## Delivery Matrix 接收管道
+The first three rows are the released 1.7.3 stream surface and remain
+compatible. `IndexComponents` query and projections are available in 1.7.4.
 
-| QuoteType | Callback (traditional / decorator) | Receiver | HTTP subscribe (POST `/api/v1/…`) | SSE channel (GET `/api/v1/stream/data/…`) |
-|---|---|---|---|---|
-| `CalculatedIndex` | `set_on_calculated_index_callback` / `@api.on_calculated_index()` | `get_calculated_index_receiver()` | `/stream/subscribe/calculated_index` `{"index":<StreamContract>}` | `calculated_index` |
-| `IndexContribution` | `set_on_index_contribution_callback` / `@api.on_index_contribution()` | `get_index_contribution_receiver()` | `/stream/subscribe/index_contribution` `{"index":…,"ranking":"top10"}` | `index_contribution` |
-| `IndustryContribution` | `set_on_industry_contribution_callback` / `@api.on_industry_contribution()` | `get_industry_contribution_receiver()` | `/stream/subscribe/industry_contribution` `{"index":<StreamContract>}` | `industry_contribution` |
-
-`<StreamContract>` = `{"security_type":"IND","exchange":"TSE","code":"IX0001","target_code":null}`.
-
-## Constraints 約束規則（產生程式前必查）
-
-- **Target enforced 標的強制**: each `QuoteType` only accepts the contract type listed in the Capability Matrix's "Contract target" column. A mismatched contract raises (e.g. `calculated index requires IND contract`).
-  各 `QuoteType` 依能力矩陣「訂閱標的」欄強制檢查，帶錯直接報錯。
-- **`ranking`**: required (keyword-only) for `QuoteType.IndexContribution`; passing it with any other `quote_type` raises. Closed set: `ContributionRanking.Top10/Abs10/Positive25/Negative25`, wire values `top10/abs10/positive25/negative25`.
-  `ranking` 僅限且必填於 `QuoteType.IndexContribution`，其他 `quote_type` 帶了就報錯；值域封閉。
-- **`intraday_odd` / `version`**: rejected for every enriched type. 所有加值型別一律拒絕。
-- **CLI unsupported**: `shioaji data stream` rejects enriched types; Python and HTTP only.
-  CLI 不支援即時加值資料，僅 Python／HTTP 可用。
-- **HTTP subscribe response** is `{"success": bool, "message": str}` (`CapabilitySubscriptionResponse`) — there is **no `subscription` field**. Do not reuse the generic `/stream/subscribe` response shape in clients.
-  HTTP 訂閱回應沒有 `subscription` 欄位，不要沿用通用 `/stream/subscribe` 的回應形狀。
-- **Unsubscribe**: HTTP posts the same body to `/stream/unsubscribe/{capability}`; Python calls `api.unsubscribe(...)` with the same arguments.
-  取消訂閱：HTTP 相同 body 打對應 unsubscribe 路由；Python 同參數呼叫 `api.unsubscribe(...)`。
-
-## Minimal Examples 最小範例
+## Authoritative Queries 權威查詢
 
 ```python
+taiex = api.contracts.get("IX0001")
+
+components = api.index_components(taiex)
+official_index = api.snapshots([taiex])[0]
+
+# Async client uses the same method names.
+components = await async_api.index_components(taiex)
+```
+
+These calls do not subscribe. `index_components()` performs one authoritative
+request without cache, retry, pagination, or callbacks and returns the complete
+constituent and industry-group snapshot. Python financial fields are `Decimal`;
+ISO fields become native `date`, `time`, and timezone-aware `datetime` values.
+
+HTTP query routes:
+
+```text
+POST /api/v1/data/index_components
+```
+
+`index_components` body is `{"contract": <ContractRequest>}`. The response
+contains root `contract`, session/reference context, `market_phase`,
+`refresh_state`, classification and weight method, `total_amount`, complete
+`entries`, and complete industry `groups`.
+
+Each constituent entry contains a `BaseContract`, category, price/reference,
+change/percentage/points, exact weight and activity allocations,
+price/trading/data status, and optional `source_at`. Each group contains its
+name/count, equal- and reference-weighted performance, contribution points,
+weight/activity allocations, advance/decline/unchanged counts, and breadth.
+
+## Streaming Delivery Matrix 串流接收管道
+
+| QuoteType | Callback | Receiver | HTTP lifecycle | Dedicated SSE |
+|---|---|---|---|---|
+| `CalculatedIndex` | `on_calculated_index` | `get_calculated_index_receiver` | `calculated_index` | `calculated_index` |
+| `IndexContribution` | `on_index_contribution` | `get_index_contribution_receiver` | `index_contribution` | `index_contribution` |
+| `IndustryContribution` | `on_industry_contribution` | `get_industry_contribution_receiver` | `industry_contribution` | `industry_contribution` |
+| `IndexComponents` | `on_index_components` | `get_index_components_receiver` | `index_components` | `index_components` |
+
+HTTP lifecycle routes are
+`POST /api/v1/stream/{subscribe|unsubscribe}/{capability}`. Dedicated SSE routes
+are `GET /api/v1/stream/data/{capability}`. The aggregate
+`GET /api/v1/stream/data` continues to emit every subscribed capability.
+
+## Subscription Constraints 約束規則
+
+- The index must be Contract V2 `TW/TSE/IND IX0001` or `TW/OTC/IND IX0043`.
+  Unsupported identity is rejected before broker work.
+- `ranking` is required and keyword-only for legacy
+  `QuoteType.IndexContribution`; other quote types reject it.
+- `projection` is required and keyword-only for
+  `QuoteType.IndexComponents`; other quote types reject it.
+- Derived quote types reject `intraday_odd` and `version`.
+- Subscribe and unsubscribe use the same `(index, projection)` pair. Repeated
+  operations are idempotent and projections are independent.
+- The CLI `shioaji data stream` does not expose enriched streams; use Python or
+  HTTP/SSE.
+- HTTP subscribe/unsubscribe returns `{"success": bool, "message": str}`.
+
+`IndexComponentsProjection` is an immutable tagged value built through one of
+three target-specific factories:
+
+```python
+IndexComponentsProjection.group_metric(metric)
+IndexComponentsProjection.component_ranking(metric, order, limit, group=None)
+IndexComponentsProjection.group_ranking(metric, order, limit)
+```
+
+Component metrics are `Contribution`, `PctChange`, `Weight`, `Amount`, and
+`AmountShare`. Group metrics are `Contribution`, `EqualWeightPerformance`,
+`WeightedPerformance`, `Weight`, `Amount`, `AmountShare`, and `Breadth`.
+Orders are `Desc`, `Asc`, `AbsDesc`, `PositiveDesc`, and `NegativeAsc`.
+Projection values expose read-only `kind`, `target`, `metric`, `order`,
+`limit`, and `group` properties, so callbacks can inspect a dynamic
+projection without parsing its `value` or topic suffix.
+
+The published streaming matrix is exact; other combinations are rejected:
+
+| Factory/target | Metric | Supported order / limit |
+|---|---|---|
+| `group_metric` | all 7 group metrics | no order or limit; emits every group |
+| `component_ranking` | `Contribution`, `PctChange` | `Desc/10`, `AbsDesc/10`, `PositiveDesc/25`, `NegativeAsc/25` |
+| `component_ranking` | `Weight`, `Amount` | `Desc/10` |
+| `component_ranking` | `AmountShare` | not published |
+| `component_ranking(group=...)` | `Contribution` | `AbsDesc/10` |
+| `component_ranking(group=...)` | `Amount` | `Desc/10` |
+| `component_ranking(group=...)` | `PctChange`, `Weight`, `AmountShare` | not published |
+| `group_ranking` | `Contribution`, `EqualWeightPerformance`, `WeightedPerformance`, `Breadth` | `AbsDesc/10` |
+| `group_ranking` | `Weight`, `Amount` | `Desc/10` |
+| `group_ranking` | `AmountShare` | not published |
+
+`AmountShare` ranking is omitted because it orders identically to `Amount`
+within one snapshot. Python projection factories reject unpublished
+combinations immediately with `ValueError`; `subscribe()` and `unsubscribe()`
+also repeat the validation before any broker operation. Every Python validation
+error includes the supported order/limit pairs.
+HTTP subscribe and unsubscribe validate the same matrix and return `400` with
+the same supported-pairs message. Invalid enum/tagged-union shapes are request
+validation errors rather than subscription attempts.
+
+Within-group topics exist only for group category IDs present in that index's
+authoritative `index_components()` snapshot. Use `snapshot.groups` to discover
+the valid IDs; the category is the stable topic identity and its display name
+does not enter the subscription key.
+
+## Query-to-Stream Projection Mapping 查詢至串流投影映射
+
+The authoritative query is a superset of every streaming projection. Applying
+a projection to one `index_components()` snapshot produces the
+stream-equivalent initial state for that projection; the financial metrics are
+already calculated in the query and must not be recomputed from prices.
+
+Public stream `value` maps from query fields as follows:
+
+| Projection metric | Query field or conversion |
+|---|---|
+| component `Contribution` | `entry.points` |
+| component `PctChange` | `entry.pct_chg` |
+| component `Weight` | `Decimal(entry.reference_weight_ppm) / 10_000` percent |
+| component `Amount` | `Decimal(entry.total_amount)` |
+| component `AmountShare` | `Decimal(entry.amount_share_bps) / 100` percent |
+| group `Contribution` | `group.points` |
+| group `EqualWeightPerformance` | `group.equal_weight_pct_chg` |
+| group `WeightedPerformance` | `group.weighted_pct_chg` |
+| group `Weight` | `Decimal(group.reference_weight_ppm) / 10_000` percent |
+| group `Amount` | `Decimal(group.total_amount)` |
+| group `AmountShare` | `Decimal(group.amount_share_bps) / 100` percent |
+| group `Breadth` | `Decimal(group.breadth_bps) / 100` percent |
+
+`group_metric(metric)` maps every query group to `{category, name, item_count,
+value}` using the selected row above. A ranking projection uses this exact
+pipeline:
+
+1. Start with all query entries for a component ranking or all query groups for
+   a group ranking. When component `group` is present, first keep entries whose
+   `category` equals it.
+2. Map the selected metric to `value` using the table above.
+3. For `PositiveDesc`, keep only `value > 0`; for `NegativeAsc`, keep only
+   `value < 0`. The other orders do not apply a sign filter.
+4. Sort `Desc` and `PositiveDesc` by `value` descending, `Asc` and
+   `NegativeAsc` by `value` ascending, and `AbsDesc` by `abs(value)` descending.
+   Break equal sort keys by component `contract.code` or group `category`,
+   ascending.
+5. Keep the first `limit` rows.
+
+Component ranking rows use `entry.contract.code` as `code` and copy category,
+price/reference/change, reference weight, and status fields from the query
+entry. Group rows copy category, name, and item count. Event-level contract and
+session/reference context have the same meanings as their query counterparts.
+This mapping describes initialization and reconciliation semantics; it does not
+change the published projection matrix above.
+
+## Python Examples
+
+```python
+import shioaji as sj
+
 taiex = api.contracts.get("IX0001")
 api.subscribe(taiex, quote_type=sj.QuoteType.CalculatedIndex)
 api.subscribe(
     taiex,
     quote_type=sj.QuoteType.IndexContribution,
-    ranking=sj.ContributionRanking.Top10,                        # required here only
+    ranking=sj.ContributionRanking.Top10,
 )
 api.subscribe(taiex, quote_type=sj.QuoteType.IndustryContribution)
+api.subscribe(
+    taiex,
+    quote_type=sj.QuoteType.IndexComponents,
+    projection=sj.IndexComponentsProjection.component_ranking(
+        sj.IndexComponentsComponentMetric.PctChange,
+        sj.IndexComponentsRankingOrder.AbsDesc,
+        10,
+    ),
+)
+
+# Highest absolute contributors within industry category 24.
+api.subscribe(
+    taiex,
+    quote_type=sj.QuoteType.IndexComponents,
+    projection=sj.IndexComponentsProjection.component_ranking(
+        sj.IndexComponentsComponentMetric.Contribution,
+        sj.IndexComponentsRankingOrder.AbsDesc,
+        10,
+        group="24",
+    ),
+)
+
+# Industries whose contribution has the largest absolute magnitude.
+api.subscribe(
+    taiex,
+    quote_type=sj.QuoteType.IndexComponents,
+    projection=sj.IndexComponentsProjection.group_ranking(
+        sj.IndexComponentsGroupMetric.Contribution,
+        sj.IndexComponentsRankingOrder.AbsDesc,
+        10,
+    ),
+)
 ```
+
+```python
+from shioaji import IndexComponentsGroupUpdate, IndexComponentsRankingUpdate
+
+@api.on_index_components()
+def on_index_components(
+    update: IndexComponentsRankingUpdate | IndexComponentsGroupUpdate,
+):
+    print(update)
+
+# Equivalent setter and clear operations:
+api.set_on_index_components_callback(on_index_components)
+api.clear_on_index_components_callback()
+```
+
+With `bind=False`, the callback receives only `update`. With `bind=True`, the
+existing context is prepended: `(context, update)`. Async clients use the same
+names with `async def`. Pull consumers use `get_index_components_receiver()`
+and `await recv()` or `try_recv()`.
+
+HTTP example:
 
 ```bash
-curl -X POST localhost:8080/api/v1/stream/subscribe/calculated_index -H 'Content-Type: application/json' \
-  -d '{"index":{"security_type":"IND","exchange":"TSE","code":"IX0001","target_code":null}}'
-curl -N localhost:8080/api/v1/stream/data/calculated_index
+curl -X POST localhost:8080/api/v1/stream/subscribe/index_components \
+  -H 'Content-Type: application/json' \
+  -d '{"index":{"security_type":"IND","exchange":"TSE","code":"IX0001","target_code":null},"projection":{"kind":"ranking","target":"group","metric":"contribution","order":"abs_desc","limit":10}}'
+curl -N localhost:8080/api/v1/stream/data/index_components
 ```
 
-## Python Callbacks 行情回調
+## IndexComponents Event Models
 
-```python
-from shioaji import CalculatedIndex, IndexContribution, IndustryContribution
+The callback/SSE event is either `IndexComponentsRankingUpdate` or
+`IndexComponentsGroupUpdate`. Both contain:
 
-# Decorator syntax 裝飾器語法
-@api.on_calculated_index()
-def on_calculated_index(idx: CalculatedIndex):
-    print(idx)
-
-@api.on_index_contribution()
-def on_index_contribution(ic: IndexContribution):
-    print(ic)
-
-@api.on_industry_contribution()
-def on_industry_contribution(ind: IndustryContribution):
-    print(ind)
-
-# Setter syntax 設定器語法（equivalent 等同）
-api.set_on_calculated_index_callback(on_calculated_index)
-api.set_on_index_contribution_callback(on_index_contribution)
-api.set_on_industry_contribution_callback(on_industry_contribution)
-
-# Clear 清除
-api.clear_on_calculated_index_callback()
-api.clear_on_index_contribution_callback()
-api.clear_on_industry_contribution_callback()
+```text
+contract, projection, date, time, calculated_at, reference_date,
+market_phase, simtrade
 ```
 
-Async (`ShioajiAsync`) uses the same names with `async def` callbacks. Receivers: `get_calculated_index_receiver()` / `get_index_contribution_receiver()` / `get_industry_contribution_receiver()` with `await recv()` / `try_recv()`.
-Async 同名、callback 改 `async def`。Receiver 三個同名 getter，`await recv()`／`try_recv()`。
+Component-ranking updates add ordered `entries` with code, category, selected
+metric `value`, price/reference, price and percentage change, reference weight,
+and status fields. Group updates add `unit` and ordered
+`{category, name, item_count, value}` groups. The projection determines whether
+the unit is points, percent, weight, currency amount, amount share, or breadth.
+Complete group metrics contain every group; group rankings contain at most the
+requested limit.
 
-## Attributes Reference 屬性參考
+Each event is a complete replacement for one `(index, projection)`. There is no
+delta, generation, sequence, replay, retained-message, or cross-projection
+atomicity guarantee. `event: index_components` is used by both aggregate and
+dedicated SSE; `projection` identifies the variant.
 
-Python objects have `to_dict()` and full reprs. Field names verified from live captures; SSE JSON uses the same names. Dates are `YYYY/MM/DD` strings, times `HH:MM:SS.ffffff` strings.
-Python 物件皆有 `to_dict()` 與完整 repr，欄位名皆經實測；SSE JSON 欄位名相同。日期／時間皆為字串。
+If immediate state is required:
 
-### CalculatedIndex Attributes 自算指數屬性
+1. Subscribe first.
+2. Call `index_components()`.
+3. Keep whichever state has the newer `calculated_at`.
 
-```python
-idx.code               # str: Index code 指數代碼
-idx.date               # str: Date 日期
-idx.time               # str: Time 時間
-idx.open               # float: Open 開盤指數
-idx.high               # float: High 最高指數
-idx.low                # float: Low 最低指數
-idx.close              # float: Latest value 最新指數
-idx.total_amount       # int: Cumulative turnover 累計成交金額 (NTD)
-idx.price_chg          # float: Price change 漲跌
-idx.pct_chg            # float: Percent change 漲跌幅 (%)
-idx.simtrade           # bool: Simulated trading 試撮
-```
+Subscription does not secretly issue a query. Query is the authoritative
+recovery path after reconnect or an SSE gap.
 
-### IndexContribution Attributes 指數貢獻屬性
+## Legacy 1.7.3 Stream Models
 
-```python
-ic.ranking             # ContributionRanking: 排行方式
-ic.code                # str: Index code 指數代碼
-ic.date                # str: Date 日期
-ic.time                # str: Time 時間
-ic.entries             # list[dict]: 貢獻排行清單，每筆
-                       #   {code, price, reference, price_chg, pct_chg, points}
-ic.simtrade            # bool: Simulated trading 試撮
-```
-
-### IndustryContribution Attributes 產業貢獻屬性
-
-```python
-ind.code               # str: Index code 指數代碼
-ind.date               # str: Date 日期
-ind.time               # str: Time 時間
-ind.entries            # list[dict]: 產業貢獻清單，每筆 {category, points}
-                       #   category = exchange industry code 交易所產業類別代碼
-ind.simtrade           # bool: Simulated trading 試撮
-ind.index_close        # float: Latest index value 最新指數
-ind.index_price_chg    # float: Index change 指數漲跌；entries 的 points 加總＝此值
-```
+The existing `CalculatedIndex`, `IndexContribution`, and
+`IndustryContribution` callbacks, receivers, subscriptions, SSE routes, event
+shapes, and topic bytes remain compatible. `ContributionRanking` still has
+`Top10`, `Abs10`, `Positive25`, and `Negative25`. These legacy stream events are
+independent from the new index-components update classes.
 
 ## Response and Decision Summary 回應與決策摘要
 
-| Operation | Python | HTTP | Agent decision |
-|---|---|---|---|
-| Subscribe enriched | `api.subscribe(contract, quote_type=…)`; events default-print unless a callback/receiver is attached | `POST /stream/subscribe/{capability}` → `{success, message}` | `success=false` or an exception → check contract target type, supported codes (`IX0001`/`IX0043`), and `ranking` rules before retrying. No output after subscribe usually means market closed, not failure. |
-| Consume events | per-type callback / decorator / receiver | `GET /stream/data/{channel}` SSE; heartbeat ≠ data | Parse `event:` name first. Heartbeat-only outside trading hours is normal, not broken. |
-| Unsubscribe | same args to `api.unsubscribe(...)` | same body to `/stream/unsubscribe/{capability}` | Treat `success=true` as accepted. |
+| Operation | Decision |
+|---|---|
+| Query components | `api.index_components(index)` is one authoritative request. `state_not_ready`/503 is retryable; 429 means the daily data-usage quota is exhausted. Do not poll continuously. |
+| Subscribe | Check contract identity and required `ranking`/`projection` first. `success=false` is not a subscription. |
+| No events | Heartbeat-only outside trading hours is normal. It does not prove a failed subscription. |
+| Reconnect/gap | Re-query `index_components()` and replace local state; do not expect replay. |
+| Unsubscribe | Send the same index plus ranking/projection; `success=true` means accepted. |
