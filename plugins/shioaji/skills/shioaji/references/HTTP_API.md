@@ -113,7 +113,8 @@ Configure the server via environment variables:
 | `SJ_HTTP_TLS_KEY` | (none) | PEM private-key path; set together with `SJ_HTTP_TLS_CERT` |
 | `SJ_HTTP3` | `false` | Also enable HTTP/3 over QUIC; requires static TLS or ACME and UDP on the bind port |
 | `SJ_AGENT_HARNESS` | `off` | Mutation capability enforcement: `off`, `production`, or `all` |
-| `SJ_AGENT_HARNESS_SECRET` | (required when active) | Shared daemon/native-broker signing secret, at least 32 bytes; never expose to an agent or WebView |
+| `SJ_AGENT_HARNESS_BOOTSTRAP` | `environment` | `one_shot_ipc` selects trusted launcher stdin-pipe bootstrap; effective source is advertised in `agent_harness.bootstrap` |
+| `SJ_AGENT_HARNESS_SECRET` | (required for environment bootstrap) | Legacy development/simulation secret, at least 32 bytes; must be absent for `one_shot_ipc` |
 | `SJ_AGENT_HARNESS_INITIAL_ENABLED` | `true` | Initial runtime enforcement state for an installed verifier; trusted hosts may start paused and switch it without restarting |
 | `SJ_HTTP_ACME_DOMAINS` | (none) | Comma-separated public DNS names; enables ACME TLS-ALPN-01 |
 | `SJ_HTTP_ACME_CONTACTS` | (none) | Comma-separated contact emails or URIs for ACME |

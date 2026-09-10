@@ -9,7 +9,8 @@ functional references continue to own order payloads and response decisions.
 
 The caller is a **capability consumer**. A trusted native approval broker is the
 **signing authority** and is the only component that receives
-`SJ_AGENT_HARNESS_SECRET`.
+the signing secret. A native launcher delivers it through one-shot IPC;
+environment bootstrap is a legacy development/simulation path.
 
 - Keep the signing secret inside the daemon/native broker boundary.
 - Give the trusted broker the exact mutation proposal and exact serialized HTTP
@@ -31,7 +32,10 @@ and report that execution is blocked.
 
 1. Fetch `GET /api/v1/info`. Confirm `simulation` and inspect
    `agent_harness.enabled`, `mode`, `audience`, `capability_version`,
-   `digest_scheme`, and `max_ttl_seconds`.
+   `digest_scheme`, `bootstrap`, and `max_ttl_seconds`.
+   - Production requires `bootstrap="one_shot_ipc"` plus the trusted host's
+     production approval policy. Missing, unknown, or `environment` bootstrap
+     means stop; do not downgrade to environment-secret signing.
    - `enabled=true`: use the capability workflow below.
    - `enabled=false` with a non-null `audience`: the verifier is installed but
      runtime enforcement is paused. An agent that may trade asks the trusted
@@ -165,6 +169,17 @@ initially unless `SJ_AGENT_HARNESS_INITIAL_ENABLED=false`; a trusted native host
 can then switch it without restarting. An agent may explain this setup, but the
 trusted operator/native broker performs it:
 
+For a native host, use `SJ_AGENT_HARNESS_BOOTSTRAP=one_shot_ipc` and an inherited
+anonymous stdin pipe containing `SJAHIPC1` + 64 ASCII hex secret bytes + EOF.
+Generate a fresh 32-byte random secret (hex-encoded) per owned sidecar generation,
+remove `SJ_AGENT_HARNESS_SECRET`, and verify the reported bootstrap before
+starting providers. This protocol belongs inside the trusted launcher, never
+an agent shell. It does not protect against debugger/process-memory access;
+OS/provider isolation and native exact-body approval remain required.
+
+The following environment example is for development/simulation compatibility
+only; process environments can be inspected by a same-user agent:
+
 ```bash
 export SJ_AGENT_HARNESS=all
 export SJ_AGENT_HARNESS_SECRET="$(openssl rand -hex 32)"
@@ -201,8 +216,9 @@ The wire value is `sj1_` followed by lowercase hex for this fixed record:
 | 32 | keyed-BLAKE3 tag over every preceding byte |
 
 Derive the 32-byte tag key with BLAKE3 `derive_key`, context
-`shioaji-agent-harness compact capability v1`, and the exact UTF-8 bytes of
-`SJ_AGENT_HARNESS_SECRET`. The server verifies the tag before reading the body,
+`shioaji-agent-harness compact capability v1`, and the exact secret bytes from
+the selected bootstrap (the 64 ASCII hex bytes for IPC, not hex-decoded bytes).
+The server verifies the tag before reading the body,
 then checks every binding and atomically consumes the nonce. A daemon restart
 changes the audience, invalidating capabilities minted for the previous process.
 The consumed nonce remains reserved through the full expiry plus clock-skew

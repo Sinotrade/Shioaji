@@ -2,7 +2,7 @@
 name: shioaji
 description: |
   Use for Shioaji, SJ, SinoPac (永豐金), Taiwan market trading/API tasks, or
-  broad order/trading requests where Shioaji may apply. Covers Python sync/async
+  order/trading requests where Shioaji may apply. Covers Python sync/async
   bindings, `shioaji` CLI, HTTP API, SSE streaming, dashboard embedding, and
   JS/TS, Go, C/C++, C#, Rust, Java/Kotlin HTTP clients. Covers TWSE/TPEX/TAIFEX
   orders, quotes, Contract V2 lazy lookup/update events, market data, realtime
@@ -12,7 +12,7 @@ description: |
   指數貢獻/產業貢獻), market signals 市場訊號
   (price-limit/rapid-move/volume-burst alerts 漲跌停/急拉急殺/爆量, simtrade
   試撮 filter), accounts, watchlists, reserve orders, setup,
-  migration, and troubleshooting. Trigger keywords include shioaji, sj, sinopac,
+  migration, and troubleshooting. Keywords: shioaji, sj, sinopac,
   永豐金, 台股, 下單, 交易, 即時行情, shioaji server, and SSE streaming.
   For first-time users, start with account/API onboarding gates before local
   installation or code. Not for US/HK markets or generic indicators unless
@@ -98,6 +98,7 @@ Routing rule: choose the functional reference first, then add the access-method 
 | Non-blocking mode, quote binding, stop orders, advanced patterns | [ADVANCED.md](references/ADVANCED.md) |
 | Interpret an error code / error message the user received, order rejection reasons | [ERROR_CODES.md](references/ERROR_CODES.md) (+ [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md)) |
 | Errors, connection issues, troubleshooting | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md) |
+| Inspect Server dashboard request rates, per-endpoint latency/errors, desired subscriptions versus physical topics, or configure Parquet monitoring history | [OBSERVABILITY.md](references/OBSERVABILITY.md) |
 
 **Common confusions 容易混淆（選檔前先看）:**
 
