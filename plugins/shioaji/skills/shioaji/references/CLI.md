@@ -157,6 +157,8 @@ shioaji data ticks --code 2330 -f toon
 |----------|-------------|
 | `SJ_PRODUCTION` | Enable production mode (default: false, simulation) |
 | `SJ_HTTP_ADDR` | Server bind address (default: 127.0.0.1:8080) |
+| `SJ_HTTP_AUTH` | `true` requires the Bearer API key even on localhost (same as `shioaji server --auth`); the CLI sends it automatically to a local daemon |
+| `SJ_HTTP_ALLOWED_ORIGINS` | Extra comma-separated browser origins allowed by the localhost cross-site guard |
 | `SJ_HTTP_CORS` | Enable CORS (default: true) |
 | `SJ_HTTP_CORS_ORIGINS` | Comma-separated browser origins allowed by CORS (defaults to Tauri and localhost dev origins) |
 | `SJ_HTTP_TIMEOUT` | HTTP request timeout in seconds (default: 30) |
@@ -314,12 +316,14 @@ shioaji server start
 shioaji server start --production
 shioaji server start --prod        # visible alias
 shioaji server start --no-open     # do not auto-open browser
+shioaji server start --auth        # require Bearer API key even on localhost
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--production` / `--prod` | Run in production mode (default: simulation). Also settable via `SJ_PRODUCTION` env var |
 | `--no-open` | Do not auto-open the dashboard/API docs browser window |
+| `--auth` | Require `Authorization: Bearer SJ_API_KEY:SJ_SEC_KEY` even on a localhost bind (same as `SJ_HTTP_AUTH=true`). Without it, localhost needs no key but rejects cross-site browser requests with 403 |
 
 TLS and protocol selection are configured through environment variables, not
 additional `server start` flags. Static TLS enables HTTPS with HTTP/2 and

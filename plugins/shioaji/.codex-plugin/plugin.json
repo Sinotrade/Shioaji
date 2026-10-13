@@ -1,6 +1,6 @@
 {
   "name": "shioaji",
-  "version": "1.7.7",
+  "version": "1.7.8",
   "description": "Shioaji Taiwan financial trading API guide. Covers Python native binding (sync/async), CLI tool, HTTP API server with SSE streaming, dashboard, and multi-language SDK integration (JS/TS, Go, C/C++, C#, Rust, Java/Kotlin) for TWSE/TPEX/TAIFEX markets.",
   "author": {
     "name": "Sinotrade",
@@ -31,7 +31,7 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Shioaji",
-    "shortDescription": "Taiwan trading API guide for Codex",
+    "shortDescription": "Taiwan trading API dev guide",
     "longDescription": "Guidance for Shioaji Python bindings, CLI, HTTP API, SSE streaming, dashboard, and multi-language Taiwan market trading workflows.",
     "developerName": "Sinotrade",
     "category": "Finance",
@@ -41,6 +41,9 @@
       "Interactive"
     ],
     "websiteURL": "https://sinotrade.github.io/",
+    "supportURL": "https://ai.sinotrade.com.tw/Shioaji/",
+    "privacyPolicyURL": "https://ai.sinotrade.com.tw/Shioaji/api/plugin/privacy/",
+    "termsOfServiceURL": "https://ai.sinotrade.com.tw/Shioaji/api/plugin/terms/",
     "brandColor": "#D71920",
     "composerIcon": "./assets/logo.png",
     "logo": "./assets/logo.png",

@@ -60,10 +60,14 @@ Python exception 皆繼承自 `sj.ShioajiError`，訊息格式為 `StatusCode: {
 | 401 | `TokenError` | 連線 Token 無效或過期 |
 | 403 | `ShioajiPermissionError` | 權限不足 |
 | 422 | `ValidationError` | 欄位驗證失敗 |
-| 503 | `SystemMaintenance` | 系統維護、強制升版、服務暫停 |
+| 409 | `OrderOutcomeUnknownError`（繼承 `ResponseError`；VPN 直連下單閘道才會出現） | 委託已送出但沒收到確認，**結果不確定**：不要重送，先 `update_status()`／`list_trades()` 對帳 |
+| 503 | `SystemMaintenance` | 系統維護、強制升版、服務暫停；VPN 下單閘道回 `NotConnected` 表示委託未送出 |
+| 504 | `ShioajiTimeoutError` | VPN 下單閘道逾時，結果可能不確定，先對帳 |
 | 其他 code | `ServerError`（訊息格式 `{呼叫}: request {topic} code: {N}, detail: {...}`） | 未分類的伺服器拒絕 |
 | （逾時） | `ShioajiTimeoutError`（訊息格式 `Timeout Topic: {topic}, Corr: {id}, Timeout: {n}ms`） | 請求逾時 |
 | （連線） | `ShioajiConnectionError` | 連線中斷 |
+
+HTTP server（含 Pro sidecar）對 VPN 下單閘道的 409／503／504 會原樣回傳 status，並在 `details.error_code` 帶閘道錯誤碼（如 `OrderOutcomeUnknown`、`NotConnected`），客戶端依此判斷「結果不確定」或「未送出」。
 
 使用 `shioaji server`（本地 :8080）的客戶注意：**本地 server 的 401 與後端 Token 無關**，是 `Authorization` header 認證失敗，訊息為 `Missing Authorization header`、`Invalid Authorization format, expected: Bearer <api_key>:<secret_key>`、`Invalid token format, expected: <api_key>:<secret_key>` 或 `Invalid API credentials`——檢查啟動 server 用的金鑰與請求 header 即可，不用查下表。
 
@@ -160,7 +164,7 @@ STS 是下單中台，需要經過下單中台的操作（下單、刪改單、�
 | `Not authenticated` / `not authenticated` | 尚未登入就呼叫需登入的功能 | 自行處理：先 `api.login()` |
 | `Invalid {Enum}: {值}`（如 `Invalid Action: buy`） | enum 字串大小寫或拼字錯 | 自行處理：改用正確值（如 `Buy`）或 `sj.constant` 常數 |
 | `{Type} must be {Type} enum or string` / `order must be StockOrder, FuturesOrder, or Order` | 參數型別錯誤 | 自行處理：依訊息修正參數型別 |
-| `Trade {id} not found in cache` | 刪改單的委託不在本地快取 | 自行處理：先 `update_status()` 取回委託再操作 |
+| `Trade {id} not found in cache` | 刪改單的委託不在本地快取 | Python：先 `update_status()` 取回委託再操作。HTTP server（1.7.8+）登入後會自動補回快取，仍出現時呼叫 `POST /api/v1/order/trades` 重抓，再用回傳的 `trade.order.id` |
 | `api_key must be at least 10 characters` / `invalid secret_key (base58 decode failed)` | 金鑰貼錯（貼到片段、多了空白或換行） | 自行處理：重新完整複製 API Key／Secret Key |
 | 錯誤訊息帶 `(cached from a previous failure; will retry server in {n}s)` 後綴 | 登入失敗後短時間內重試，回的是本地快取的舊錯誤，**不代表新設定無效** | 自行處理：等提示秒數過後再重試 |
 | `Path: {path} without write permission. Please set SJ_CONTRACTS_PATH to a writable path.` | 商品檔快取目錄不可寫（常見於 Docker／唯讀環境） | 自行處理：把 `SJ_CONTRACTS_PATH` 指到可寫路徑 |
@@ -234,7 +238,7 @@ STS 是下單中台，需要經過下單中台的操作（下單、刪改單、�
 
 ## 5. 重試決策摘要
 
-1. **逾時或「處理中」後絕不直接重送委託**（`STS Request Timeout`、`連線逾時`、`處理中`）：先 `update_status()` 確認委託狀態。重複下單比漏單更糟。
+1. **逾時、「處理中」或結果不確定後絕不直接重送委託**（`STS Request Timeout`、`連線逾時`、`處理中`、409 `OrderOutcomeUnknown`、504）：先 `update_status()` 確認委託狀態。重複下單比漏單更糟。
 2. **自行處理類**（參數錯、Token 過期、未帶 CA、未更新狀態、金鑰／權限設定）：修正後即可重試；金鑰與權限問題到新理財網 API 管理頁自行調整。
 3. **等待重試類**（維護、忙線、`操作異常`）：等待後再試，不要密集輪詢——可能觸發封鎖。
 4. **聯絡永豐類**（下單中台異常、風控、額度、簽署、被封鎖）：重試無效，請使用者附上完整錯誤訊息至客服群組（[Telegram](https://t.me/joinchat/973EyAQlrfthZTk1) 或 [Discord](https://discord.gg/5nzmWCTnG7)）詢問；額度與風控類也可洽所屬營業員。

@@ -401,31 +401,13 @@ uvx --from shioaji shioaji server start
 
 ### Standalone Binary 獨立二進制檔
 
-**Linux / macOS:**
+If Python/uv is not available, download the prebuilt `shioaji` binary for your OS/architecture from the official GitHub Releases page, then put it on `PATH`. Pick the latest stable release, a pre-release, or a specific tag (e.g. `v1.5.6`) there.
+若環境沒有 Python/uv，請到官方 GitHub Releases 頁面下載對應作業系統/架構的 `shioaji` 執行檔並加入 `PATH`。可在該頁選擇最新穩定版、預覽版或指定版本（例如 `v1.5.6`）。
 
-```bash
-# Stable
-curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | sh
+- Releases: <https://github.com/Sinotrade/Shioaji/releases>
 
-# Pre-release
-curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | CHANNEL=prerelease sh
-
-# Specific version
-curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | VERSION=v1.5.6 sh
-```
-
-**Windows (PowerShell):**
-
-```powershell
-# Stable
-irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
-
-# Pre-release
-$env:CHANNEL="prerelease"; irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
-
-# Specific version
-$env:VERSION="v1.5.6"; irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
-```
+Do not pipe a remote installer script straight into a shell. If an installer script is needed, the user should download and review it before running it themselves.
+不要把遠端安裝腳本直接交給 shell 執行；如需安裝腳本，請使用者自行下載、檢視後再執行。
 
 ### Verify Installation 驗證安裝
 
@@ -467,6 +449,8 @@ Shioaji 支援的所有環境變數。可以在 `.env` 檔案（CLI 自動載入
 |---|---|---|
 | `SJ_PRODUCTION` | `false` | Enable production mode. Default is simulation. |
 | `SJ_HTTP_ADDR` | `127.0.0.1:8080` | Server HTTP bind address. Priority: `SJ_HTTP_ADDR` > `SJ_BIND_ADDR` > `BIND_ADDR` > `127.0.0.1:8080` |
+| `SJ_HTTP_AUTH` | (unset) | `true`/`1`/`yes` requires the Bearer API key even on localhost (same as `shioaji server --auth`). Without it, localhost needs no key but rejects cross-site browser requests with 403. |
+| `SJ_HTTP_ALLOWED_ORIGINS` | (none) | Extra comma-separated browser origins allowed by the localhost cross-site guard. |
 | `SJ_HTTP_CORS` | `true` | Enable CORS headers. Also reads `SJ_CORS` and `ENABLE_CORS` as fallbacks. |
 | `SJ_HTTP_CORS_ORIGINS` | Tauri production origins and localhost Vite dev origins | Comma-separated browser origins. Also reads `SJ_CORS_ORIGINS` as fallback. Avoid `*` on a trading server. |
 | `SJ_HTTP_TIMEOUT` | `30` | HTTP request timeout in seconds. Also reads `TIMEOUT_SECONDS` as fallback. |
@@ -592,8 +576,8 @@ Use this section before deciding whether the server is ready, whether login/acco
 
 | Check | Response shape | Agent decision |
 |---|---|---|
-| `GET /api/v1/health` / `shioaji server check` | `HealthResponse { status, version, timestamp, token_expires_in_seconds?, token_stale?, contract_count?, last_maintenance?, next_maintenance?, last_maintenance_error?, ca_expires_in_days?, ca_expired?, agent_harness }` | If unavailable, start the server or diagnose bind/daemon issues. If `token_stale=true`, re-login/restart before trading. `contract_count` is an observation of currently loaded/cached data, not a Contract V2 readiness gate; run the required narrow contract query. If `ca_expired=true`, renew/replace CA before production orders. If `agent_harness.enabled=true`, load [AGENT_HARNESS.md](AGENT_HARNESS.md) before mutation. |
-| `GET /api/v1/info` | `ApiInfoResponse { name, version, description, protocols, scheme, uds_plaintext, simulation, agent_harness }` | Use `simulation` to decide whether to warn before real trading. Never assume production from server availability alone. `agent_harness.enabled=true` means direct HTTP/CLI mutation requires trusted native approval, even on localhost/UDS. |
+| `GET /api/v1/health` / `shioaji server check` | `HealthResponse { status, version, timestamp, token_expires_in_seconds?, token_stale?, contract_count?, last_maintenance?, next_maintenance?, last_maintenance_error?, ca_expires_in_days?, ca_expired?, agent_harness, instance_id }` | If unavailable, start the server or diagnose bind/daemon issues. If `token_stale=true`, wait briefly: since 1.7.8 the server re-logs in by itself once the token expires; restart only if it stays stale. `contract_count` is an observation of currently loaded/cached data, not a Contract V2 readiness gate; run the required narrow contract query. If `ca_expired=true`, renew/replace CA before production orders. If `agent_harness.enabled=true`, load [AGENT_HARNESS.md](AGENT_HARNESS.md) before mutation. |
+| `GET /api/v1/info` | `ApiInfoResponse { name, version, description, protocols, scheme, uds_plaintext, simulation, agent_harness, instance_id }` | Use `simulation` to decide whether to warn before real trading. `instance_id` (also the `X-Shioaji-Instance` header on every response) changes only when the server process restarts. The server refills its trade cache after every login (best-effort; not combo orders), so same-day `trade_id`s normally keep working; if one is still missing, refresh with `POST /api/v1/order/trades`. Never assume production from server availability alone. `agent_harness.enabled=true` means direct HTTP/CLI mutation requires trusted native approval, even on localhost/UDS. |
 
 ### Accounts / Usage / CA
 

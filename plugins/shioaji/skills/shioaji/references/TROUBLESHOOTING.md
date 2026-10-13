@@ -503,7 +503,8 @@ All HTTP errors return JSON format:
 | Status Code 狀態碼 | Meaning 意義 | Common Cause 常見原因 |
 |---------------------|--------------|------------------------|
 | 400 | Bad Request 請求錯誤 | Invalid parameters, account not signed, CA issues 參數錯誤、帳戶未簽署、CA 問題 |
-| 401 | Unauthorized 未授權 | Missing or invalid `Authorization` header (non-localhost) 缺少或無效 `Authorization` 標頭（非 localhost） |
+| 401 | Unauthorized 未授權 | Missing or invalid `Authorization` header (non-localhost, or `SJ_HTTP_AUTH=true`) 缺少或無效 `Authorization` 標頭（非 localhost 或 `SJ_HTTP_AUTH=true`） |
+| 403 | Forbidden 禁止 | Localhost cross-site guard: browser request from a non-allowed `Origin`, `Origin: null`, non-loopback `Host`, or `Sec-Fetch-Site: cross-site`. Add the page origin to `SJ_HTTP_ALLOWED_ORIGINS`, or use `SJ_HTTP_AUTH=true` 本機跨站防護拒絕；把網頁 origin 加入 `SJ_HTTP_ALLOWED_ORIGINS` |
 | 422 | Validation Error 驗證錯誤 | Backend validation failure (e.g., invalid date, count < 1) 後端驗證失敗（如日期無效、count < 1） |
 | 500 | Internal Error 內部錯誤 | Connection lost, timeout, decode failure 連線中斷、逾時、解碼失敗 |
 
@@ -538,8 +539,8 @@ curl -H "Authorization: Bearer YOUR_API_KEY:YOUR_SECRET_KEY" \
 
 **Troubleshooting checklist 疑難排解檢查清單:**
 
-1. **Confirm bind address 確認繫結位址** — localhost (`127.0.0.1`) requires no auth; any other address requires auth
-   localhost（`127.0.0.1`）不需認證；其他位址需要認證
+1. **Confirm bind address 確認繫結位址** — localhost (`127.0.0.1`) requires no auth unless `SJ_HTTP_AUTH=true` / `--auth`; any other address requires auth
+   localhost（`127.0.0.1`）不需認證（除非設 `SJ_HTTP_AUTH=true` 或 `--auth`）；其他位址需要認證
 2. **Check header format 檢查標頭格式** — Must be `Bearer <key>:<secret>`, not `Basic` or bare token
    必須是 `Bearer <key>:<secret>`，不是 `Basic` 或裸令牌
 3. **Verify env vars 確認環境變數** — `SJ_API_KEY` and `SJ_SEC_KEY` must be set when server starts; production orders also need `SJ_CA_PATH` and `SJ_CA_PASSWD`

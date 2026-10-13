@@ -33,7 +33,7 @@ Start the Shioaji HTTP server first:
 
 ```bash
 uv tool install shioaji
-# or: curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | sh
+# or: standalone binary from GitHub Releases — see PREPARE.md
 shioaji server start   # simulation mode by default
 ```
 

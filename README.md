@@ -1,5 +1,5 @@
 # Shioaji
-![shioaji-logo](https://sinotrade.github.io/images/shioaji-logo-01.png)![sinopac-logo](https://www.sinotrade.com.tw/Images/logo.png)
+![shioaji-logo](https://sinotrade.github.io/img/shioaji-mark-on-light-256.png)![sinopac-logo](https://www.sinotrade.com.tw/Images/logo.png)
 
 
 [![PyPI - Status](https://img.shields.io/pypi/v/shioaji.svg?style=for-the-badge)](https://pypi.org/project/shioaji)

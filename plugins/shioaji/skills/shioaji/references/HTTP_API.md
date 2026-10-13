@@ -69,8 +69,13 @@ Authorization: Bearer <SJ_API_KEY>:<SJ_SEC_KEY>
 
 ### When is auth required? / 何時需要認證?
 
-- **Localhost** (`127.0.0.1`, `::1`): Authentication is **disabled**. All endpoints are accessible without credentials.
+- **Localhost** (`127.0.0.1`, `::1`, default): No API key is needed, but the server rejects cross-site browser requests with 403 so web pages you visit cannot drive it. A request is rejected when its `Host` is not a loopback name (DNS rebinding), when its `Origin` is not loopback / a Shioaji Pro (Tauri) origin / listed in `SJ_HTTP_ALLOWED_ORIGINS` or `SJ_HTTP_CORS_ORIGINS` (`Origin: null` is rejected), or when it carries `Sec-Fetch-Site: cross-site` without an allowed `Origin` (plain GET/HEAD link navigations still open). curl, the CLI, and SDK clients send no `Origin` and are unaffected.
+  localhost 預設不需 API key，但會以 403 拒絕跨站瀏覽器請求（非 loopback `Host`、非允許的 `Origin`、`Origin: null`、`Sec-Fetch-Site: cross-site`）。curl、CLI、SDK 不受影響。
+- **Force auth on localhost**: set `SJ_HTTP_AUTH=true` (or `shioaji server --auth`) to require the Bearer credential on any bind. The CLI sends `SJ_API_KEY:SJ_SEC_KEY` automatically to a local (UDS/loopback) daemon. Recommended on shared machines or when you upload apps from third parties.
+  在 localhost 也要求認證：設 `SJ_HTTP_AUTH=true` 或 `shioaji server --auth`。
 - **Non-localhost** (any other bind address): Authentication is **required** on all protected endpoints. The `/api/v1/health` and `/api/v1/info` endpoints remain public.
+
+Uploaded apps (`/apps/<name>/`) are served from the same origin as the API, so an app can place and cancel orders and read accounts. Only upload apps you trust. 上傳的 app 與 API 同源，可下單與讀取帳戶，只上傳信任的 app。
 
 API-key authentication identifies the HTTP caller; it is separate from
 mutation approval. When `/api/v1/info` reports `agent_harness.enabled=true`,
@@ -105,6 +110,8 @@ Configure the server via environment variables:
 | `SJ_SEC_KEY` | (required) | Secret key for Shioaji authentication |
 | `SJ_PRODUCTION` | `false` | Enable production mode (default: simulation) |
 | `SJ_HTTP_ADDR` | `127.0.0.1:8080` | Server bind address (also: `SJ_BIND_ADDR`, `BIND_ADDR`) |
+| `SJ_HTTP_AUTH` | (unset) | `true`/`1`/`yes` requires the Bearer API key on any bind, including localhost (same as `--auth`); `false`/unset keeps auth only on non-localhost binds |
+| `SJ_HTTP_ALLOWED_ORIGINS` | (none) | Extra comma-separated exact browser origins allowed through the localhost cross-site guard (loopback and Shioaji Pro origins are always allowed) |
 | `SJ_HTTP_CORS` | `true` | Enable CORS |
 | `SJ_HTTP_CORS_ORIGINS` | Tauri production origins and localhost Vite dev origins | Comma-separated browser origins; use `*` only when unrestricted browser access is explicitly intended |
 | `SJ_HTTP_TIMEOUT` | `30` | HTTP request timeout in seconds |
@@ -444,6 +451,14 @@ Returns health status. Public, no auth required.
 
 `contract_count` reflects currently loaded/cached contracts and can change with lazy Contract V2 access; do not wait for a fixed full-market count. For health/auth readiness decisions, see [PREPARE.md](PREPARE.md).
 
+Token lifecycle (since 1.7.8): daily maintenance (`next_maintenance`) always
+logs in for a fresh 24h token, so `token_expires_in_seconds` normally lands
+around the next maintenance. Startup and Solace-outage recovery reuse a cached
+token only if it stays valid past the next maintenance. If the token still
+expires (for example maintenance kept failing), the server logs in again by
+itself with the session-recovery backoff; `token_stale=true` is then a
+transient state, not a signal to restart.
+
 #### GET `/api/v1/info`
 
 Returns API server information including simulation mode.
@@ -465,9 +480,27 @@ Returns API server information including simulation mode.
     "digest_scheme": "compact_keyed_blake3",
     "audience": "<per-daemon-audience>",
     "max_ttl_seconds": 60
-  }
+  },
+  "instance_id": "3f1c2b6e8a47"
 }
 ```
+
+`instance_id` (also in `/api/v1/health`) is an opaque 12-character id generated
+when the server process starts; it changes only on restart. Compare it as a
+string; do not parse it. Every HTTP response handled
+by the server, including 4xx/5xx errors, carries it in the
+`X-Shioaji-Instance` header. A missing header (for example a malformed request
+rejected before reaching the server) means "unknown", not "changed".
+
+After each login (startup, daily maintenance, session recovery) the server
+refills its trade cache with `update_status` for every signed account, so
+same-day `trade_id`s normally keep working across restarts and re-logins. A
+cancel/update whose `trade_id` is not cached waits for that refill; accounts
+that fail to refresh are retried a few times at most. This is best-effort:
+combo orders are not refilled, the cache still resets at the 06:00 trading-day
+rollover, and `GET` trades may be briefly empty right after a re-login. If a
+cancel/update still reports the trade missing, call `POST /api/v1/order/trades`
+(refresh) and use the returned `trade.order.id`.
 
 For simulation/production branching, see [PREPARE.md](PREPARE.md). When
 `agent_harness.enabled=true`, follow [AGENT_HARNESS.md](AGENT_HARNESS.md)
@@ -842,7 +875,7 @@ login session. Available since 1.5.12 (#234).
 { "trade_id": "abc123" }
 ```
 
-`trade_id` is `Trade.order.id` from a `Trade` returned by the same server process. Internally the server looks up that id in its trade cache to recover the original contract, order, account, and CA before sending cancel/update upstream. If the caller only knows `ordno`/`seqno`, or the order was not placed through this server process, call `POST /api/v1/order/trades` with `refresh` omitted or `true`; it runs `update_status(account)`, refreshes the cache, and returns `Vec<Trade>`. Select the intended trade, then send `trade.order.id`.
+`trade_id` is `Trade.order.id` from a `Trade` returned by this server. Internally the server looks up that id in its trade cache to recover the original contract, order, account, and CA before sending cancel/update upstream. Since 1.7.8 the server refills that cache with `update_status` after every login (startup, daily maintenance, session recovery), and a cancel/update whose `trade_id` is not cached waits for that refill, so same-day ids keep working across restarts. If the caller only knows `ordno`/`seqno`, or the id is still not found, call `POST /api/v1/order/trades` with `refresh` omitted or `true`; it runs `update_status(account)`, refreshes the cache, and returns `Vec<Trade>`. Select the intended trade, then send `trade.order.id`.
 
 The returned `Trade` is not always the final cancelled state. Watch official `order_deal_event` via `/api/v1/stream/data/order_event`, or call `/api/v1/order/trades` again for reconciliation.
 
