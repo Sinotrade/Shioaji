@@ -573,7 +573,7 @@ void TickStream::stop() {
 
 For futures continuous-month aliases such as `TXFR1` / `TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into the subscribe request. Regular futures codes do not need `target_code`.
 
-Order events use a separate per-account subscription in production and simulation. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` for each account; success starts active reports for that account.
+Order events use a separate account subscription in production. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` once per account; simulation does not require it.
 
 ### SSE Endpoints / SSE 端點
 

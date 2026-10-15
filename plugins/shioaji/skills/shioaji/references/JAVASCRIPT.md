@@ -43,18 +43,6 @@ Before starting the server, configure `.env` in the server working directory or 
 伺服器預設在 `http://localhost:8080` 啟動。
 The server starts at `http://localhost:8080` by default.
 
-For a browser client to negotiate HTTP/2 directly, configure a trusted TLS
-certificate on the Shioaji server and use `https://localhost:8080`; browsers do
-not use HTTP/2 on the default plaintext URL. Local development can use mkcert.
-With `SJ_HTTP3=true`, capable browsers discover QUIC through `Alt-Svc` and keep
-the same `https://` application URL. See [HTTP_API.md](HTTP_API.md) for the
-static-TLS, mkcert, ACME, UDP-port, and protocol-verification procedures.
-
-瀏覽器要直接協商 HTTP/2，必須先替 Shioaji server 設定受信任 TLS 憑證，
-並使用 `https://localhost:8080`；預設明文 URL 不會使用 HTTP/2。本機開發可用
-mkcert。啟用 `SJ_HTTP3=true` 後，支援的瀏覽器會透過 `Alt-Svc` 發現 QUIC，
-應用程式仍使用相同的 `https://` URL。
-
 - **Localhost 模式**: 不需要認證 | No authentication required
 - **公開綁定模式**: 需要 `Authorization: Bearer SJ_API_KEY:SJ_SEC_KEY` | Auth required when binding to non-localhost
 
@@ -133,16 +121,6 @@ export interface ContractRequest {
 }
 
 /** Server health | 伺服器健康狀態 */
-export interface AgentHarnessInfo {
-  enabled: boolean;
-  mode: "off" | "production" | "all";
-  capability_version: number;
-  capability_header: string;
-  digest_scheme: "compact_keyed_blake3";
-  audience: string | null;
-  max_ttl_seconds: number;
-}
-
 export interface HealthResponse {
   status: string;
   version: string;
@@ -152,7 +130,6 @@ export interface HealthResponse {
   contract_count?: number;
   ca_expires_in_days?: number;
   ca_expired?: boolean;
-  agent_harness: AgentHarnessInfo;
 }
 
 /** Server info | 伺服器資訊 */
@@ -161,19 +138,20 @@ export interface ApiInfoResponse {
   version: string;
   description: string;
   protocols: string[];
-  scheme: "http" | "https";
-  uds_plaintext: boolean;
   simulation: boolean;
-  agent_harness: AgentHarnessInfo;
 }
 
-/** Contract V2 Base lookup response | Contract V2 Base 查詢回應 */
-export interface BaseContractRecord {
-  security_type: "STK" | "IND" | "FUT" | "OPT" | "WRT";
-  region: "TW" | "US" | "HK" | "JP";
-  exchange: string;
-  code: string;
-  target_code: string | null;
+/** Contract lookup response | 商品查詢回應 */
+export interface ContractRecord extends ContractRequest {
+  symbol?: string;
+  name?: string;
+  category?: string;
+  currency?: string;
+  delivery_month?: string;
+  delivery_date?: string;
+  strike_price?: number;
+  option_right?: string;
+  target_code?: string;
 }
 
 /** 帳戶 | Account */
@@ -185,9 +163,6 @@ export interface Account {
   signed: boolean;
   username?: string;
 }
-
-/** 委託查詢；refresh 預設為 true 以維持既有行為。 */
-export type TradesRequest = Partial<Account> & { refresh?: boolean };
 
 /** 快照 | Snapshot */
 export interface Snapshot {
@@ -218,12 +193,7 @@ export interface StockOrder {
   price_type: "LMT" | "MKT";
   order_type: "ROD" | "IOC" | "FOK";
   order_lot?: "Common" | "Odd" | "IntradayOdd";
-  order_cond?:
-    | "Cash"
-    | "MarginTrading"
-    | "ShortSelling"
-    | "SBLShort"
-    | "SBLShortPriceExempt";
+  order_cond?: "Cash" | "MarginTrading" | "ShortSelling";
   daytrade_short?: boolean;
   custom_field?: string;
 }
@@ -387,8 +357,8 @@ export class ShioajiClient {
   async getContract(
     code: string,
     securityType: ContractRequest["security_type"]
-  ): Promise<BaseContractRecord> {
-    return this.request<BaseContractRecord>(
+  ): Promise<ContractRecord> {
+    return this.request<ContractRecord>(
       "GET",
       `/data/contracts/${encodeURIComponent(code)}?security_type=${encodeURIComponent(securityType)}`
     );
@@ -431,9 +401,9 @@ export class ShioajiClient {
     });
   }
 
-  /** 查詢委託；refresh=false 僅讀 server process cache。 */
-  async trades(req: TradesRequest = {}): Promise<Trade[]> {
-    return this.request<Trade[]>("POST", "/order/trades", req);
+  /** 更新並查詢委託狀態 | Update and list trades */
+  async trades(account: Partial<Account> = {}): Promise<Trade[]> {
+    return this.request<Trade[]>("POST", "/order/trades", account);
   }
 
   /** 查詢歷史委託/成交事件 | Historical order/deal records */
@@ -566,49 +536,18 @@ await client.subscribe({
 
 For futures continuous-month aliases such as `TXFR1` / `TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into the subscribe request. Regular futures codes do not need `target_code`.
 
-Order events use a separate per-account subscription in production and simulation. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` for each account; success starts active reports for that account.
+Order events use a separate account subscription in production. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` once per account; simulation does not require it.
 
 ### 6.2 接收資料 | Receive Data
 
 **瀏覽器 | Browser:**
 
-When a browser feature set consumes several event families, use one aggregate
-`EventSource`. Multiple long-lived dedicated streams can occupy the browser's
-per-origin HTTP/1.1 connection pool and delay ordinary REST requests. Keep
-subscribe/unsubscribe commands as REST calls, and dispatch the aggregate SSE by
-its named `event:` values. A dedicated stream remains appropriate for a client
-that intentionally consumes only one event family.
-
 ```typescript
-declare function refreshAffectedContracts(change: unknown): Promise<void>;
-// Fetch the official index through POST /api/v1/data/snapshots.
-declare function refreshOfficialIndexSnapshot(): Promise<void>;
-
-// region/security_type filter contract_event only; market and derived events
-// on this same connection are unaffected.
-const es = new EventSource(
-  "http://localhost:8080/api/v1/stream/data?region=TW&security_type=STK"
-);
+const es = new EventSource("http://localhost:8080/api/v1/stream/data/tick_stk");
 
 es.addEventListener("tick_stk", (e) => {
   const tick = JSON.parse(e.data);
   console.log("Tick:", tick);
-});
-
-es.addEventListener("calculated_index", (e) => {
-  console.log("Calculated index:", JSON.parse(e.data));
-});
-
-es.addEventListener("contract_event", async (e) => {
-  const change = JSON.parse(e.data);
-  // This is an invalidation signal, not a full replacement snapshot.
-  await refreshAffectedContracts(change);
-});
-
-es.addEventListener("calculated_index_gap", async (e) => {
-  const gap = JSON.parse(e.data);
-  console.warn(`Dropped ${gap.dropped} calculated-index events`);
-  await refreshOfficialIndexSnapshot();
 });
 
 es.addEventListener("heartbeat", (e) => {
@@ -621,21 +560,13 @@ es.addEventListener("error", (e) => {
 });
 ```
 
-When local TLS is enabled, change the URL above to
-`https://localhost:8080/api/v1/stream/data?...`. The browser negotiates
-HTTP/2 automatically; do not attempt to select HTTP/2 from the `EventSource`
-API. Native browser `EventSource` cannot set an `Authorization` header, so use
-it directly only with the auth-disabled loopback server. For protected remote
-binds, use authenticated `fetch` streaming, a header-capable SSE polyfill, or a
-trusted same-origin gateway.
-
 **Node.js（需要 eventsource 套件）| Node.js (requires eventsource package):**
 
 ```typescript
 import { EventSource } from "eventsource";
 
 // 非 localhost 帶認證 | With auth for non-localhost
-const url = "http://localhost:8080/api/v1/stream/data?region=TW";
+const url = "http://localhost:8080/api/v1/stream/data/tick_stk";
 const es = new EventSource(url, {
   headers: {
     Authorization: `Bearer ${apiKey}:${secretKey}`,
@@ -652,30 +583,17 @@ es.addEventListener("tick_stk", (e) => {
 
 | 端點 Path | 事件名稱 Event Name | 說明 Description |
 |---|---|---|
-| `/api/v1/stream/data` | All named events below plus `contract_event`, derived-data gaps, and one `heartbeat` | 所有資料合併串流 All data merged |
+| `/api/v1/stream/data` | `tick_stk`, `bidask_stk`, `tick_fop`, `bidask_fop`, `quote_stk`, `quote_fop`, `order_event` | 所有資料合併串流 All data merged |
 | `/api/v1/stream/data/tick_stk` | `tick_stk` | 股票逐筆成交 Stock ticks |
 | `/api/v1/stream/data/bidask_stk` | `bidask_stk` | 股票五檔報價 Stock bid/ask |
 | `/api/v1/stream/data/tick_fop` | `tick_fop` | 期貨選擇權逐筆成交 Futures/Options ticks |
 | `/api/v1/stream/data/bidask_fop` | `bidask_fop` | 期貨選擇權五檔報價 Futures/Options bid/ask |
 | `/api/v1/stream/data/quote_stk` | `quote_stk` | 股票整合報價 Stock quotes |
 | `/api/v1/stream/data/quote_fop` | `quote_fop` | 期貨選擇權整合報價 Futures/Options quotes |
-| `/api/v1/stream/data/quote_idx` | `quote_idx` | 指數報價 Index quotes |
-| `/api/v1/stream/data/calculated_index` | `calculated_index` | 自算指數 Calculated index |
-| `/api/v1/stream/data/index_contribution` | `index_contribution` | 指數貢獻 Index contribution |
-| `/api/v1/stream/data/industry_contribution` | `industry_contribution` | 產業貢獻 Industry contribution |
-| `/api/v1/stream/data/kbar` | `kbar` | 即時 KBar Realtime KBar |
-| `/api/v1/stream/data/scanner` | `scanner` | 市場訊號 Market signals |
 | `/api/v1/stream/data/order_event` | `order_event` | 委託/成交回報 Order events |
-| `/api/v1/stream/data/contract_event` | `contract_event` | 商品檔異動 Contract V2 changes |
 
 所有串流端點都會附帶 `heartbeat` 事件（每 30 秒）。
 All stream endpoints include `heartbeat` events (every 30 seconds).
-
-On the aggregate endpoint, optional `region` and `security_type` parameters
-filter `contract_event` only. Derived broadcast lag is delivered as
-`<event_name>_gap` with a dropped count. After reconnect or a gap event,
-reconcile snapshot-based feature state through REST before treating the local
-store as current.
 
 ### 6.4 斷線重連 | Reconnection Handling
 
@@ -723,7 +641,7 @@ function createReconnectingStream(
 
 // 使用 | Usage
 const cleanup = createReconnectingStream(
-  "http://localhost:8080/api/v1/stream/data?region=TW",
+  "http://localhost:8080/api/v1/stream/data/tick_stk",
   "tick_stk",
   (tick) => console.log("Tick:", tick)
 );
@@ -840,7 +758,7 @@ async function main() {
   // 5. 接收 SSE 串流 | Receive SSE stream
   // ================================================================
   const es = new EventSource(
-    "http://localhost:8080/api/v1/stream/data?region=TW"
+    "http://localhost:8080/api/v1/stream/data/tick_stk"
   );
 
   es.addEventListener("tick_stk", (e) => {

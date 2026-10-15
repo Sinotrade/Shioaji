@@ -20,8 +20,7 @@ rules and `ComboTrade` status handling live in
 - [Cancel Orders 刪單](#cancel-orders-刪單)
 - [Order Status 訂單狀態](#order-status-訂單狀態)
 - [Order Deal Records 委託成交紀錄](#order-deal-records-委託成交紀錄)
-- [Order Deal Event 主動委託/成交回報](#order-deal-event-主動委託成交回報)
-- [Order Callback API 訂單回報 API](#order-callback-api-訂單回報-api)
+- [Order Callbacks 訂單回報](#order-callbacks-訂單回報)
 - [Subscribe/Unsubscribe Trade 訂閱/取消訂閱交易回報](#subscribeunsubscribe-trade-訂閱取消訂閱交易回報)
 - [Best Practices 最佳實踐](#best-practices-最佳實踐)
 
@@ -31,13 +30,6 @@ rules and `ComboTrade` status handling live in
 
 Before placing **production** orders, ensure CA is activated. Simulation orders skip CA signing automatically.
 正式環境下單前請確認已啟用憑證；模擬下單會自動跳過 CA 簽章。
-
-For HTTP orders, first inspect `/api/v1/info`. If
-`agent_harness.enabled=true`, follow
-[AGENT_HARNESS.md](AGENT_HARNESS.md) before place/update/cancel: serialize the
-body once, obtain approval from the trusted native broker, and send those exact
-bytes with its one-time capability. Capability acceptance does not replace the
-order-status reconciliation described below.
 
 ```python
 import shioaji as sj
@@ -56,21 +48,16 @@ api.activate_ca(
 
 ## Stock Orders 股票下單
 
-Python order examples below assume login is complete. Resolve a Base contract through `api.contracts.get()` and pass that Base directly to `place_order()`; Info is needed only when pricing/risk logic reads fields such as reference prices or limits. Contract V2 loads the required data lazily. Choose simulation/production intentionally, activate CA for production orders, and always inspect `trade.status.status` after `place_order()`.
-以下 Python 下單範例假設已完成登入。請透過 `api.contracts.get()` 取得 Base contract，並直接傳給 `place_order()`；只有定價或風控需要參考價、漲跌停等欄位時才查 Info。Contract V2 會按需載入所需資料。請明確選擇 simulation/production，正式下單前啟用 CA，並在 `place_order()` 後檢查 `trade.status.status`。
+Python order examples below assume login is complete and contract files are ready. For full scripts, load contracts with `contracts_timeout` (sync) or `fetch_contracts()` (async), choose simulation/production intentionally, activate CA for production orders, and always inspect `trade.status.status` after `place_order()`.
+以下 Python 下單範例假設已完成登入且商品檔已載入。完整程式請用 `contracts_timeout`（sync）或 `fetch_contracts()`（async）載入商品檔，明確選擇 simulation/production，正式下單前啟用 CA，並在 `place_order()` 後檢查 `trade.status.status`。
 
 `place_order()` returns a `Trade`, but the first returned status can be `PendingSubmit` (`傳送中`). Treat `PendingSubmit` as an intermediate state, not a final exchange acknowledgement. To know whether the order became `Submitted`, `Filled`, `PartFilled`, `Failed`, or `Cancelled`, prefer waiting for active order/deal reports first: Python order callbacks or HTTP order-event SSE. Use `api.update_status(trade=trade)` / `api.update_status(account)` when callbacks/SSE are unavailable, were missed, or a reconciliation check is needed.
 `place_order()` 會回 `Trade`，但第一次回來的狀態可能是 `PendingSubmit`（傳送中）。請把 `PendingSubmit` 視為中間狀態，不是交易所最終確認。若要知道是否變成 `Submitted`、`Filled`、`PartFilled`、`Failed` 或 `Cancelled`，優先等待主動委託/成交回報：Python order callback 或 HTTP order-event SSE。只有在無法使用 callback/SSE、疑似漏回報或需要對帳補查時，才用 `api.update_status(trade=trade)` / `api.update_status(account)`。
 
-Since 1.7.6, active reports are projected into the Trade cache before they are delivered to callbacks or SSE. When your callback runs, `api.list_trades()` and any `Trade` you already hold already reflect that report; no `update_status()` call is needed to observe it.
-1.7.6 起，主動回報會先投影進 Trade cache，才交付給 callback／SSE。因此 callback 被呼叫的當下，`api.list_trades()` 與你已持有的 `Trade` 物件就已經反映該筆回報，不需要再呼叫 `update_status()`。
-
 ### Basic Stock Order 基本股票下單
 
 ```python
-contract = api.contracts.get("2330")
-if contract is None:
-    raise LookupError("contract 2330 not found")
+contract = api.Contracts.Stocks["2330"]
 
 order = sj.StockOrder(
     price=580,
@@ -83,14 +70,13 @@ order = sj.StockOrder(
 )
 
 trade = api.place_order(contract, order)
-print(trade.status.status)  # May be PendingSubmit 可能是 PendingSubmit
+print(trade.status.status)
 
-# `trade` is a live view (1.7.6+): read it again after the active report arrives
-# (for example inside the order callback) to see the new state.
-# `trade` 是 live view（1.7.6+）：主動回報到達後（例如在 order callback 內）再讀一次就是新狀態。
-# Use api.update_status(trade=trade) only when callbacks/SSE are unavailable
-# or a report may have been missed.
-# 只有在無法使用 callback/SSE 或疑似漏回報時，才用 api.update_status(trade=trade)。
+if trade.status.status == sj.OrderStatus.PendingSubmit:
+    # Prefer active order callbacks/SSE; use update_status for reconciliation.
+    # 優先等主動回報；需要補查或對帳時再用 update_status。
+    api.update_status(trade=trade)
+    print(trade.status.status)
 ```
 
 #### HTTP: Place Stock Order
@@ -129,7 +115,7 @@ curl -X POST http://localhost:8080/api/v1/order/place_order \
 | `price_type` | PriceType | LMT/MKT/MKP 限價/市價/範圍市價 |
 | `order_type` | OrderType | ROD/IOC/FOK 委託條件 |
 | `order_lot` | OrderLot | Common/Odd/IntradayOdd/Fixing 交易單位 |
-| `order_cond` | OrderCond | Cash/MarginTrading/ShortSelling/SBLShort/SBLShortPriceExempt 信用條件 |
+| `order_cond` | OrderCond | Cash/MarginTrading/ShortSelling 信用條件 |
 | `account` | Account | Trading account 交易帳戶 |
 | `custom_field` | str | Memo (max 6 chars) 備註（最多6字元）|
 
@@ -178,7 +164,7 @@ order = sj.StockOrder(
 **Note 注意:** IntradayOdd orders cannot update price, only reduce quantity.
 盤中零股委託不能改價，只能減量。
 
-### Margin, Short Selling, and Securities Borrowing 融資、融券與借券
+### Margin Trading 融資融券
 
 ```python
 # Margin buy 融資買進
@@ -202,77 +188,33 @@ order = sj.StockOrder(
     order_cond=sj.StockOrderCond.ShortSelling,
     account=api.stock_account,
 )
-
-# Securities borrowing sell 借券賣出
-order = sj.StockOrder(
-    price=580,
-    quantity=1,
-    action=sj.Action.Sell,
-    price_type=sj.StockPriceType.LMT,
-    order_type=sj.OrderType.ROD,
-    order_cond=sj.StockOrderCond.SBLShort,
-    account=api.stock_account,
-)
-
-# Price-exempt securities borrowing sell 價格豁免借券賣出
-exempt_order = sj.StockOrder(
-    price=580,
-    quantity=1,
-    action=sj.Action.Sell,
-    price_type=sj.StockPriceType.LMT,
-    order_type=sj.OrderType.ROD,
-    order_cond=sj.StockOrderCond.SBLShortPriceExempt,
-    account=api.stock_account,
-)
 ```
-
-`SBLShort` is order type 5 (general strategic securities-borrowing and
-lending short sale). `SBLShortPriceExempt` is order type 6 (price-exempt
-SBL short sale for eligible special financial products). Both are distinct
-from `ShortSelling`, which means a margin short sale (融券賣出), and from the
-quote field `avail_borrowing` (available shares to borrow). Use them with
-`Action.Sell`; account eligibility, borrow position, product eligibility, and
-order validity are confirmed by the backend/exchange.
-
-`SBLShort` 是委託類別 5（一般策略性借券賣出）；
-`SBLShortPriceExempt` 是委託類別 6（適用特殊金融商品的價格豁免
-借券賣出）。兩者都不同於 `ShortSelling`（融券賣出），也不是行情欄位
-`avail_borrowing`（可借券數量）。請搭配 `Action.Sell`；帳戶資格、借券
-部位、商品資格與委託是否合法由後端／交易所確認。
 
 ### Day Trading 現股當沖
 
-`daytrade_short=True` means **sell first, buy back later** (先賣後買). Set it only on the
-opening **sell**; never set it on a buy.
-`daytrade_short=True` 代表**先賣後買**，只在開倉的**賣單**設定，買單不要設。
-
 ```python
-# Sell first (open) 先賣（現股當沖賣出）
-order = sj.StockOrder(
-    price=590,
-    quantity=1,
-    action=sj.Action.Sell,
-    price_type=sj.StockPriceType.LMT,
-    order_type=sj.OrderType.ROD,
-    daytrade_short=True,  # sell-then-buy day trade 先賣後買
-    account=api.stock_account,
-)
-
-# Buy back the same day (close) 當日買回（一般買單）
+# Day trade buy (first leg) 當沖買進（第一筆）
 order = sj.StockOrder(
     price=580,
     quantity=1,
     action=sj.Action.Buy,
     price_type=sj.StockPriceType.LMT,
     order_type=sj.OrderType.ROD,
+    daytrade_short=True,  # Enable day trade 啟用當沖
+    account=api.stock_account,
+)
+
+# Day trade sell (close position) 當沖賣出（平倉）
+order = sj.StockOrder(
+    price=590,
+    quantity=1,
+    action=sj.Action.Sell,
+    price_type=sj.StockPriceType.LMT,
+    order_type=sj.OrderType.ROD,
+    daytrade_short=True,
     account=api.stock_account,
 )
 ```
-
-Buy-first day trading (先買後賣) uses ordinary cash orders for both legs, without
-`daytrade_short`. Whether selling shares bought today is accepted depends on the
-account's day-trading eligibility, which the broker checks.
-先買後賣兩筆都用一般現股單，不帶 `daytrade_short`；能否賣出今日買進的股數由帳戶當沖資格決定，券商端檢查。
 
 ---
 
@@ -281,9 +223,7 @@ account's day-trading eligibility, which the broker checks.
 ### Basic Futures Order 基本期貨下單
 
 ```python
-contract = api.contracts.get("TXFR1")  # Continuous near month 連續近月
-if contract is None:
-    raise LookupError("contract TXFR1 not found")
+contract = api.Contracts.Futures["TXFC0"]  # Current month 近月
 
 order = sj.FuturesOrder(
     price=18000,
@@ -296,14 +236,13 @@ order = sj.FuturesOrder(
 )
 
 trade = api.place_order(contract, order)
-print(trade.status.status)  # May be PendingSubmit 可能是 PendingSubmit
+print(trade.status.status)
 
-# `trade` is a live view (1.7.6+): read it again after the active report arrives
-# (for example inside the order callback) to see the new state.
-# `trade` 是 live view（1.7.6+）：主動回報到達後（例如在 order callback 內）再讀一次就是新狀態。
-# Use api.update_status(trade=trade) only when callbacks/SSE are unavailable
-# or a report may have been missed.
-# 只有在無法使用 callback/SSE 或疑似漏回報時，才用 api.update_status(trade=trade)。
+if trade.status.status == sj.OrderStatus.PendingSubmit:
+    # Prefer active order callbacks/SSE; use update_status for reconciliation.
+    # 優先等主動回報；需要補查或對帳時再用 update_status。
+    api.update_status(trade=trade)
+    print(trade.status.status)
 ```
 
 #### HTTP: Place Futures Order
@@ -362,9 +301,7 @@ HTTP accepts both `"New"` and `"NewPosition"` for compatibility, but Python expo
 
 ```python
 # Buy call option 買進買權
-contract = api.contracts.get("TXO202401C18000")
-if contract is None:
-    raise LookupError("option contract not found")
+contract = api.Contracts.Options["TXO202401C18000"]
 
 order = sj.FuturesOrder(
     price=100,
@@ -383,9 +320,7 @@ trade = api.place_order(contract, order)
 
 ```python
 # Sell put option 賣出賣權
-contract = api.contracts.get("TXO202401P17000")
-if contract is None:
-    raise LookupError("option contract not found")
+contract = api.Contracts.Options["TXO202401P17000"]
 
 order = sj.FuturesOrder(
     price=50,
@@ -423,8 +358,8 @@ Quick reminders:
 
 ## Modify Orders 改單
 
-For HTTP/JS/Go/Rust/C#/Java clients, update/cancel endpoints do **not** accept a full Python `Trade` object. They accept `trade_id`, which is the nested `Trade.order.id` from the server's trade cache. Since 1.7.8 the server refills its trade cache after every login (startup, daily maintenance, session recovery), so same-day `trade_id`s keep working across server restarts. If the client only knows `ordno`/`seqno`, or the server still reports the trade missing, first call `POST /api/v1/order/trades` with `refresh` omitted or `true`. That runs `update_status(account)`, refreshes the server cache, and returns `Vec<Trade>`. Use `refresh: false` only when the process-local cached snapshot is sufficient. Select the intended trade, then send `trade.order.id`.
-HTTP/JS/Go/Rust/C#/Java client 的改單/刪單 endpoint 不吃 Python 的完整 `Trade` 物件，而是吃 `trade_id`，也就是 server trade cache 裡的 `Trade.order.id`。1.7.8 起 server 每次登入後（啟動、每日維護、斷線重建）都會自動補回 trade cache，同一天的 `trade_id` 在 server 重啟後仍可使用。如果 client 只知道 `ordno`/`seqno`，或 server 仍回報找不到該委託，要先用帳號呼叫 `POST /api/v1/order/trades`，並省略 `refresh` 或設為 `true`。這會執行 `update_status(account)`、刷新 server cache、回傳 `Vec<Trade>`；只有確定 process-local cache snapshot 已足夠時才使用 `refresh: false`。選到目標 trade 後，再送 `trade.order.id`。
+For HTTP/JS/Go/Rust/C#/Java clients, update/cancel endpoints do **not** accept a full Python `Trade` object. They accept `trade_id`, which is the nested `Trade.order.id` from the server's trade cache. If the order was not just placed by the same running server, or if the client only knows `ordno`/`seqno`, first call `POST /api/v1/order/trades` with the account. That endpoint runs `update_status(account)`, refreshes the server cache, and returns `Vec<Trade>`. Select the intended trade, then send `trade.order.id`.
+HTTP/JS/Go/Rust/C#/Java client 的改單/刪單 endpoint 不吃 Python 的完整 `Trade` 物件，而是吃 `trade_id`，也就是 server trade cache 裡的 `Trade.order.id`。如果該委託不是剛由同一個 running server 下出，或 client 只知道 `ordno`/`seqno`，要先用帳號呼叫 `POST /api/v1/order/trades`。這個 endpoint 會先執行 `update_status(account)`、刷新 server cache、回傳 `Vec<Trade>`；選到目標 trade 後，再送 `trade.order.id`。
 
 Do not use a deal-event `trade_id` blindly unless you know it matches the same `Trade.order.id`. The safer HTTP flow is: `/order/trades` -> pick `trade.order.id` -> `/order/update_price`, `/order/update_qty`, or `/order/cancel_order` -> wait for `order_deal_event` or call `/order/trades` again to confirm.
 不要盲目使用成交回報裡的 `trade_id`，除非已確認它和同一筆委託的 `Trade.order.id` 對得上。HTTP 較安全流程是：`/order/trades` -> 選 `trade.order.id` -> `/order/update_price`、`/order/update_qty` 或 `/order/cancel_order` -> 等 `order_deal_event` 或再呼叫 `/order/trades` 確認。
@@ -549,115 +484,19 @@ for trade in trades:
     print(f"Deal Quantity: {trade.status.deal_quantity}")
 ```
 
-### Trade Cache Health 委託快取健康狀態
-
-`api.trade_cache_health(account)` (1.7.6+) only inspects the process-local
-cache; it does not call `update_status()`. `Healthy` means the subscribed report streams
-have baselines and no detected cache issue. `Unknown` means the account is not
-subscribed yet or a stream has no baseline. `Degraded` means a reason such as a
-sequence gap, pending report, untrackable event ID, or projection failure was
-observed. Inspect `health.reasons` for the affected event type and reason code.
-
-`api.trade_cache_health(account)`（1.7.6+）只檢查 process-local cache，不會呼叫
-`update_status()`。`Healthy` 表示已訂閱的回報串流具備 baseline，且目前未偵測
-到快取問題；`Unknown` 表示帳號尚未訂閱，或串流還沒有 baseline；`Degraded`
-表示已觀察到跳號、待關聯回報、無法追蹤的 event ID 或投影失敗等原因。請從
-`health.reasons` 查看受影響的事件類型與原因碼。
-
-```python
-health = api.trade_cache_health(api.stock_account)
-if health.state != sj.TradeCacheHealthState.Healthy:
-    for item in health.reasons:
-        print(item.event_type, item.reason)
-```
-
-Each `health.reasons` item carries `event_type` and `reason`:
-
-| `reason` | Meaning | Clears when |
-|---|---|---|
-| `NotSubscribed` | The account has no trade-report subscription | `subscribe_trade(account)` succeeds |
-| `NoBaseline` | Subscribed, but that stream has not delivered a trackable report yet | The first report arrives on that stream, or `update_status(account)` runs |
-| `SequenceGap` | An event ID sequence number was skipped within one stream and reset | The missing report arrives late and projects, or `update_status(account)` runs |
-| `PendingReport` | A report cannot be correlated to a cached order yet | The matching order response or New report arrives, or `update_status(account)` runs |
-| `UntrackableEventId` | The event ID is missing or not a supported `v1:` ID | `update_status(account)` runs |
-| `ProjectionFailed` | A report could not be applied to the cached Trade, such as incomplete identity, product or action mismatch, or conflicting reports | `update_status(account)` runs |
-
-`NotSubscribed` and `NoBaseline` keep the state at `Unknown`; any other reason
-makes it `Degraded`. Only `update_status(account)` reconciles health;
-`update_status(trade=trade)` does not.
-
-`health.reasons` 的每個項目含 `event_type` 與 `reason`：
-
-| `reason` | 意義 | 何時消失 |
-|---|---|---|
-| `NotSubscribed` | 該帳戶尚未訂閱交易回報 | `subscribe_trade(account)` 成功 |
-| `NoBaseline` | 已訂閱，但該串流尚未收到可追蹤的回報 | 該串流第一筆回報到達，或執行 `update_status(account)` |
-| `SequenceGap` | 同一串流、同一重置碼內的 event ID 序號跳號 | 缺少的回報晚到並完成投影，或執行 `update_status(account)` |
-| `PendingReport` | 回報尚無法關聯到 cache 中的委託 | 對應的下單回應或 New 回報到達，或執行 `update_status(account)` |
-| `UntrackableEventId` | event ID 缺失，或不是支援的 `v1:` ID | 執行 `update_status(account)` |
-| `ProjectionFailed` | 回報無法套用到 cache 中的 Trade，例如關聯欄位不全、商品或買賣別不符、回報互相衝突 | 執行 `update_status(account)` |
-
-`NotSubscribed` 與 `NoBaseline` 會讓狀態維持 `Unknown`；其他原因則為 `Degraded`。
-只有 `update_status(account)` 會對 health 做對帳，`update_status(trade=trade)` 不會。
-
-Call `update_status(account)` explicitly when `Degraded` must be reconciled,
-when active reports may have been missed, or when an authoritative final state
-is required. `Unknown` alone can be normal immediately after subscribing; wait
-for the stream baseline unless the caller requires immediate reconciliation.
-
-當 `Degraded` 需要對帳、可能漏掉主動回報，或必須立即取得權威最終狀態時，
-由 caller 明確呼叫 `update_status(account)`。剛訂閱後的 `Unknown` 可能是正常
-狀態；若不需要立即對帳，可先等待串流建立 baseline。
-
-#### HTTP: Trade Cache Health
-
-```bash
-# POST /api/v1/order/trade_cache_health (1.7.6+)
-curl -X POST http://localhost:8080/api/v1/order/trade_cache_health \
-  -H "Content-Type: application/json" \
-  -d '{"broker_id":"9A95","account_id":"1234567","account_type":"S"}'
-```
-
-| Body | Account 帳戶 |
-|---|---|
-| `{"account_type":"S"}` | Default stock account 預設股票帳戶 |
-| `{"account_type":"F"}` | Default futures/options account 預設期貨／選擇權帳戶 |
-| `{}` | Same as `S` 視為 `S` |
-| `{"broker_id":"9A95","account_id":"1234567"}` | That specific account; `account_type` may be omitted 指定帳戶，`account_type` 可省略 |
-| `account_type` other than `S`/`F` 非 `S`/`F` | HTTP 400 `Invalid account_type` |
-
-The response is `{"state": ..., "reasons": [{"event_type": ..., "reason": ...}]}`,
-for example
-`{"state":"Unknown","reasons":[{"event_type":"StockDeal","reason":"NoBaseline"}]}`.
-Like the Python call, it reads only this running server's cache and does not
-call the backend.
-
-回應為 `{"state": ..., "reasons": [{"event_type": ..., "reason": ...}]}`，例如
-`{"state":"Unknown","reasons":[{"event_type":"StockDeal","reason":"NoBaseline"}]}`。
-與 Python 呼叫相同，只讀取這個 running server 的 cache，不會呼叫後端。
-
 #### HTTP: Get Trades
 
 ```bash
-# Cache-only: no upstream update_status request.
+# POST /api/v1/order/trades
 curl -X POST http://localhost:8080/api/v1/order/trades \
   -H "Content-Type: application/json" \
-  -d '{"account_type":"S","refresh":false}'
-
-# Authoritative reconciliation; omitting refresh has the same behavior.
-curl -X POST http://localhost:8080/api/v1/order/trades \
-  -H "Content-Type: application/json" \
-  -d '{"account_type":"S","refresh":true}'
+  -d '{}'
 ```
-
-`refresh: false` (1.7.6+) returns only this running server's account-filtered
-cache and does not call the backend. Use `refresh: true` if active reports may have been
-missed or a final status must be reconciled.
 
 ### Trade Status Values 交易狀態值
 
 `PendingSubmit` is a normal intermediate response from order APIs. Do not tell users the order was submitted, failed, filled, or cancelled until active reports (Python callback / HTTP SSE) or a reconciliation `update_status()` confirms the later state.
-`PendingSubmit` 是下單 API 可能回傳的正常中間狀態，此時還不知道委託的最終結果。要等主動回報（Python callback / HTTP SSE）或補查用的 `update_status()` 確認後續狀態後，才能告訴使用者該單已送出、失敗、成交或取消。
+`PendingSubmit` 是下單 API 可能回傳的正常中間狀態。不要在主動回報（Python callback / HTTP SSE）或補查用的 `update_status()` 確認後續狀態前，告訴使用者該單已送出、失敗、成交或取消。
 
 | Status 狀態 | Description 說明 |
 |-------------|------------------|
@@ -686,47 +525,6 @@ trade.status          # Status object 狀態物件
 trade.status.status   # Status value 狀態值
 trade.status.deal_quantity  # Filled quantity 成交量
 trade.status.cancel_quantity # Cancelled quantity 取消量
-```
-
-Since 1.7.6, Python `Trade` objects backed by the process-local Trade cache are
-**live read-only views**. A previously retained `trade.order` or `trade.status`
-reference reads the latest state projected from active reports; callers cannot
-assign fields to make a local object look like an upstream order change.
-
-1.7.6 起，Python 中連到本機 Trade cache 的 `Trade` 是**唯讀 live view**。先前保存的
-`trade.order` 或 `trade.status` reference 會持續讀到主動回報投影後的最新
-狀態；不能直接指定欄位來假裝已經向上游改單。
-
-`trade.status.deals` is a read-only live `Sequence[Deal]`, not a mutable Python
-list. `len(deals)` and `deals[index]` read the latest fills. Each `for` loop
-fixes one snapshot when iteration starts, so fills arriving during that loop do
-not change its length. Use `list(deals)` for a fixed fills-only copy.
-
-`trade.status.deals` 是唯讀且持續更新的 `Sequence[Deal]`，不是可修改的
-Python list。`len(deals)` 與 `deals[index]` 讀取最新成交；每次 `for` 開始
-時會固定該輪迭代內容，因此迭代期間新到的成交不會改變該輪長度。需要只
-複製成交明細時，使用 `list(deals)`。
-
-Use `trade.copy()` when order, status, and deals must all come from the same
-instant. It takes one Rust Trade snapshot and returns a fixed, read-only
-`Trade`; it does not call the backend or `update_status()`.
-
-需要委託、狀態與成交明細全部來自同一時點時，使用 `trade.copy()`。它在
-Rust core 內一次取得完整 Trade 狀態，回傳固定且唯讀的 `Trade` 副本；不會
-呼叫後端或 `update_status()`。
-
-```python
-trade = api.list_trades()[0]
-order = trade.order
-status = trade.status
-deals = status.deals
-
-# The same retained views continue to observe active-report projection.
-# 同一組已保存 view 會持續看到主動回報投影後的狀態。
-print(order.price, status.status, len(deals))
-
-fills_copy = list(deals)  # fixed fills-only copy / 固定成交清單副本
-trade_copy = trade.copy() # fixed whole-Trade copy / 固定整筆 Trade 副本
 ```
 
 ---
@@ -771,13 +569,6 @@ Shioaji 將這個功能稱為 `order_deal_event`：在 `place_order`、`update_o
 | `OrderState.FuturesOrder` / `FORDER` | Futures/options order accepted/updated/cancelled | dict-like event with `operation`, `order`, `status`, `contract` | `{"state":"FuturesOrder","data":{"FuturesOrder":{...}}}` |
 | `OrderState.FuturesDeal` / `FDEAL` | Futures/options deal / partial fill / fill | dict-like event with `trade_id`, `seqno`, `ordno`, `exchange_seq`, `broker_id`, `account_id`, `action`, `code`, `price`, `quantity`, `subaccount`, `security_type`, `delivery_month`, `full_code`, `strike_price`, `option_right`, `market_type`, `combo`, `ts` | `{"state":"FuturesDeal","data":{"FuturesDeal":{...}}}` |
 
-All four payloads expose top-level `event_id: str` (1.7.6+). Live reports require a
-nonempty ID. Historical `order_deal_records()` returns `""` when no ID was
-saved; skip ID-based deduplication and sequence tracking for these records.
-Treat the ID as an opaque string and preserve it exactly.
-
-四種回報都提供頂層 `event_id: str`（1.7.6+）。即時回報的 ID 必須非空；歷史 `order_deal_records()` 沒有保存 ID 時回傳 `""`，這些紀錄不參與 ID 去重或序號追蹤。請將 ID 視為不透明字串，原樣保留。
-
 Agent decision rules:
 
 - Match order and deal events with `order.id` / `status.id` to deal `trade_id`.
@@ -792,18 +583,11 @@ Agent decision rules:
 Order and deal events are pushed automatically when orders are submitted or filled.
 委託及成交事件會在下單或成交時主動推送。
 
-Since 1.7.6, a held `Trade` and `api.list_trades()` are already up to date when
-the callback runs, so you do not need to update them yourself.
-
-1.7.6 起，callback 執行時，持有的 `Trade` 與 `api.list_trades()` 已經是最新狀態，
-不需要自己去更新它們。
-
 ### set_order_callback 設定委託回報
 
 ```python
 def order_cb(stat, msg):
     print(f"State: {stat}")
-    print(f"Event ID: {msg['event_id']}")  # Nonempty producer identity on live callbacks
     print(f"Message: {msg}")
 
 api.set_order_callback(order_cb)
@@ -840,7 +624,6 @@ api = sj.ShioajiAsync()
 await api.login(api_key="YOUR_KEY", secret_key="YOUR_SECRET")
 
 async def order_cb(stat, msg):
-    print(f"Event ID: {msg['event_id']}")
     print(f"State: {stat}, Message: {msg}")
 
 api.set_order_callback(order_cb)
@@ -902,78 +685,18 @@ api.set_order_callback(order_cb)
 **Note 注意:** Deal events may arrive before order events due to exchange message priority.
 成交回報可能比委託回報更早到達，因為交易所訊息優先順序不同。
 
-### HTTP: Order Events via SSE 透過 SSE 接收委託／成交回報
+### HTTP: Order Events via SSE
 
 Order events are available through SSE streaming. See [STREAMING.md](STREAMING.md) for SSE details.
-
-委託／成交回報可透過 SSE 接收，詳見 [STREAMING.md](STREAMING.md)。
-
-The existing envelope is unchanged. For example, the `event: order_event`
-frame's JSON data contains `{"state":"StockOrder","data":{"StockOrder":{
-"event_id":"v1:SO:C6U5mMWBd:BOKZbRr:123", ...}}}` (ellipsis denotes the
-unchanged operation/order/status/contract fields). Read
-`envelope.data[envelope.state].event_id`. This payload field is not SSE's
-transport `id:` field, `Trade.order.id`, request ID or `exchange_seq`. Each
-order can have many event IDs.
-
-SSE 的封裝格式維持不變，從 `envelope.data[envelope.state].event_id` 取值。這個欄位不是 SSE 的 `id:`、委託 ID 或成交序號；同一張委託可以有多個事件 ID。以下省略號代表原有的其他回報欄位。
-
-### event_id: Deduplication and Sequence Gaps 去重與跳號判讀
-
-`event_id` is available since 1.7.6. Python callbacks read `msg["event_id"]`;
-HTTP SSE clients read `envelope.data[envelope.state].event_id`.
-
-`event_id` 自 1.7.6 起提供。Python callback 讀取 `msg["event_id"]`；HTTP SSE 讀取 `envelope.data[envelope.state].event_id`。
-
-For deduplication, use the complete nonempty ID within the same environment.
-An order can have many event IDs. Matching IDs identify a repeated delivery;
-different IDs do not prove different business operations.
-Callbacks/SSE deliver every decoded report, including repeats, independently
-of Trade cache projection. Your application decides how to process them.
-
-去重時，在同一環境使用完整、非空的 ID。相同 ID 表示同一回報再次送達；不同 ID 不保證是不同業務操作。callback／SSE 會交付每筆成功解碼的回報，包含重複回報，與 Trade cache 投影獨立；由你的程式決定如何處理。
-
-For sequence tracking, split a supported `v1:` ID at its last two colons:
-
-追蹤序號時，將支援的 `v1:` ID 從最後兩個冒號拆成以下三段；前綴與重置碼直接當字串使用即可。
-
-`<stream>:<reset>:<sequence>`
-
-Compare decimal sequences only within the same environment, stream and reset.
-The first observed sequence establishes a baseline. A new reset establishes
-its own baseline; keep late reports from an older reset separate.
-A smaller sequence can be a previously unseen late report, so use the complete
-ID to decide whether it is a duplicate.
-
-只比較同環境、同前綴、同重置碼的十進位序號。首次收到時建立基準；新的重置碼另建基準，舊輪晚到回報分開處理。較小序號可能是尚未收到過的晚到回報，是否重複仍以完整 ID 判斷。
-
-`123 → 125` means `124` has not yet been observed; it may arrive later.
-A gap indicates possible missing reports, not confirmed loss or automatic
-replay. Reconciliation is an explicit caller action; sequence tracking does
-not call `update_status()`.
-
-`123 → 125` 表示目前尚未觀察到 `124`，它仍可能晚到。跳號只代表可能缺回報，不表示已確定遺失，也不會自動補送或呼叫 `update_status()`；對帳由呼叫者明確要求。
-
-```python
-# Supported nonempty v1 IDs only. 僅適用於支援的 v1 非空 ID。
-stream, reset, seq_text = event_id.rsplit(":", 2)
-sequence = int(seq_text)
-# Compare within (environment, stream, reset). 與同環境、前綴及重置碼的最高序號比較。
-```
-
-Use `BigInt(seqText)` for exact sequence comparisons in JavaScript.
-For unsupported ID formats, retain the raw report and skip sequence inference.
-
-JavaScript 使用 `BigInt(seqText)` 精確比較序號。遇到不支援的 ID 格式時，保留原始回報，略過序號判讀。
-
+委託事件可透過 SSE 串流取得，詳見 [STREAMING.md](STREAMING.md)。
 
 ---
 
 ## Subscribe/Unsubscribe Trade 訂閱/取消訂閱交易回報
 
-Subscribe to order/deal events for a specific account. Production and simulation both support this operation. A successful subscription starts active reports for that account. Use the same explicit-subscribe pattern as market-data subscription (#237).
+Subscribe to trade events for a specific account. **Required** before consuming the order_event SSE stream in production — without it the relay does not forward FORDER/FDEAL/SORDER/SDEAL to the client. Same explicit-subscribe pattern as market-data subscription (#237).
 
-訂閱特定帳戶的交易事件，啟用即時委託／成交通知。正式環境與測試環境都支援此操作；訂閱成功後開始接收該帳戶的主動回報。消費 `/stream/data/order_event` SSE 前須先對每個帳戶訂閱，操作方式與訂閱報價一致。
+訂閱特定帳戶的交易事件，啟用即時委託/成交通知。正式環境下消費 `/stream/data/order_event` SSE 之前**必須**呼叫一次（每帳號一次），否則 relay 不會推送回報；pattern 與訂閱報價一致。
 
 ### Python
 
@@ -1010,7 +733,7 @@ curl -X POST http://localhost:8080/api/v1/auth/unsubscribe_trade \
 
 Body shape: `{broker_id, account_id, account_type}` (`S` for stock, `F` for futures/options). Omit `broker_id`/`account_id` to subscribe the default account of `account_type`.
 
-Call `subscribe_trade` after login for each account whose active reports are needed. A successful `unsubscribe_trade` stops reports for that account. See [STREAMING.md](STREAMING.md) and [HTTP_API.md](HTTP_API.md#post-apiv1authsubscribe_trade) for full SSE/endpoint reference.
+Subscriptions survive the server's daily client refresh, so callers only need to subscribe once per server boot per account. See [STREAMING.md](STREAMING.md) and [HTTP_API.md](HTTP_API.md#post-apiv1authsubscribe_trade) for full SSE/endpoint reference.
 
 ---
 
@@ -1018,18 +741,8 @@ Call `subscribe_trade` after login for each account whose active reports are nee
 
 ### 1. Use Callbacks for Real-time Status 使用主動回報獲取即時狀態
 
-Since 1.7.6, active reports update `Trade` state automatically. Use the order
-callback as a reminder to read `Trade`; there is no need to poll `update_status()`.
-1.7.6 起內建以主動回報更新 `Trade` 狀態，可用 order callback 當作提醒再去讀 `Trade`，
-不需要反覆呼叫 `update_status()`。
-
-Just check `api.trade_cache_health(account)`, and call `update_status(account)`
-when it is `Degraded`, in case reports were missed because of a network drop or
-other uncontrollable causes. For `Unknown`, follow `health.reasons`; see
-[Trade Cache Health](#trade-cache-health-委託快取健康狀態).
-唯需確認 `api.trade_cache_health(account)`，為 `Degraded` 時再呼叫
-`update_status(account)`，以防網路斷線等不可控因素造成回報漏接。為 `Unknown` 時
-請依 `health.reasons` 處理，詳見 [Trade Cache Health](#trade-cache-health-委託快取健康狀態)。
+Prefer callbacks over `update_status()` to avoid rate limits.
+優先使用主動回報而非 `update_status()` 以避免觸發流量限制。
 
 ### 2. Non-blocking Orders 非阻塞下單
 
