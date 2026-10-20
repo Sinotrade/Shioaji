@@ -191,7 +191,7 @@ struct StockOrder {
     double price;
     int quantity;
     std::string price_type;  // "LMT", "MKT", "MKP"
-    std::string order_type;  // "ROD", "IOC", "FOK"
+    std::string time_in_force;  // "ROD", "IOC", "FOK"
 };
 
 void to_json(nlohmann::json& j, const StockOrder& o) {
@@ -200,7 +200,7 @@ void to_json(nlohmann::json& j, const StockOrder& o) {
         {"price", o.price},
         {"quantity", o.quantity},
         {"price_type", o.price_type},
-        {"order_type", o.order_type}
+        {"time_in_force", o.time_in_force}
     };
 }
 
@@ -474,7 +474,7 @@ Keep order examples disabled in runnable code. Confirm account, production/simul
 //         {"price", 580.0},
 //         {"quantity", 1},
 //         {"price_type", "LMT"},
-//         {"order_type", "ROD"}
+//         {"time_in_force", "ROD"}
 //     }}
 // };
 //
@@ -573,7 +573,7 @@ void TickStream::stop() {
 
 For futures continuous-month aliases such as `TXFR1` / `TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into the subscribe request. Regular futures codes do not need `target_code`.
 
-Order events use a separate account subscription in production. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` once per account; simulation does not require it.
+Order events use a separate per-account subscription in production and simulation. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` for each account; success starts active reports for that account.
 
 ### SSE Endpoints / SSE 端點
 

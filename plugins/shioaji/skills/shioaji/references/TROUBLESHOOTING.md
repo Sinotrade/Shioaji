@@ -7,6 +7,25 @@ Use [MIGRATION.md](MIGRATION.md) when an error comes from deprecated Python idio
 
 ---
 
+## Error Triage 錯誤判讀
+
+When the user pastes an error message, exception, or a failed `Trade`, identify the form first, then look it up in [ERROR_CODES.md](ERROR_CODES.md):
+使用者貼出錯誤訊息、exception 或失敗的 `Trade` 時，先判斷錯誤形式，再到 [ERROR_CODES.md](ERROR_CODES.md) 查對照：
+
+- Exception / HTTP error JSON (e.g. `TokenError: StatusCode: 401, Detail: ...`) — API request rejected: login, query, cancel/update, bad parameters.
+  Exception 或 HTTP error JSON — API 請求被拒：登入、查詢、刪改單、參數錯誤。
+- `Trade` with `status.status = Failed` — order rejected by the backend; **no exception is raised**, read `trade.status.msg`.
+  `Trade` 的 `status.status = Failed` — 下單被後台拒絕；**不會拋例外**，讀 `trade.status.msg`。
+- Order callback with `operation.op_code != "00"` — operation failed at exchange/backoffice, read `op_msg`.
+  委託回報 `operation.op_code != "00"` — 操作在交易所／後台失敗，讀 `op_msg`。
+- HTTP 200 with empty data or `status: false` — silent failure: check usage quota first (Market Data section below), or the reserve `info` field.
+  HTTP 200 但回空資料或 `status: false` — 靜默失敗：先查流量用量（見下方行情資料節），預收券款則看回應 `info` 欄位。
+
+After a timeout or a `處理中` message on any order operation, always run `update_status()` and check the trade state before re-sending — never blindly retry an order.
+下單類操作遇到逾時或「處理中」訊息，重送前務必先 `update_status()` 確認委託狀態，絕不直接重送。
+
+---
+
 ## Market Data 行情資料相關
 
 ### Historical data returns empty 歷史行情回傳空資料
@@ -101,8 +120,8 @@ MKT + ROD 限制**僅期交所 (TAIFEX)** 適用，證交所股票不受此限�
 
 - **Futures / options (TAIFEX)**: only `MKT` is restricted — it must pair with IOC or FOK; `MKT + ROD` is rejected with `op_code` 9938. `LMT` and `MKP` both accept ROD/IOC/FOK.
   **期貨／選擇權**：僅 `MKT` 受限——必須搭配 IOC 或 FOK，`MKT + ROD` 會被退單（`op_code` 9938）；`LMT` 與 `MKP` 三種委託條件皆可。
-- **Stocks (TWSE)**: every `price_type` × `order_type` combination is valid — MKT/LMT/MKP each accept ROD/IOC/FOK. Symptom worth knowing: a stock MKT + IOC with no immediate counterparty returns `op_code` 48, which is normal liquidity behaviour, not an SDK issue.
-  **股票**：所有 `price_type` × `order_type` 組合皆有效；MKT/LMT/MKP 都可搭配 ROD/IOC/FOK。若股票下 MKT + IOC 沒立即成交，會回 `op_code` 48，這是市場流動性問題，並非 SDK 錯誤。
+- **Stocks (TWSE)**: every `price_type` × `time_in_force` combination is valid — MKT/LMT/MKP each accept ROD/IOC/FOK. Symptom worth knowing: a stock MKT + IOC with no immediate counterparty returns `op_code` 48, which is normal liquidity behaviour, not an SDK issue.
+  **股票**：所有 `price_type` × `time_in_force` 組合皆有效；MKT/LMT/MKP 都可搭配 ROD/IOC/FOK。若股票下 MKT + IOC 沒立即成交，會回 `op_code` 48，這是市場流動性問題，並非 SDK 錯誤。
 
 ```python
 import shioaji as sj
@@ -114,7 +133,7 @@ order = sj.FuturesOrder(
     price=0,  # MKT ignores price 市價單忽略價格
     quantity=1,
     price_type=sj.FuturesPriceType.MKT,
-    order_type=sj.OrderType.IOC,  # MKT must use IOC / FOK; MKP / LMT accept ROD too 僅 MKT 須 IOC/FOK
+    time_in_force=sj.TimeInForce.IOC,  # MKT must use IOC / FOK; MKP / LMT accept ROD too 僅 MKT 須 IOC/FOK
     octype=sj.FuturesOCType.Auto,
     account=api.futopt_account,
 )
@@ -126,7 +145,7 @@ order = sj.StockOrder(
     price=0,
     quantity=1,
     price_type=sj.StockPriceType.MKT,
-    order_type=sj.OrderType.ROD,  # Or IOC / FOK 也可用 IOC / FOK
+    time_in_force=sj.TimeInForce.ROD,  # Or IOC / FOK 也可用 IOC / FOK
     account=api.stock_account,
 )
 ```
@@ -137,7 +156,9 @@ Get limit prices from contract:
 從合約取得漲跌停價：
 
 ```python
-contract = api.Contracts.Stocks["2330"]
+contract = api.contracts.get("2330")
+if contract is None:
+    raise LookupError("contract 2330 not found")
 
 # Limit up 漲停價
 price = contract.limit_up
@@ -150,7 +171,7 @@ order = sj.StockOrder(
     price=price,
     quantity=1,
     price_type=sj.StockPriceType.LMT,
-    order_type=sj.OrderType.ROD,
+    time_in_force=sj.TimeInForce.ROD,
     account=api.stock_account
 )
 ```
@@ -160,8 +181,8 @@ order = sj.StockOrder(
 Pre-market reservation orders do not trigger order/deal callbacks immediately. Reservation orders are released at 08:30 on each trading day, and callbacks are triggered then.
 盤前預約單不會立即觸發委託/成交回報。預約單會在每個交易日 08:30 放單，屆時才會觸發委託回報。
 
-Do not infer callback failure only because a pre-market reservation order produced no callback before 08:30. Confirm the order/trade state with `list_trades()` / `/api/v1/order/trades`, and for HTTP order events make sure `POST /api/v1/auth/subscribe_trade` was called per account in production.
-不要因為 08:30 前沒有 callback 就判定 callback 壞掉。請用 `list_trades()` / `/api/v1/order/trades` 確認委託狀態；HTTP 委託回報在正式環境還要確認每個帳戶都已呼叫 `POST /api/v1/auth/subscribe_trade`。
+Do not infer callback failure only because a pre-market reservation order produced no callback before 08:30. Confirm the order/trade state with `list_trades()` / `/api/v1/order/trades`, and for HTTP order events make sure `POST /api/v1/auth/subscribe_trade` succeeded for each account in production or simulation.
+不要因為 08:30 前沒有 callback 就判定 callback 壞掉。請用 `list_trades()` / `/api/v1/order/trades` 確認委託狀態；正式環境與測試環境的 HTTP 委託回報都要確認每個帳戶已成功呼叫 `POST /api/v1/auth/subscribe_trade`。
 
 ---
 
@@ -186,10 +207,10 @@ api.login(api_key="YOUR_KEY", secret_key="YOUR_SECRET")
 def on_tick(tick):
     print(tick)
 
-api.subscribe(
-    api.Contracts.Stocks["2330"],
-    quote_type=sj.QuoteType.Tick
-)
+contract = api.contracts.get("2330")
+if contract is None:
+    raise LookupError("contract 2330 not found")
+api.subscribe(contract, quote_type=sj.QuoteType.Tick)
 
 # Keep program alive 保持程式運行
 Event().wait()
@@ -225,8 +246,8 @@ Event().wait()
 
 1. Sync the OS clock first. This applies to Python clients and to machines running `shioaji server start` for JS/Go/Rust/C#/Java clients.
    先校準作業系統時間。Python client 要校時；JS/Go/Rust/C#/Java 使用的 `shioaji server start` 那台機器也要校時。
-2. If the machine clock is correct but login is slow, increase Python `receive_window` from the default 30000 ms.
-   若時間正確但登入過慢，Python 可把 `receive_window` 從預設 30000 ms 調高。
+2. If the machine clock is correct but login is slow, raise `receive_window` from the default 30000 ms. Python: `api.login(..., receive_window=60000)`. Server and CLI (1.7.9+): `SJ_RECEIVE_WINDOW=60000` in the environment or `.env`, or `shioaji server start --receive-window 60000`. Before 1.7.9 the server and CLI used a fixed 5000 ms, so a clock off by more than 5 s failed there while Python still logged in; upgrade.
+   若時間正確但登入過慢，把 `receive_window` 從預設 30000 ms 調高。Python：`api.login(..., receive_window=60000)`。server 與 CLI（1.7.9 起）：在環境變數或 `.env` 設 `SJ_RECEIVE_WINDOW=60000`，或 `shioaji server start --receive-window 60000`。1.7.9 以前 server 與 CLI 固定用 5000 ms，時間差超過 5 秒就會失敗，Python 卻能登入；請升級。
 3. For HTTP/CLI/server clients, restart the server after fixing the machine time so the login flow uses the corrected clock.
    HTTP/CLI/server client 在修正系統時間後重啟 server，讓登入流程使用正確時間。
 
@@ -270,6 +291,14 @@ uv tool install shioaji
 # Import (same as original shioaji) 引入方式不變
 import shioaji as sj
 ```
+
+If `uv lock` fails with `No solution found ... there is no version of shioaji==X.Y.Z and your project depends on shioaji==X.Y.Z`, `pyproject.toml` pins an exact patch release that is no longer on PyPI:
+1. Check `pyproject.toml`: change the shioaji dependency to the same release line (`==X.Y.Z` → `"shioaji==X.Y.*"`, e.g. `1.5.6` → `1.5.*`); do not switch lines.
+2. Re-lock: `uv lock`, then `uv sync`.
+
+若 `uv lock` 出現 `No solution found ... there is no version of shioaji==X.Y.Z and your project depends on shioaji==X.Y.Z`，代表 `pyproject.toml` 鎖到第三碼，而該版本已不在 PyPI：
+1. 檢查 `pyproject.toml`：把 shioaji 依賴改成同一條版本線（`==X.Y.Z` → `"shioaji==X.Y.*"`，例如 `1.5.6` → `1.5.*`），不要換版本線。
+2. 重新 lock：`uv lock`，再 `uv sync`。
 
 ### Change log file path 更改 log 檔案路徑
 
@@ -321,18 +350,28 @@ Contract files are time-sensitive. Use these update windows when diagnosing stal
 
 **Check 檢查項目:**
 
-1. If a contract is missing near an update window, reload contracts before changing code.
-   若商品在更新時段附近找不到，先重新載入商品檔，不要先改程式。
-2. Python can use `contracts_timeout`, `contracts_cb`, `fetch_contract=False`, and `api.fetch_contracts(contract_download=True)` to control or observe contract loading.
-   Python 可用 `contracts_timeout`、`contracts_cb`、`fetch_contract=False` 與 `api.fetch_contracts(contract_download=True)` 控制或觀察商品檔載入。
-3. HTTP/CLI/other language clients get contracts from the running server. Check `GET /api/v1/health` for `contract_count` and restart `shioaji server start` if the server loaded stale contracts.
-   HTTP/CLI/其他語言 client 使用執行中 server 的商品檔。用 `GET /api/v1/health` 檢查 `contract_count`；若 server 載入的是舊商品檔，重啟 `shioaji server start`。
-4. Expired concrete futures codes disappear from `api.Contracts`; use continuous contracts such as `TXFR1` / `TXFR2` for long historical futures queries.
-   到期的實際期貨代碼會從 `api.Contracts` 消失；長期歷史期貨查詢請用 `TXFR1` / `TXFR2` 這類連續合約。
+1. Near an update window, rerun the same narrow `api.contracts`/HTTP/CLI query. Contract V2 receives update events and refreshes dirty data on the next access; do not add a manual reload loop.
+   在更新時段附近，重新執行相同的 `api.contracts`／HTTP／CLI 窄查詢。Contract V2 收到事件後會在下一次存取更新過期資料，不要另寫手動 reload 迴圈。
+2. Verify the exchange/master code, `region`, and `security_type`. Taiwan's weighted index is `IX0001`, not the old `TSE001`.
+   確認交易所編碼、`region` 與 `security_type`；台灣加權指數使用 `IX0001`，不是舊的 `TSE001`。
+3. HTTP/CLI users can watch `/api/v1/stream/data/contract_event` or `shioaji contracts watch`, then rerun only the affected query. Python handles invalidation internally.
+   HTTP／CLI 可監聽 Contract event 後重查受影響資料；Python 會在內部自動處理 invalidation。
+4. Expired concrete futures codes leave the current Base list; use continuous contracts such as `TXFR1` / `TXFR2` for long historical futures queries.
+   到期的實際期貨代碼會離開目前 Base 清單；長期歷史期貨查詢請用 `TXFR1`／`TXFR2` 這類連續合約。
 
 ---
 
 ## Connection 連線相關
+
+### Server log files 伺服器 log 檔
+
+`shioaji server` (foreground or the background daemon) writes one log file per day, `logs/server-{port}/server.YYYY-MM-DD.log` (UTC date), and keeps the newest 14 days for each port, so servers on different ports keep separate files. `logs/` is under `SJ_HOME_PATH` (or `~/.shioaji/logs`); set `SJ_LOG_DIR` to change it. The path is also printed when the server starts. The daemon's `server-{port}.stderr.log` only holds what logging cannot capture, such as a crash, and is overwritten on each start. `SJ_LOG_PATH` above is for the Python package, not the server.
+`shioaji server`（前景或背景 daemon）每天寫一個 log 檔 `logs/server-{port}/server.YYYY-MM-DD.log`（日期是 UTC），每個 port 各自只保留最近 14 天，不同 port 的 server 各寫各的檔。`logs/` 在 `SJ_HOME_PATH` 下（或 `~/.shioaji/logs`），用 `SJ_LOG_DIR` 可改目錄；server 啟動時也會印出路徑。daemon 的 `server-{port}.stderr.log` 只留 log 收不到的內容（例如程式崩潰），每次啟動時覆寫。上面的 `SJ_LOG_PATH` 是給 Python 套件用的，不影響 server。
+
+```bash
+export SJ_LOG_DIR=/var/log/shioaji
+shioaji server start
+```
 
 ### Login reused a token that expires too soon 登入重用了快到期 token
 
@@ -383,22 +422,22 @@ the fixes are opposite.
 | Symptom / detail | Cause | Fix |
 |---|---|---|
 | `操作異常，請1分鐘後再重新登入` | Temporary rate-limit ban. The account/IP has exceeded a request-rate guardrail, so the backend blocks the whole session path; even `login()` can return 503 during the ban window. | Stop retry loops. Wait at least one minute without sending more login/API requests, then reduce request rate, replace polling with streaming, batch/cache repeated queries, and add client-side backoff. |
-| `Please update the version of shioaji ...` followed by `Not authenticated` on later calls | Version rejected by the server. Known bad yanked 1.5.x releases are not accepted; PyPI marks `1.5.0` and `1.5.1` yanked, and as of 2026-06-25 `1.5.2` is also yanked. | Upgrade to `shioaji==1.5.3`, then restart the Python process or `shioaji server` daemon and login again. |
+| `Please update the version of shioaji ...` followed by `Not authenticated` on later calls | Version rejected by the server. Known bad yanked 1.5.x releases are not accepted; PyPI marks `1.5.0` and `1.5.1` yanked, and as of 2026-06-25 `1.5.2` is also yanked. | Upgrade to the latest release of your line (`shioaji==1.5.*` or `shioaji==1.7.*`), then restart the Python process or `shioaji server` daemon and login again. |
 
 | 症狀 / detail | 成因 | 修法 |
 |---|---|---|
 | `操作異常，請1分鐘後再重新登入` | 暫時限流 ban。帳號/IP 超過 request-rate 防護後，後端會擋住整個 session path；ban 期間連 `login()` 都可能回 503。 | 停止重試迴圈。至少一分鐘內不要再送 login/API request，再降低頻率、用 streaming 取代輪詢、批次/快取重複查詢，並加入 client-side backoff。 |
-| `Please update the version of shioaji ...`，後續呼叫又出現 `Not authenticated` | 版本被伺服器拒收。已知有問題的 yanked 1.5.x 版本不被接受；PyPI 標記 `1.5.0`、`1.5.1` 為 yanked，截至 2026-06-25 `1.5.2` 也被標記為 yanked。 | 升級到 `shioaji==1.5.3`，然後重啟 Python process 或 `shioaji server` daemon，再重新登入。 |
+| `Please update the version of shioaji ...`，後續呼叫又出現 `Not authenticated` | 版本被伺服器拒收。已知有問題的 yanked 1.5.x 版本不被接受；PyPI 標記 `1.5.0`、`1.5.1` 為 yanked，截至 2026-06-25 `1.5.2` 也被標記為 yanked。 | 升級到所用版本線的最新版（`shioaji==1.5.*` 或 `shioaji==1.7.*`），然後重啟 Python process 或 `shioaji server` daemon，再重新登入。 |
 
 ```bash
 # uv project
-uv add "shioaji==1.5.3"
+uv add "shioaji==1.5.*"
 
 # pip / existing environment
-python -m pip install -U "shioaji==1.5.3"
+python -m pip install -U "shioaji==1.5.*"
 
 # CLI tool install
-uv tool install --force "shioaji==1.5.3"
+uv tool install --force "shioaji==1.5.*"
 ```
 
 Rate-limit ban guardrails include market-data queries (50 / 5 sec),
@@ -482,7 +521,8 @@ All HTTP errors return JSON format:
 | Status Code 狀態碼 | Meaning 意義 | Common Cause 常見原因 |
 |---------------------|--------------|------------------------|
 | 400 | Bad Request 請求錯誤 | Invalid parameters, account not signed, CA issues 參數錯誤、帳戶未簽署、CA 問題 |
-| 401 | Unauthorized 未授權 | Missing or invalid `Authorization` header (non-localhost) 缺少或無效 `Authorization` 標頭（非 localhost） |
+| 401 | Unauthorized 未授權 | Missing or invalid `Authorization` header (non-localhost, or `SJ_HTTP_AUTH=true`) 缺少或無效 `Authorization` 標頭（非 localhost 或 `SJ_HTTP_AUTH=true`） |
+| 403 | Forbidden 禁止 | Localhost cross-site guard: browser request from a non-allowed `Origin`, `Origin: null`, non-loopback `Host`, or `Sec-Fetch-Site: cross-site`. Add the page origin to `SJ_HTTP_ALLOWED_ORIGINS`, or use `SJ_HTTP_AUTH=true` 本機跨站防護拒絕；把網頁 origin 加入 `SJ_HTTP_ALLOWED_ORIGINS` |
 | 422 | Validation Error 驗證錯誤 | Backend validation failure (e.g., invalid date, count < 1) 後端驗證失敗（如日期無效、count < 1） |
 | 500 | Internal Error 內部錯誤 | Connection lost, timeout, decode failure 連線中斷、逾時、解碼失敗 |
 
@@ -517,14 +557,63 @@ curl -H "Authorization: Bearer YOUR_API_KEY:YOUR_SECRET_KEY" \
 
 **Troubleshooting checklist 疑難排解檢查清單:**
 
-1. **Confirm bind address 確認繫結位址** — localhost (`127.0.0.1`) requires no auth; any other address requires auth
-   localhost（`127.0.0.1`）不需認證；其他位址需要認證
+1. **Confirm bind address 確認繫結位址** — localhost (`127.0.0.1`) requires no auth unless `SJ_HTTP_AUTH=true` / `--auth`; any other address requires auth
+   localhost（`127.0.0.1`）不需認證（除非設 `SJ_HTTP_AUTH=true` 或 `--auth`）；其他位址需要認證
 2. **Check header format 檢查標頭格式** — Must be `Bearer <key>:<secret>`, not `Basic` or bare token
    必須是 `Bearer <key>:<secret>`，不是 `Basic` 或裸令牌
 3. **Verify env vars 確認環境變數** — `SJ_API_KEY` and `SJ_SEC_KEY` must be set when server starts; production orders also need `SJ_CA_PATH` and `SJ_CA_PASSWD`
    伺服器啟動時必須設定 `SJ_API_KEY` 和 `SJ_SEC_KEY`；正式下單也需要 `SJ_CA_PATH` 和 `SJ_CA_PASSWD`
 4. **Public endpoints 公開端點** — `/api/v1/health` and `/api/v1/info` bypass auth even on non-localhost
    即使在非 localhost，`/api/v1/health` 和 `/api/v1/info` 也不需認證
+
+### HTTPS, HTTP/2, HTTP/3, and ACME Issues / HTTPS、HTTP/2、HTTP/3、ACME 問題
+
+**The browser still reports HTTP/1.1 / 瀏覽器仍顯示 HTTP/1.1:**
+
+- The default plaintext `http://` listener is HTTP/1.1. Configure
+  `SJ_HTTP_TLS_CERT` and `SJ_HTTP_TLS_KEY`, then use the matching `https://`
+  hostname. Browsers do not select Shioaji HTTP/2 over plaintext h2c.
+- For local development, create a trusted localhost certificate with mkcert;
+  do not use ACME for localhost.
+- Verify outside the app with
+  `curl --http2 -sS -o /dev/null -w 'HTTP %{http_version}\n' https://localhost:8080/api/v1/health`.
+
+**The browser rejects local HTTPS / 瀏覽器拒絕本機 HTTPS:**
+
+- Generate the certificate for every hostname/IP the client actually uses,
+  and open the URL with a matching name. A certificate for `localhost` does
+  not validate `https://192.168.x.x`.
+- Run `mkcert -install` in the same OS/browser trust environment. Container,
+  simulator, and physical-device clients may need that CA installed in their
+  own trust store.
+- Never work around a production certificate error by disabling certificate
+  verification.
+
+**`SJ_HTTP3=true` fails startup or the browser never uses HTTP/3:**
+
+- HTTP/3 requires static TLS or ACME; it is rejected with plaintext HTTP.
+- Expose the configured port for both TCP and UDP. HTTP/2/HTTP/1.1 use TCP;
+  QUIC uses the same numeric UDP port.
+- First verify the TCP HTTPS response contains `Alt-Svc`, then test with a curl
+  build that supports `--http3-only`. Browser upgrade is automatic and may
+  occur after the first HTTPS response.
+- A proxy/load balancer must forward UDP/QUIC explicitly; forwarding TCP alone
+  cannot carry HTTP/3.
+
+**ACME mode fails validation or certificate issuance:**
+
+- Use public DNS names only: no localhost, IP literal, or wildcard.
+- Bind to a publicly reachable non-loopback address and expose TCP 443 for the
+  TLS-ALPN-01 challenge.
+- Set at least one contact and `SJ_HTTP_ACME_CACHE`. The cache must be a real
+  non-symlink directory with owner-only `0700` permissions.
+- Do not combine ACME variables with static TLS certificate/key variables.
+- Set `SJ_HTTP_ACME_DIRECTORY_NAME` and `SJ_HTTP_ACME_DIRECTORY_URL` together;
+  use the Let's Encrypt staging directory before production issuance.
+- First-start issuance is asynchronous, so HTTPS may be temporarily pending.
+
+See [HTTP_API.md](HTTP_API.md) for complete mkcert, static-TLS, HTTP/3, ACME,
+and browser `EventSource` examples.
 
 ### Unix Domain Socket (UDS) Issues Unix Domain Socket 問題
 
@@ -578,8 +667,8 @@ curl -N http://localhost:8080/api/v1/stream/data
 - Use `/api/v1/health` to confirm server is running 使用 `/api/v1/health` 確認伺服器運行中
 - For futures continuous-month aliases `TXFR1` / `TXFR2`, first resolve the contract and copy `target_code` into the subscribe body. Regular futures codes do not need this.
   期貨連續月 alias `TXFR1` / `TXFR2` 要先查合約並把 `target_code` 放進訂閱 body；一般期貨代碼不需要。
-- For order events in production, call `POST /api/v1/auth/subscribe_trade` once per account before opening `/api/v1/stream/data/order_event`. In simulation, `subscribe_trade` is a no-op success and is not required.
-  正式環境的委託回報要先對每個帳戶呼叫一次 `POST /api/v1/auth/subscribe_trade`，再打開 `/api/v1/stream/data/order_event`；simulation 模式下這是 no-op success，不需要呼叫。
+- For order events in production or simulation, call `POST /api/v1/auth/subscribe_trade` for each account before opening `/api/v1/stream/data/order_event`. A successful response starts active reports for that account.
+  正式環境與測試環境的委託回報都要先對每個帳戶呼叫 `POST /api/v1/auth/subscribe_trade`，成功後才會開始接收該帳戶的主動回報，再打開 `/api/v1/stream/data/order_event`。
 
 ```bash
 # Continuous futures alias example 連續月範例

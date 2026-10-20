@@ -203,13 +203,18 @@ accounts = api.login(os.environ["SJ_API_KEY"], os.environ["SJ_SEC_KEY"])
 print(accounts)                                         # login test 登入測試
 
 # Stock order test 證券下單測試
-sc = api.Contracts.Stocks["2890"]
-st = api.place_order(sc, sj.StockOrder(
-    price=sc.reference,                                 # reference = 平盤價
+sc_base = api.contracts.get("2890")
+if sc_base is None:
+    raise LookupError("contract 2890 not found")
+sc_info = api.contracts.info(sc_base)                   # Only for test price
+if sc_info is None:
+    raise LookupError("contract info 2890 not found")
+st = api.place_order(sc_base, sj.StockOrder(
+    price=sc_info.reference,                            # reference = 平盤價
     quantity=1,
     action=sj.Action.Buy,
     price_type=sj.StockPriceType.LMT,
-    order_type=sj.OrderType.ROD,
+    time_in_force=sj.TimeInForce.ROD,
     order_lot=sj.StockOrderLot.Common,
     account=api.stock_account,
 ))
@@ -218,13 +223,18 @@ print(st.status.status)                                 # PendingSubmit / Submit
 time.sleep(1.1)                                         # ≥ 1s between stock & futures tests
 
 # Futures order test 期貨下單測試
-fc = api.Contracts.Futures["TXFR1"]
-ft = api.place_order(fc, sj.FuturesOrder(
-    price=fc.reference,
+fc_base = api.contracts.get("TXFR1")
+if fc_base is None:
+    raise LookupError("contract TXFR1 not found")
+fc_info = api.contracts.info(fc_base)                   # Only for test price
+if fc_info is None:
+    raise LookupError("contract info TXFR1 not found")
+ft = api.place_order(fc_base, sj.FuturesOrder(
+    price=fc_info.reference,
     quantity=1,
     action=sj.Action.Buy,
     price_type=sj.FuturesPriceType.LMT,
-    order_type=sj.OrderType.ROD,
+    time_in_force=sj.TimeInForce.ROD,
     octype=sj.FuturesOCType.Auto,
     account=api.futopt_account,
 ))
@@ -389,10 +399,49 @@ shioaji server start
 uvx --from shioaji shioaji server start
 ```
 
+The CLI binary ships only in the regular (abi3) wheels. Free-threaded Python 3.14t wheels contain the Python package only, so install the CLI with a regular Python. `uv tool install` and `uvx` already pick a regular Python by default; if a 3.14t interpreter is forced, add `--python 3.13` (or another non-`t` version), or install `shioaji-cli` below.
+CLI 執行檔只放在一般（abi3）wheel。free-threaded Python 3.14t 的 wheel 只有 Python 套件，所以 CLI 要用一般版 Python 安裝。`uv tool install` 與 `uvx` 預設就會選一般版 Python；若環境強制用 3.14t，請加 `--python 3.13`（或其他不帶 `t` 的版本），或改裝下面的 `shioaji-cli`。
+
+From 1.7.9 the CLI is also published alone as `shioaji-cli`: the same native binary in a wheel that does not depend on the Python version (free-threaded 3.14t included) and carries no Python extension. Use it when you only need the CLI or local HTTP server; its version always matches `shioaji`.
+1.7.9 起 CLI 另外單獨發佈為 `shioaji-cli`：同一個原生執行檔，包成不綁 Python 版本的 wheel（free-threaded 3.14t 也可裝），不含 Python 擴充模組。只需要 CLI 或本機 HTTP server 時用它；版本永遠和 `shioaji` 相同。
+
+```bash
+uv tool install shioaji-cli          # or pin the line 或鎖版本線: "shioaji-cli==1.7.*"
+uvx --from shioaji-cli shioaji server start
+```
+
+Install one or the other: both put a `shioaji` command on `PATH`, so installing both in the same environment or as two uv tools makes them overwrite each other.
+兩者擇一安裝：兩個都會放一個 `shioaji` 指令到 `PATH`，裝在同一個環境或同時裝成兩個 uv tool 會互相覆蓋。
+
+### Version Pinning 鎖版號
+
+Shioaji's compatibility promise: releases that share the first two version parts never make incompatible changes. Every 1.5.x is compatible with other 1.5.x releases, and every 1.7.x with other 1.7.x releases; patch releases only add fixes or backward-compatible additions. Incompatible changes only happen when the first two parts change (for example 1.5 to 1.7).
+Shioaji 相容性承諾：前兩碼相同的版本之間不會有不相容的異動。1.5.x 之間彼此相容、1.7.x 之間彼此相容，修正版只會加修正或向下相容的新增功能；不相容的異動只會出現在前兩碼改變時（例如 1.5 到 1.7）。
+
+Pin only the first two version parts (the release line), never an exact patch version. PyPI keeps only the latest two patch releases of each line (for example two 1.7.x and two 1.5.x), so an exact pin such as `shioaji==1.7.3` stops installing once that release is removed, while a line pin keeps receiving fixes.
+只鎖前兩碼（版本線），不要鎖到第三碼。PyPI 每條版本線只保留最新兩個修正版（例如 1.7.x 兩版、1.5.x 兩版），鎖死 `shioaji==1.7.3` 這種版本在舊版移除後就會裝不到；鎖版本線則會持續拿到修正。
+
+```bash
+# Python project 專案
+uv add "shioaji==1.7.*"
+
+# pip / existing environment 既有環境
+python -m pip install -U "shioaji==1.7.*"
+
+# CLI tool CLI 工具
+uv tool install --force "shioaji==1.7.*"
+
+# requirements.txt / pyproject dependency 依賴寫法
+shioaji==1.7.*
+```
+
+Use `shioaji==1.5.*` for code that must stay on the 1.5 stable API (for example before migrating to Contract V2), and `shioaji==1.7.*` for 1.7 features.
+程式必須維持 1.5 穩定版 API 時（例如尚未遷移到 Contract V2）用 `shioaji==1.5.*`；要用 1.7 功能則用 `shioaji==1.7.*`。
+
 ### Standalone Binary 獨立二進制檔
 
-If Python/uv is not available, download the prebuilt `shioaji` binary for your OS/architecture from the official GitHub Releases page, then put it on `PATH`. Pick the latest stable release, a pre-release, or a specific tag (e.g. `v1.5.8`) there.
-若環境沒有 Python/uv，請到官方 GitHub Releases 頁面下載對應作業系統/架構的 `shioaji` 執行檔並加入 `PATH`。可在該頁選擇最新穩定版、預覽版或指定版本（例如 `v1.5.8`）。
+If Python/uv is not available, download the prebuilt `shioaji` binary for your OS/architecture from the official GitHub Releases page, then put it on `PATH`. Pick the latest stable release, a pre-release, or a specific tag (e.g. `v1.5.6`) there.
+若環境沒有 Python/uv，請到官方 GitHub Releases 頁面下載對應作業系統/架構的 `shioaji` 執行檔並加入 `PATH`。可在該頁選擇最新穩定版、預覽版或指定版本（例如 `v1.5.6`）。
 
 - Releases: <https://github.com/Sinotrade/Shioaji/releases>
 
@@ -439,7 +488,10 @@ Shioaji 支援的所有環境變數。可以在 `.env` 檔案（CLI 自動載入
 |---|---|---|
 | `SJ_PRODUCTION` | `false` | Enable production mode. Default is simulation. |
 | `SJ_HTTP_ADDR` | `127.0.0.1:8080` | Server HTTP bind address. Priority: `SJ_HTTP_ADDR` > `SJ_BIND_ADDR` > `BIND_ADDR` > `127.0.0.1:8080` |
+| `SJ_HTTP_AUTH` | (unset) | `true`/`1`/`yes` requires the Bearer API key even on localhost (same as `shioaji server --auth`). Without it, localhost needs no key but rejects cross-site browser requests with 403. |
+| `SJ_HTTP_ALLOWED_ORIGINS` | (none) | Extra comma-separated browser origins allowed by the localhost cross-site guard. |
 | `SJ_HTTP_CORS` | `true` | Enable CORS headers. Also reads `SJ_CORS` and `ENABLE_CORS` as fallbacks. |
+| `SJ_HTTP_CORS_ORIGINS` | Tauri production origins and localhost Vite dev origins | Comma-separated browser origins. Also reads `SJ_CORS_ORIGINS` as fallback. Avoid `*` on a trading server. |
 | `SJ_HTTP_TIMEOUT` | `30` | HTTP request timeout in seconds. Also reads `TIMEOUT_SECONDS` as fallback. |
 | `SJ_HTTP_LOG` | `true` | Enable HTTP request logging. Also reads `SJ_REQUEST_LOG` and `ENABLE_LOGGING` as fallbacks. |
 
@@ -464,6 +516,7 @@ Shioaji 支援的所有環境變數。可以在 `.env` 檔案（CLI 自動載入
 | `SJ_BIND_ADDR` | `SJ_HTTP_ADDR` (lower priority fallback) |
 | `BIND_ADDR` | `SJ_HTTP_ADDR` (lowest priority fallback) |
 | `SJ_CORS` | `SJ_HTTP_CORS` (fallback) |
+| `SJ_CORS_ORIGINS` | `SJ_HTTP_CORS_ORIGINS` (fallback) |
 | `ENABLE_CORS` | `SJ_HTTP_CORS` (fallback) |
 | `TIMEOUT_SECONDS` | `SJ_HTTP_TIMEOUT` (fallback) |
 | `SJ_REQUEST_LOG` | `SJ_HTTP_LOG` (fallback) |
@@ -502,15 +555,12 @@ accounts = api.login(
 print(accounts)
 ```
 
-**Sync login signature:**
+**Recommended sync login parameters:**
 ```python
 api.login(
     api_key: str,
     secret_key: str,
-    fetch_contract: bool = True,       # Auto-fetch contracts after login
-    contracts_timeout: int = 0,        # 0 = async (background), >0 = blocking (ms)
-    contracts_cb: Callable = None,     # () once after all contracts, or (SecurityType) per type
-    subscribe_trade: bool = True,      # Auto-subscribe to trade events
+    subscribe_trade: bool = True,      # Subscribe trade events on a fresh login (a reused token keeps its session's subscriptions)
     receive_window: int = 30000,       # Token receive window (ms)
     force_refresh: bool = False,       # True = request a fresh backend token; skip token-pool reuse
 ) -> List[Account]
@@ -521,25 +571,17 @@ api.login(
 await api.login(
     api_key: str,
     secret_key: str,
-    fetch_contract: bool = True,
     subscribe_trade: bool = True,
     receive_window: int = 30000,
     force_refresh: bool = False,
 ) -> List[Account]
 ```
 
-Note: `contracts_timeout` and `contracts_cb` are only available in the sync client. The async client always loads contracts non-blocking.
+Contract V2 is queried through `api.contracts` after login. It downloads the required type or shard on first access and reuses its cache; normal applications do not control contract download from `login()`.
 
-`receive_window` is the token-login receive window in milliseconds. Keep the default `30000` for normal use; increase it only when the machine clock is correct but token login is slow enough to hit backend signing/receive-window checks.
+`receive_window` is the token-login receive window in milliseconds. Keep the default `30000` for normal use; increase it only when the machine clock is correct but token login is slow enough to hit backend signing/receive-window checks. The server and CLI use the same default (1.7.9+) and read `SJ_RECEIVE_WINDOW`; `shioaji server start --receive-window <ms>` overrides it.
 
 `force_refresh=False` keeps the default token-pool behavior: a valid cached token may be reused after `auth/usage` verification. Use `force_refresh=True` when the login must bypass cached-token reuse and request a fresh token from the backend; the fresh token is cached afterward when a local token-pool slot is available. Locked slots owned by another live process are not invalidated.
-
-`contracts_cb` accepts either:
-
-- `callback()` -- called once after all contract types finish loading.
-- `callback(security_type)` -- called after each contract type finishes loading. The argument is a `SecurityType` enum such as `SecurityType.Stock`, `SecurityType.Future`, `SecurityType.Option`, or `SecurityType.Index`.
-
-Callbacks with more than one parameter raise `ShioajiTypeError`.
 
 ### CLI / Server: Environment Variables
 
@@ -560,6 +602,9 @@ SJ_API_KEY=xxx SJ_SEC_KEY=yyy shioaji server start
 After login, the token is cached to `SJ_HOME_PATH` (default `~/.shioaji`). Subsequent logins with the same credentials reuse the cached token if it has not expired, avoiding unnecessary API calls.
 登入後，令牌快取到 `SJ_HOME_PATH`（預設 `~/.shioaji`）。使用相同憑證的後續登入會重用未過期的快取令牌。
 
+A reused token keeps the trade-report subscriptions its session already had; `subscribe_trade` on that login does not add or remove them. If `trade_cache_health(account)` reports `NotSubscribed`, call `api.subscribe_trade(account)` (or log in with `force_refresh=True`).
+重用令牌時，沿用該 session 原本的主動回報訂閱，這次 login 的 `subscribe_trade` 不會增減訂閱。若 `trade_cache_health(account)` 顯示 `NotSubscribed`，請呼叫 `api.subscribe_trade(account)`（或以 `force_refresh=True` 重新登入）。
+
 ---
 
 ## Server Health and Auth Responses 伺服器狀態與認證回應
@@ -570,8 +615,8 @@ Use this section before deciding whether the server is ready, whether login/acco
 
 | Check | Response shape | Agent decision |
 |---|---|---|
-| `GET /api/v1/health` / `shioaji server check` | `HealthResponse { status, version, timestamp, token_expires_in_seconds?, token_stale?, contract_count?, last_maintenance?, next_maintenance?, last_maintenance_error?, ca_expires_in_days?, ca_expired? }` | If unavailable, start the server or diagnose bind/daemon issues. If `token_stale=true`, re-login/restart before trading. If `contract_count` is low or zero, wait for contracts or check contract download. If `ca_expired=true`, renew/replace CA before production orders. |
-| `GET /api/v1/info` | `ApiInfoResponse { name, version, description, protocols, simulation }` | Use `simulation` to decide whether to warn before real trading. Never assume production from server availability alone. |
+| `GET /api/v1/health` / `shioaji server check` | `HealthResponse { status, version, timestamp, token_expires_in_seconds?, token_stale?, contract_count?, last_maintenance?, next_maintenance?, last_maintenance_error?, ca_expires_in_days?, ca_expired?, agent_harness, instance_id }` | If unavailable, start the server or diagnose bind/daemon issues. If `token_stale=true`, wait briefly: since 1.7.8 the server re-logs in by itself once the token expires; restart only if it stays stale. `contract_count` is an observation of currently loaded/cached data, not a Contract V2 readiness gate; run the required narrow contract query. If `ca_expired=true`, renew/replace CA before production orders. If `agent_harness.enabled=true`, load [AGENT_HARNESS.md](AGENT_HARNESS.md) before mutation. |
+| `GET /api/v1/info` | `ApiInfoResponse { name, version, description, protocols, scheme, uds_plaintext, simulation, agent_harness, instance_id }` | Use `simulation` to decide whether to warn before real trading. `instance_id` (also the `X-Shioaji-Instance` header on every response) changes only when the server process restarts. The server refills its trade cache after every login (best-effort; not combo orders), so same-day `trade_id`s normally keep working; if one is still missing, refresh with `POST /api/v1/order/trades`. Never assume production from server availability alone. `agent_harness.enabled=true` means direct HTTP/CLI mutation requires trusted native approval, even on localhost/UDS. |
 
 ### Accounts / Usage / CA
 
@@ -585,8 +630,8 @@ Use this section before deciding whether the server is ready, whether login/acco
 
 | Check | Response shape | Agent decision |
 |---|---|---|
-| Python `api.subscribe_trade(account)` / `POST /api/v1/auth/subscribe_trade` | `SubscribeTradeOut { account, subscribe_trade, ts }` | Required before consuming HTTP `/api/v1/stream/data/order_event` in production. If `subscribe_trade=false` or the call errors, do not assume order/deal events are active. In simulation, HTTP subscribe is a no-op success and is not required. |
-| Python `api.unsubscribe_trade(account)` / `POST /api/v1/auth/unsubscribe_trade` | `SubscribeTradeOut { account, subscribe_trade, ts }` | Treat `subscribe_trade=false` as unsubscribed. In simulation, HTTP unsubscribe can return validation error because there is no production trade-event subscription to cancel. |
+| Python `api.subscribe_trade(account)` / `POST /api/v1/auth/subscribe_trade` | Python `bool` / HTTP `SubscribeTradeOut { account, subscribe_trade, ts }` | Production and simulation both support this operation. It is required before consuming HTTP `/api/v1/stream/data/order_event`; success starts active reports for that account. If `subscribe_trade=false` or the call errors, do not assume order/deal events are active. |
+| Python `api.unsubscribe_trade(account)` / `POST /api/v1/auth/unsubscribe_trade` | Python `bool` / HTTP `SubscribeTradeOut { account, subscribe_trade, ts }` | Production and simulation both support this operation. Treat `subscribe_trade=false` as successfully unsubscribed; active reports for that account stop. |
 
 ---
 
@@ -604,14 +649,13 @@ Standard synchronous client. Methods block until complete.
 import shioaji as sj
 
 api = sj.Shioaji(simulation=True)
-accounts = api.login(
-    api_key="xxx",
-    secret_key="yyy",
-    contracts_timeout=10000,  # Wait before using api.Contracts immediately
-)
+accounts = api.login(api_key="xxx", secret_key="yyy")
 
 # All methods are blocking 所有方法都是阻塞的
-snapshots = api.snapshots([api.Contracts.Stocks["2330"]])
+contract = api.contracts.get("2330")
+if contract is None:
+    raise LookupError("contract 2330 not found")
+snapshots = api.snapshots([contract])
 ```
 
 ### `ShioajiAsync` (Async 異步)
@@ -626,10 +670,12 @@ import uvloop
 async def main():
     api = sj.ShioajiAsync(simulation=True)
     accounts = await api.login(api_key="xxx", secret_key="yyy")
-    await api.fetch_contracts(contract_download=True)
 
     # All I/O methods are async 所有 I/O 方法都是異步的
-    snapshots = await api.snapshots([api.Contracts.Stocks["2330"]])
+    contract = await api.contracts.get("2330")
+    if contract is None:
+        raise LookupError("contract 2330 not found")
+    snapshots = await api.snapshots([contract])
 
     # Async callbacks for streaming data 串流資料的異步回呼
     async def on_tick(tick):
@@ -649,7 +695,7 @@ This example uses [uvloop](https://pypi.org/project/uvloop/) (`pip install uvloo
 |---|---|---|
 | Method calls 方法呼叫 | Blocking 阻塞 | `await` / `Awaitable` |
 | Callbacks 回呼 | Regular functions 一般函式 | `async def` coroutines 協程 |
-| Login extra params 登入額外參數 | `contracts_timeout`, `contracts_cb` | (none) |
+| Contract V2 lookup 商品檔查詢 | `api.contracts.*` | `await api.contracts.*` |
 | Data reception 資料接收 | Callback or Receiver | Callback or Receiver |
 | Runtime model 執行模式 | Blocking wrapper | Awaitable wrapper |
 
@@ -753,6 +799,9 @@ Action.Sell        # Sell 賣出
 
 ### OrderType 委託類型
 
+Values for the `time_in_force` order field (legacy name `order_type`, still accepted).
+用於委託的 `time_in_force` 欄位（舊名 `order_type` 仍可用）。
+
 ```python
 from shioaji import OrderType
 
@@ -801,6 +850,8 @@ StockOrderCond.Cash           # Cash 現股
 StockOrderCond.Netting        # Netting 沖銷
 StockOrderCond.MarginTrading  # Margin trading 融資
 StockOrderCond.ShortSelling   # Short selling 融券
+StockOrderCond.SBLShort # General strategic SBL short sale 一般策略性借券賣出（碼 5）
+StockOrderCond.SBLShortPriceExempt # Price-exempt SBL short sale 價格豁免借券賣出（碼 6）
 StockOrderCond.Emerging       # Emerging market 興櫃
 ```
 
