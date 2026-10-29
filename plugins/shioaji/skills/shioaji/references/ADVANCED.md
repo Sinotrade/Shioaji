@@ -640,7 +640,7 @@ df = pl.DataFrame([
 
 | Category 類別 | Limit 限制 |
 |---------------|------------|
-| Quote query 行情查詢 | 50 / 5 sec |
+| Quote query 行情查詢 | 50 / 10 sec |
 | Accounting 帳務 | 25 / 5 sec |
 | Orders 委託 | 250 / 10 sec |
 

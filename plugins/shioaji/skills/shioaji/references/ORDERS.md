@@ -126,7 +126,7 @@ curl -X POST http://localhost:8080/api/v1/order/place_order \
 | `price` | float/int | Order price 委託價格 |
 | `quantity` | int | Order quantity 委託數量 |
 | `action` | Action | Buy/Sell 買/賣 |
-| `price_type` | PriceType | LMT/MKT/MKP 限價/市價/範圍市價 |
+| `price_type` | StockPriceType | LMT/MKT 限價/市價 |
 | `time_in_force` | TimeInForce | ROD/IOC/FOK 委託條件 (legacy name 舊名 `order_type` still accepted 仍可用) |
 | `order_lot` | OrderLot | Common/Odd/IntradayOdd/Fixing 交易單位 |
 | `order_cond` | OrderCond | Cash/MarginTrading/ShortSelling/SBLShort/SBLShortPriceExempt 信用條件 |
@@ -164,11 +164,17 @@ shioaji order place ... --tif ioc   # also --time-in-force; legacy --order-type 
 
 - An `IOC`/`FOK` order that does not fill is reported as cancelled right away; that is normal, not an error. Check `deal_quantity` / `status` to see what filled.
   `IOC`／`FOK` 沒成交時會立刻收到取消，這是正常結果不是錯誤；用 `deal_quantity`／`status` 看實際成交多少。
-- Which combinations an exchange accepts differs by market: see the TWSE note below and [Futures Parameters](#futures-parameters-期貨參數) (TAIFEX rejects `MKT` + `ROD`; standard option combos reject `ROD`).
-  各市場可接受的組合不同：見下方證交所說明與[期貨參數](#futures-parameters-期貨參數)（期交所拒絕 `MKT` + `ROD`；選擇權標準組合單不接受 `ROD`）。
+- Which combinations an exchange accepts differs by market: see the stock table below and [Futures Parameters](#futures-parameters-期貨參數) (TAIFEX rejects `MKT`/`MKP` + `ROD`; standard option combos reject `ROD`).
+  各市場可接受的組合不同：見下方股票表格與[期貨參數](#futures-parameters-期貨參數)（期交所拒絕 `MKT`／`MKP` + `ROD`；選擇權標準組合單不接受 `ROD`）。
 
-> **TWSE accepts every `price_type` × `time_in_force` combination** — MKT/LMT/MKP each pair with ROD/IOC/FOK. This differs from TAIFEX; see [Futures Parameters](#futures-parameters-期貨參數).
-> **證交所所有 `price_type` × `time_in_force` 組合皆有效** — MKT/LMT/MKP 都可搭配 ROD/IOC/FOK；與期交所限制不同。
+**Stocks (TWSE / TPEx)** — stock `price_type` is only MKT/LMT. Stocks have no MKP: in Python, passing it raises `ShioajiValueError: Invalid StockPriceType: MKP`. Which combinations the exchange accepts depends on the session and the lot type. This differs from TAIFEX; see [Futures Parameters](#futures-parameters-期貨參數).
+**上市、上櫃股票** — 股票 `price_type` 只有 MKT/LMT。股票沒有 MKP，Python 帶入會丟 `ShioajiValueError: Invalid StockPriceType: MKP`。交易所接受哪些組合，依時段與交易單位而定；與期交所限制不同。
+
+| Session / lot 時段／交易單位 | Accepted 可用組合 |
+|---|---|
+| `Common`, continuous trading 整股逐筆交易（09:00–13:25） | MKT/LMT × ROD/IOC/FOK |
+| `Common`, call auction 整股集合競價（盤前 08:30–09:00、收盤 13:25–13:30、價格穩定措施期間） | LMT + ROD only 僅限價 ROD |
+| `IntradayOdd` / `Odd` / `Fixing` 盤中零股／盤後零股／盤後定價 | LMT + ROD only 僅限價 ROD |
 
 ### Market Order 市價單
 
@@ -178,7 +184,7 @@ order = sj.StockOrder(
     quantity=1,
     action=sj.Action.Buy,
     price_type=sj.StockPriceType.MKT,
-    time_in_force=sj.TimeInForce.ROD,  # Stocks: MKT accepts ROD/IOC/FOK 股票市價可搭配 ROD/IOC/FOK
+    time_in_force=sj.TimeInForce.ROD,
     account=api.stock_account,
 )
 ```
@@ -374,8 +380,8 @@ curl -X POST http://localhost:8080/api/v1/order/place_order \
 | `octype` | FuturesOCType | Auto/New/Cover/DayTrade 自動/新倉/平倉/當沖 |
 | `account` | Account | Futures account 期貨帳戶 |
 
-> **TAIFEX rejects `MKT` + `ROD`** — on futures/options, MKT must pair with IOC or FOK (server returns `op_code` 9938). LMT and MKP accept ROD/IOC/FOK.
-> **期交所拒絕 `MKT` + `ROD`** — 期貨/選擇權市價單必須搭配 IOC 或 FOK（伺服器回 `op_code` 9938 退單）；LMT、MKP 則三種委託條件皆可。
+> **TAIFEX rejects `MKT`/`MKP` + `ROD`** — on futures/options, MKT and MKP (range market) must pair with IOC or FOK. Only LMT accepts ROD/IOC/FOK.
+> **期交所拒絕 `MKT`／`MKP` + `ROD`** — 期貨/選擇權的市價與範圍市價單都必須搭配 IOC 或 FOK；只有 LMT 三種委託條件皆可。
 
 ### Open/Close Type 開平倉類型
 
@@ -464,6 +470,9 @@ Do not use a deal-event `trade_id` blindly unless you know it matches the same `
 不要盲目使用成交回報裡的 `trade_id`，除非已確認它和同一筆委託的 `Trade.order.id` 對得上。HTTP 較安全流程是：`/order/trades` -> 選 `trade.order.id` -> `/order/update_price`、`/order/update_qty` 或 `/order/cancel_order` -> 等 `order_deal_event` 或再呼叫 `/order/trades` 確認。
 
 ### Change Price 改價
+
+For stocks, only limit orders can change price. Odd-lot orders (intraday or after-hours) and market orders cannot; reduce the quantity or cancel instead.
+股票只有限價單能改價；零股（盤中／盤後）、市價單不能改價，只能減量或刪單。
 
 ```python
 api.update_order(trade=trade, price=585)

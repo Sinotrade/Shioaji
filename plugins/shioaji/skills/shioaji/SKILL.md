@@ -158,10 +158,23 @@ response 意義再 retry。正確用法會離這些限制很遠；若碰到限�
 | Category | Limit |
 |----------|-------|
 | Daily Traffic | 500MB–10GB (based on trading volume) |
-| Quote Query | 50 requests / 5 sec |
+| Quote Query | 50 requests / 10 sec |
 | Accounting Query | 25 requests / 5 sec |
 | Connections | 5 per person ID |
 | Daily Logins | 1000 times |
+
+Source 來源：[Shioaji 使用限制](https://sinotrade.github.io/zh/tutor/limit/)
+
+---
+
+## Trading Rule Sources / 交易規則來源
+
+Exchange trading rules in this skill (sessions, order type combinations, odd lots, price changes) summarize the official pages below; when they disagree, the official page wins.
+本 skill 中的交易規則（交易時段、委託組合、零股、改價）摘錄自以下官方網頁；如有出入，以官方網頁為準。
+
+- [TWSE 集中市場交易制度介紹](https://www.twse.com.tw/zh/products/system/trading.html)
+- [TPEx 盤中全面逐筆交易專區](https://www.tpex.org.tw/zh-tw/mainboard/trading/rules/continuous.html)
+- [TAIFEX 委託單種介紹](https://www.taifex.com.tw/cht/4/oamIntroduction)
 
 ---
 

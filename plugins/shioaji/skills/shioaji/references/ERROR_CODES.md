@@ -4,6 +4,7 @@
 使用時機：使用者貼出 exception traceback、HTTP error JSON、失敗的 `Trade`、或委託回報內容。
 
 > 錯誤訊息文字可能隨伺服器版本微調，比對時抓關鍵字即可，不要求逐字相同。
+> 第 2.2–2.5 節與第 3 節的訊息由後端或交易所回傳，不在 SDK 原始碼中；其中的交易所規則（如集合競價時段、STATUS 49）見 [SKILL.md](../SKILL.md) 交易規則來源。
 > 處理方法分三類：**自行處理**（修正後即可重試）、**等待重試**（稍後再試，勿密集輪詢）、**聯絡永豐**（重試無效，請附完整錯誤訊息至客服群組詢問：[Telegram](https://t.me/joinchat/973EyAQlrfthZTk1) 或 [Discord](https://discord.gg/5nzmWCTnG7)）。
 
 ---
@@ -33,18 +34,21 @@ if trade.status.status == sj.constant.Status.Failed:
 如果找不到當初的回傳值，用查詢的方式取回委託（不會產生新委託）：
 
 ```python
-api.update_status()
+for account in api.list_accounts():
+    api.update_status(account)
 for trade in api.list_trades():
     print(trade.status.status, trade.status.msg)
 ```
 
-HTTP client 同理：檢查先前 `POST /api/v1/order/place` 回應 body 的 `status.status` 是否為 `"Failed"`（`200 OK` 不代表委託被接受）；事後查詢用 `POST /api/v1/order/trades`（會先更新狀態再列出委託，不會產生新委託），不要重打下單端點。
+`update_status()` 不帶參數只會更新預設帳號。手上有某筆 `trade` 時用 `api.update_status(trade=trade)` 只更新那一筆；組合單用 `api.update_combostatus()`。
+
+HTTP client 同理：檢查先前 `POST /api/v1/order/place_order` 回應 body 的 `status.status` 是否為 `"Failed"`（`200 OK` 不代表委託被接受）；事後查詢用 `POST /api/v1/order/trades`，body 帶原委託的帳號（會先更新狀態再列出委託，不會產生新委託）；組合單用 `POST /api/v1/order/combotrades`。不要重打下單端點。
 
 **形式四：HTTP 200 但靜默失敗。** 沒有 exception、沒有錯誤 code，要從回應內容判斷：
 
 - 行情查詢（`ticks`／`kbars`／`snapshots`）回空資料：頭號原因是流量用量超額，先查 `api.usage()` 或 `GET /api/v1/auth/usage`，判讀流程見 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 歷史行情回空一節。
-- 預收券款（reserve）操作：回應 `status` 為 `false` 時，失敗原因在 `info` 欄位，見 [RESERVE.md](RESERVE.md)。
-- watchlist／`credit_enquire` 在後端異常時可能靜默回空結果：重試仍空、且查詢條件確認無誤時，至客服群組詢問。
+- 預收券款（reserve）操作：回應 `status` 為 `false` 時，失敗原因在 `info` 欄位，見 [RESERVE.md](RESERVE.md)。模擬環境固定回 `status: false` 且 `info` 為空，這是預設回應，不是失敗。
+- watchlist／`credit_enquires` 在後端異常時可能靜默回空結果：重試仍空、且查詢條件確認無誤時，至客服群組詢問。
 
 ---
 
@@ -52,7 +56,7 @@ HTTP client 同理：檢查先前 `POST /api/v1/order/place` 回應 body 的 `st
 
 ### 2.1 Exception 與 HTTP status 對照
 
-Python exception 皆繼承自 `sj.ShioajiError`，訊息格式為 `StatusCode: {code}, Detail: {訊息}`。HTTP API 客戶收到相同 code 的 `{"code": N, "message": ..., "details": ...}`。
+Python exception 皆繼承自 `sj.ShioajiError`。後端回 400／401／403／422／503 時，訊息格式為 `StatusCode: {code}, Detail: {訊息}`；其他 status、逾時、連線、VPN 下單閘道等例外的格式不同，見下表各列。HTTP API 客戶收到相同 code 的 `{"code": N, "message": ..., "details": ...}`。
 
 | Status | Python exception | 意義 |
 |---|---|---|
@@ -69,9 +73,12 @@ Python exception 皆繼承自 `sj.ShioajiError`，訊息格式為 `StatusCode: {
 
 HTTP server（含 Pro sidecar）對 VPN 下單閘道的 409／503／504 會原樣回傳 status，並在 `details.error_code` 帶閘道錯誤碼（如 `OrderOutcomeUnknown`、`NotConnected`），客戶端依此判斷「結果不確定」或「未送出」。
 
-使用 `shioaji server`（本地 :8080）的客戶注意：**本地 server 的 401 與後端 Token 無關**，是 `Authorization` header 認證失敗，訊息為 `Missing Authorization header`、`Invalid Authorization format, expected: Bearer <api_key>:<secret_key>`、`Invalid token format, expected: <api_key>:<secret_key>` 或 `Invalid API credentials`——檢查啟動 server 用的金鑰與請求 header 即可，不用查下表。
+使用 `shioaji server` 的客戶注意：本地 server 的 401 有兩種來源，看訊息分辨：
 
-注意：422 的 detail 不是字串，而是欄位錯誤**陣列**（`[{"loc": [...], "msg": "field required", "type": ...}]`）——看到這種格式，依 `loc` 指出的欄位修正請求參數即可。
+- `Missing Authorization header`、`Invalid Authorization format, expected: Bearer <api_key>:<secret_key>`、`Invalid token format, expected: <api_key>:<secret_key>` 或 `Invalid API credentials`：本地 server 的 `Authorization` header 認證失敗，檢查啟動 server 用的金鑰與請求 header。只有 server 綁定在非 localhost，或用 `--auth`／`SJ_HTTP_AUTH` 開啟認證時才會檢查 header；預設綁 `127.0.0.1` 不檢查。
+- 其他訊息：後端回的 401 原樣轉發，依下方 2.2 表判讀。
+
+注意：422 是逐欄位的驗證錯誤，依錯誤內容指出的欄位（`loc`）修正請求參數即可。Python 的 `ValidationError` 會把多筆錯誤用 `; ` 串成一個字串（`StatusCode: 422, Detail: {...}; {...}`）；HTTP 回應的 `details` 依後端內容可能是物件、陣列或 null。
 
 CA 相關 exception 在本地拋出、不帶 status code：
 
@@ -94,12 +101,12 @@ CA 相關 exception 在本地拋出、不帶 status code：
 | 401 | `Could not validate credentials` | Token 無效（格式錯誤或環境不符） | 自行處理：重新登入；確認模擬／正式環境一致 |
 | 401 | `Token doesn't have permission` | API Key 權限未開放該功能 | 自行處理：至新理財網 API 管理頁（<https://www.sinotrade.com.tw/newweb/PythonAPIKey/>）確認並調整 API Key 的權限設定 |
 | 400 | `key: {key_id} not exist.` | API Key 不存在（打錯或已刪除） | 自行處理：核對 API Key；必要時至 API 管理頁重新申請 |
-| 401 | `key: {key_id} not match signature.` | Secret Key 錯誤（與 API Key 不成對） | 自行處理：核對金鑰；必要時至 API 管理頁重新產生 |
-| 406 | `{key_id} is expired.` | API Key 已過期 | 自行處理：至新理財網 API 管理頁（<https://www.sinotrade.com.tw/newweb/PythonAPIKey/>）重新申請 API Key |
-| 401 | `ip: {ip} not allow.` | 登入 IP 不在 API Key 的白名單內 | 自行處理：至 API 管理頁調整 IP 白名單，或改用允許的網路 |
-| 401 | `Token doesn't have production permission.` | API Key 沒有正式環境權限 | 自行處理：至 API 管理頁確認權限；或先用模擬環境 |
+| 400 | `key: {key_id} not match signature.` | Secret Key 錯誤（與 API Key 不成對） | 自行處理：核對金鑰；必要時至 API 管理頁重新產生 |
+| 400 | `{key_id} is expired.` | API Key 已過期 | 自行處理：至新理財網 API 管理頁（<https://www.sinotrade.com.tw/newweb/PythonAPIKey/>）重新申請 API Key |
+| 400 | `ip: {ip} not allow.` | 登入 IP 不在 API Key 的白名單內 | 自行處理：至 API 管理頁調整 IP 白名單，或改用允許的網路 |
+| 400 | `Token doesn't have production permission.` | API Key 沒有正式環境權限 | 自行處理：至 API 管理頁確認權限；或先用模擬環境 |
 | 451 | `Too Many Connections.` | 同一 person_id 最多 5 條連線，每次 `api.login()` 都算一條；常見原因是程式結束前沒 `logout()` 或程式沒真正關掉 | 自行處理：每次用完呼叫 `api.logout()`；若都有登出仍發生，關閉殘留程式或重開機後再登入；見 [CONCEPTS.md](CONCEPTS.md) |
-| 406 | `Sign data is timeout.`（登入時出現） | 本機時間與伺服器相差超過 receive_window（預設 30 秒） | 自行處理：先校準系統時間，見 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 登入簽章逾時與 <https://sinotrade.github.io/zh/tutor/login/#_1> |
+| 400 | `Sign data is timeout.`（登入時出現） | 本機時間與伺服器相差超過 receive_window（預設 30 秒） | 自行處理：先校準系統時間，見 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 登入簽章逾時與 <https://sinotrade.github.io/zh/tutor/login/#_1> |
 | 503 | `Please update the version of shioaji to at least {版本} ...` | 版本低於最低要求 | 自行處理：用 uv 升級至要求版本（`uv add "shioaji=={版本}"`；CLI 安裝用 `uv tool install --force "shioaji=={版本}"`）後重新登入，見 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) |
 | 400 | `密碼錯誤 {N} 次，請留意英文字母大小寫`（券商原文，錯滿 3 次的訊息附客服電話） | 登入密碼錯誤 | 自行處理：留意大小寫；錯 3 次會鎖定，鎖定後至新理財網重置密碼 |
 | 503 | `登入密碼錯誤3次，請進行密碼重置` | 密碼錯誤三次鎖定 | 自行處理：至新理財網重置密碼後再重新登入 |
@@ -112,7 +119,7 @@ CA 相關 exception 在本地拋出、不帶 status code：
 
 | Status | 訊息 | 原因 | 處理方法 |
 |---|---|---|---|
-| 406 | `Order price error.` | 價格不符檔位或漲跌幅限制 | 自行處理：修正價格；漲跌停價掛法見 [ORDERS.md](ORDERS.md) |
+| 406 | `Order price error.` | 價格不符檔位或漲跌幅限制 | 自行處理：修正價格；漲跌停價掛法見 [TROUBLESHOOTING.md](TROUBLESHOOTING.md#how-to-place-limit-updown-orders-如何掛漲跌停價) |
 | 406 | `Account Not Acceptable.` | 帳號未完成開通（簽署＋模擬測試） | 自行處理：完成 API 簽署與模擬登入/下單測試，見 [PREPARE.md](PREPARE.md)；完成後仍出現才聯絡永豐 |
 | 400 | `Ca is empty` | 正式環境下單未帶 CA 簽章 | 自行處理：先啟用 CA，見 [PREPARE.md](PREPARE.md) |
 | 400 | `Please run update_status first to get trade details.` | 刪改單前未先更新委託狀態 | 自行處理：先呼叫 `api.update_status()` 再操作 |
@@ -141,7 +148,7 @@ CA 相關 exception 在本地拋出、不帶 status code：
 | 503 | `Service is unavailable, Please try again later.` | 等待重試 |
 | 200 | `account_balance` 的 `errmsg` = `查無銀行交割帳號` / `非永豐銀行交割帳號` | 帳號未綁永豐銀行交割帳戶；自行確認交割戶設定，開戶或變更請洽營業員 |
 | 200 | `account_balance` 的 `errmsg` 為其他銀行端錯誤（如 `SP Bank Error (Code: {n})`） | 銀行端餘額查詢失敗，聯絡永豐：至客服群組反應 |
-| 4xx | `trading_limits` 於非開放時段查詢的錯誤（訊息由後端回傳） | 僅交易日 08:30–15:00 開放查詢，時段外出現錯誤屬預期行為，等開放時段再查 |
+| 4xx | `trading_limits` 於非開放時段查詢的錯誤（訊息由後端回傳） | 正式環境後端規則：僅交易日 08:30–15:00 開放查詢，時段外出現錯誤屬預期行為，等開放時段再查（模擬環境不檢查時段，直接回預設值） |
 | 500 | `Internal Server Error` / `Please check param.` | 聯絡永豐：至客服群組反應 |
 | 504 | `... API call timed out`（如 `SOR Gateway API call timed out`） | 聯絡永豐：後端服務逾時，至客服群組反應 |
 
@@ -151,7 +158,7 @@ STS 是下單中台，需要經過下單中台的操作（下單、刪改單、�
 
 | Status | 訊息 | 原因 | 處理方法 |
 |---|---|---|---|
-| 408 | `STS Request Timeout` | 下單中台回應逾時 | 聯絡永豐：至客服群組回報；**下單類操作在重送前必先 `update_status()` 確認委託是否已成立**，避免重複下單 |
+| 408 | `STS Request Timeout` | 下單中台回應逾時 | 聯絡永豐：至客服群組回報；**下單類操作在重送前必先 `update_status(原委託帳號)`（組合單用 `update_combostatus(原委託帳號)`）確認委託是否已成立**，避免重複下單 |
 | 503 | `STS Service Unavailable` | 下單中台連線中斷、重連中 | 聯絡永豐：至客服群組回報 |
 | 500 | `STS Sending Error` / `STS Data Receive Error` | 下單中台傳送／接收資料異常 | 聯絡永豐：至客服群組回報 |
 
@@ -164,11 +171,11 @@ STS 是下單中台，需要經過下單中台的操作（下單、刪改單、�
 | `Not authenticated` / `not authenticated` | 尚未登入就呼叫需登入的功能 | 自行處理：先 `api.login()` |
 | `Invalid {Enum}: {值}`（如 `Invalid Action: buy`） | enum 字串大小寫或拼字錯 | 自行處理：改用正確值（如 `Buy`）或 `sj.constant` 常數 |
 | `{Type} must be {Type} enum or string` / `order must be StockOrder, FuturesOrder, or Order` | 參數型別錯誤 | 自行處理：依訊息修正參數型別 |
-| `Trade {id} not found in cache` | 刪改單的委託不在本地快取 | Python：先 `update_status()` 取回委託再操作。HTTP server（1.7.8+）登入後會自動補回快取，仍出現時呼叫 `POST /api/v1/order/trades` 重抓，再用回傳的 `trade.order.id` |
+| `Trade {id} not found in cache` | 刪改單的委託不在本地快取 | Python：先帶原委託帳號 `update_status(account)`，再用 `list_trades()` 取回委託後操作。HTTP server（1.7.8+）登入後會自動補回快取，仍出現時呼叫 `POST /api/v1/order/trades` 並帶帳號重抓，再用回傳的 `trade.order.id` |
 | `api_key must be at least 10 characters` / `invalid secret_key (base58 decode failed)` | 金鑰貼錯（貼到片段、多了空白或換行） | 自行處理：重新完整複製 API Key／Secret Key |
 | 錯誤訊息帶 `(cached from a previous failure; will retry server in {n}s)` 後綴 | 登入失敗後短時間內重試，回的是本地快取的舊錯誤，**不代表新設定無效** | 自行處理：等提示秒數過後再重試 |
 | `Path: {path} without write permission. Please set SJ_CONTRACTS_PATH to a writable path.` | 商品檔快取目錄不可寫（常見於 Docker／唯讀環境） | 自行處理：把 `SJ_CONTRACTS_PATH` 指到可寫路徑 |
-| `Login To Activate Ca` | 未登入就呼叫 `activate_ca()` | 自行處理：先 `login()` 再啟用 CA |
+| `Login To Activate Ca` | 已登入，但登入回應沒有取得對外 IP，無法啟用 CA | 自行處理：重新 `login()` 後再啟用 CA；仍出現至客服群組詢問 |
 | `contracts: wire version mismatch (server {X}, client supports {Y})` | Contract V2 版本不符 | 自行處理：升級 shioaji |
 | `contracts: not populated for {region}/{type}` / `contracts: transient transport failure: ...` | 當日商品檔尚未產製／暫時性傳輸失敗 | 等待重試 |
 | `No stock account found` / `No futures account found` / `{api}: no ... account found` | 未帶帳戶且登入帳號無對應類型帳戶 | 自行處理：確認帳戶類型；無該類帳戶需先開戶 |
@@ -185,10 +192,10 @@ STS 是下單中台，需要經過下單中台的操作（下單、刪改單、�
 
 | `msg` 訊息 | 原因 | 處理方法 |
 |---|---|---|
-| `非委託時間` | 不在委託時段 | 自行處理：等委託時段；盤前可用預約單，見 [RESERVE.md](RESERVE.md) |
-| `非預約下單時間` / `委託預約單時間` | 預約單時段規則 | 自行處理：確認預約時段，見 [RESERVE.md](RESERVE.md) |
-| `處理中, 請再確認委託狀態` | 委託處理中，結果未定 | 等待重試：`update_status()` 確認，**不要直接重送** |
-| `連線逾時,請再確認委託狀態` | 委託送出但結果未知 | **重送前必先 `update_status()` 確認**，避免重複下單 |
+| `非委託時間` | 不在委託時段 | 自行處理：等委託時段；盤前可用預約單 |
+| `非預約下單時間` / `委託預約單時間` | 預約單時段規則 | 自行處理：確認預約時段 |
+| `處理中, 請再確認委託狀態` | 委託處理中，結果未定 | 等待重試：`update_status(原委託帳號)`（組合單用 `update_combostatus(原委託帳號)`）確認，**不要直接重送** |
+| `連線逾時,請再確認委託狀態` | 委託送出但結果未知 | **重送前必先 `update_status(原委託帳號)`（組合單用 `update_combostatus(原委託帳號)`）確認**，避免重複下單 |
 | `忙線中, 請稍後再查` | 後台忙碌 | 等待重試 |
 | `買賣值有錯` / `交易條件值有錯` | 參數組合不合法 | 自行處理：檢查 `action`、`price_type`、`time_in_force`、`order_cond` 組合，見 [ORDERS.md](ORDERS.md) |
 | `無此商品代碼` | 合約代碼錯誤 | 自行處理：確認合約，見 [CONTRACTS.md](CONTRACTS.md) |
@@ -211,7 +218,8 @@ STS 是下單中台，需要經過下單中台的操作（下單、刪改單、�
 | `帳號不存在` | 模擬帳號未建立 | 自行處理：重新以模擬模式登入一次（登入時會建立模擬帳號） |
 | `價格超過漲跌幅範圍` | 價格超出漲跌停 | 自行處理：修正價格 |
 | `價格檔數錯誤` / `價格錯誤` | 價格不符檔位 | 自行處理：依商品檔位修正價格 |
-| `集合競價時段不可輸入市價／ IOC ／ FOK 委託` | 開收盤集合競價時段限制 | 自行處理：改用限價 ROD，或等連續交易時段 |
+| `集合競價時段不可輸入市價／ IOC ／ FOK 委託` | 開收盤集合競價時段限制。正式環境交易所同樣會退單（證交所／櫃買 STATUS 49） | 自行處理：改用限價 ROD，或等逐筆交易時段（09:00–13:25） |
+| `集合競價時段不可輸入 FOK／一定範圍市價委託` | 期貨開盤前集合競價時段（08:30–08:45、14:50–15:00）不接受 FOK 與範圍市價（MKP）。正式環境期交所同樣不接受 | 自行處理：改用市價 IOC、限價 IOC 或限價 ROD，或等開盤 |
 | `集保賣出餘股數不足，餘股數 {n} 股` | 模擬庫存不足 | 自行處理：確認模擬持倉數量 |
 | `該商品非當沖` | 商品不可當沖 | 自行處理：取消當沖條件或換商品 |
 | `委託數量已完全刪除` / `該委託書已完全成交，不可刪單/改單或改價` | 對已刪除／已成交的委託操作 | 自行處理：`update_status()` 確認委託狀態 |
@@ -222,7 +230,7 @@ STS 是下單中台，需要經過下單中台的操作（下單、刪改單、�
 
 ## 4. 形式三：委託回報 `op_code`
 
-委託／成交回報（`order_deal_event` callback、order-event SSE）帶 `operation` 區塊：
+委託回報（`StockOrderEvent`／`FuturesOrderEvent`，經 `order_deal_event` callback 或 order-event SSE 送達）帶 `operation` 區塊；成交回報（`StockDealEvent`／`FuturesDealEvent`）沒有這個欄位：
 
 ```python
 {"op_type": "New", "op_code": "00", "op_msg": ""}
@@ -238,7 +246,7 @@ STS 是下單中台，需要經過下單中台的操作（下單、刪改單、�
 
 ## 5. 重試決策摘要
 
-1. **逾時、「處理中」或結果不確定後絕不直接重送委託**（`STS Request Timeout`、`連線逾時`、`處理中`、409 `OrderOutcomeUnknown`、504）：先 `update_status()` 確認委託狀態。重複下單比漏單更糟。
+1. **逾時、「處理中」或結果不確定後絕不直接重送委託**（`STS Request Timeout`、`連線逾時`、`處理中`、409 `OrderOutcomeUnknown`、504）：先 `update_status(trade=trade)`（或帶原委託帳號）確認委託狀態；組合單改用 `update_combostatus(原委託帳號)`，再檢查刷新後的組合單。重複下單比漏單更糟。
 2. **自行處理類**（參數錯、Token 過期、未帶 CA、未更新狀態、金鑰／權限設定）：修正後即可重試；金鑰與權限問題到新理財網 API 管理頁自行調整。
 3. **等待重試類**（維護、忙線、`操作異常`）：等待後再試，不要密集輪詢——可能觸發封鎖。
 4. **聯絡永豐類**（下單中台異常、風控、額度、簽署、被封鎖）：重試無效，請使用者附上完整錯誤訊息至客服群組（[Telegram](https://t.me/joinchat/973EyAQlrfthZTk1) 或 [Discord](https://discord.gg/5nzmWCTnG7)）詢問；額度與風控類也可洽所屬營業員。

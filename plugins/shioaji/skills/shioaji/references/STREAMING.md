@@ -397,8 +397,8 @@ async def on_kbar(kbar):
     print(f"Code: {kbar.code}, Close: {kbar.close}")
 ```
 
-> **Performance (Python only) 效能（限 Python）**: for high-throughput streaming with `ShioajiAsync`, run it on uvloop for a faster event loop. See [PREPARE.md → Why uvloop](PREPARE.md#why-uvloop-為什麼用-uvloop).
-> 高吞吐串流使用 `ShioajiAsync` 時，建議搭配 uvloop 取得更快的 event loop。見 [PREPARE.md → Why uvloop](PREPARE.md#why-uvloop-為什麼用-uvloop)。
+> **Performance (Python only) 效能（限 Python）**: for high-throughput streaming with `ShioajiAsync`, run it on uvloop for a faster event loop. See [PREPARE.md → ShioajiAsync](PREPARE.md#shioajiasync-async-異步).
+> 高吞吐串流使用 `ShioajiAsync` 時，建議搭配 uvloop 取得更快的 event loop。見 [PREPARE.md → ShioajiAsync](PREPARE.md#shioajiasync-async-異步)。
 
 ---
 

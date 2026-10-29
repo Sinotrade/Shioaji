@@ -18,11 +18,11 @@ When the user pastes an error message, exception, or a failed `Trade`, identify 
   `Trade` 的 `status.status = Failed` — 下單被後台拒絕；**不會拋例外**，讀 `trade.status.msg`。
 - Order callback with `operation.op_code != "00"` — operation failed at exchange/backoffice, read `op_msg`.
   委託回報 `operation.op_code != "00"` — 操作在交易所／後台失敗，讀 `op_msg`。
-- HTTP 200 with empty data or `status: false` — silent failure: check usage quota first (Market Data section below), or the reserve `info` field.
-  HTTP 200 但回空資料或 `status: false` — 靜默失敗：先查流量用量（見下方行情資料節），預收券款則看回應 `info` 欄位。
+- HTTP 200 with empty data or `status: false` — silent failure: check usage quota first (Market Data section below), or the reserve `info` field. In simulation, reserve always returns `status: false` with empty `info`; that is the default response, not a failure.
+  HTTP 200 但回空資料或 `status: false` — 靜默失敗：先查流量用量（見下方行情資料節），預收券款則看回應 `info` 欄位。模擬環境的預收券款固定回 `status: false` 且 `info` 為空，這是預設回應，不是失敗。
 
-After a timeout or a `處理中` message on any order operation, always run `update_status()` and check the trade state before re-sending — never blindly retry an order.
-下單類操作遇到逾時或「處理中」訊息，重送前務必先 `update_status()` 確認委託狀態，絕不直接重送。
+After a timeout or a `處理中` message on any order operation, always run `update_status(trade=trade)` (or pass the order's account) and check the trade state before re-sending — never blindly retry an order. For combo orders, run `update_combostatus(account)` with the original account instead and check the refreshed combo trade.
+下單類操作遇到逾時或「處理中」訊息，重送前務必先 `update_status(trade=trade)`（或帶原委託帳號）確認委託狀態，絕不直接重送。組合單改用 `update_combostatus(原委託帳號)`，再檢查刷新後的組合單。
 
 ---
 
@@ -76,8 +76,8 @@ Real-time subscriptions are different: streaming subscriptions do **not** consum
 
 1. **Traffic quota / usage 流量額度 / 用量** — Check `api.usage()`, `shioaji auth usage`, or `GET /api/v1/auth/usage` first. If `remaining_bytes` is exhausted, empty historical responses are expected until quota is available again.
    先查 `api.usage()`、`shioaji auth usage` 或 `GET /api/v1/auth/usage`。如果 `remaining_bytes` 已耗盡，歷史行情回空是預期現象，需等額度恢復。
-2. **Request rate 次數限制** — Market data queries (`credit_enquires`, `short_stock_sources`, `snapshots`, `ticks`, `kbars`) share a 50 calls / 5 seconds limit. Intraday `ticks` queries are limited to 10 calls; intraday `kbars` queries are limited to 270 calls. If exceeded, wait at least one minute before retrying.
-   行情查詢（`credit_enquires`、`short_stock_sources`、`snapshots`、`ticks`、`kbars`）總次數為 5 秒 50 次；盤中 `ticks` 查詢不得超過 10 次，盤中 `kbars` 查詢不得超過 270 次。若超限，至少等待一分鐘再重試。
+2. **Request rate 次數限制** — Market data queries (`credit_enquires`, `short_stock_sources`, `snapshots`, `ticks`, `kbars`) share a 50 calls / 10 seconds limit. Intraday `ticks` queries are limited to 10 calls; intraday `kbars` queries are limited to 270 calls. If exceeded, wait at least one minute before retrying.
+   行情查詢（`credit_enquires`、`short_stock_sources`、`snapshots`、`ticks`、`kbars`）總次數為 10 秒 50 次；盤中 `ticks` 查詢不得超過 10 次，盤中 `kbars` 查詢不得超過 270 次。若超限，至少等待一分鐘再重試。
 3. **Trading day 交易日** — Weekends, holidays, or future dates can have no historical rows.
    週末、休市日或未來日期可能沒有歷史資料。
 4. **Supported historical range 支援區間** — Historical ticks/K-bars are only available from the supported start dates in [MARKET_DATA.md](MARKET_DATA.md#historical-data-periods-歷史資料可查詢區間).
@@ -115,13 +115,13 @@ If the response is still empty after these checks, treat it as no available data
 
 ### How to place MKT/MKP orders 如何下市價單
 
-The MKT + ROD restriction is **TAIFEX-only** — it does not apply to TWSE stocks.
-MKT + ROD 限制**僅期交所 (TAIFEX)** 適用，證交所股票不受此限。
+Futures (TAIFEX) and stocks (TWSE / TPEx) restrict different combinations.
+期貨（期交所）與股票（證交所／櫃買）限制的組合不同。
 
-- **Futures / options (TAIFEX)**: only `MKT` is restricted — it must pair with IOC or FOK; `MKT + ROD` is rejected with `op_code` 9938. `LMT` and `MKP` both accept ROD/IOC/FOK.
-  **期貨／選擇權**：僅 `MKT` 受限——必須搭配 IOC 或 FOK，`MKT + ROD` 會被退單（`op_code` 9938）；`LMT` 與 `MKP` 三種委託條件皆可。
-- **Stocks (TWSE)**: every `price_type` × `time_in_force` combination is valid — MKT/LMT/MKP each accept ROD/IOC/FOK. Symptom worth knowing: a stock MKT + IOC with no immediate counterparty returns `op_code` 48, which is normal liquidity behaviour, not an SDK issue.
-  **股票**：所有 `price_type` × `time_in_force` 組合皆有效；MKT/LMT/MKP 都可搭配 ROD/IOC/FOK。若股票下 MKT + IOC 沒立即成交，會回 `op_code` 48，這是市場流動性問題，並非 SDK 錯誤。
+- **Futures / options (TAIFEX)**: `MKT` and `MKP` must pair with IOC or FOK; `MKT`/`MKP` + `ROD` is rejected. Only `LMT` accepts ROD/IOC/FOK.
+  **期貨／選擇權**：`MKT` 與 `MKP` 都必須搭配 IOC 或 FOK，`MKT`／`MKP` + `ROD` 會被退單；只有 `LMT` 三種委託條件皆可。
+- **Stocks (TWSE / TPEx)**: stock `price_type` is only MKT/LMT. Stocks have no MKP; in Python, passing it raises `ShioajiValueError: Invalid StockPriceType: MKP`. Round-lot orders accept MKT/LMT × ROD/IOC/FOK during continuous trading (09:00–13:25). During call auctions (pre-open, closing, price-stabilization) and for odd-lot / Fixing orders, only LMT + ROD is accepted; see the table in [ORDERS.md](ORDERS.md#time-in-force-委託條件).
+  **股票**：股票 `price_type` 只有 MKT/LMT。股票沒有 MKP，Python 帶入會丟 `ShioajiValueError: Invalid StockPriceType: MKP`。整股在逐筆交易時段（09:00–13:25）MKT/LMT 都可搭配 ROD/IOC/FOK；集合競價時段（盤前、收盤、價格穩定措施）與零股、盤後定價只接受 LMT + ROD，見 [ORDERS.md](ORDERS.md#time-in-force-委託條件) 表格。
 
 ```python
 import shioaji as sj
@@ -133,7 +133,7 @@ order = sj.FuturesOrder(
     price=0,  # MKT ignores price 市價單忽略價格
     quantity=1,
     price_type=sj.FuturesPriceType.MKT,
-    time_in_force=sj.TimeInForce.IOC,  # MKT must use IOC / FOK; MKP / LMT accept ROD too 僅 MKT 須 IOC/FOK
+    time_in_force=sj.TimeInForce.IOC,  # MKT must use IOC / FOK 市價須 IOC/FOK
     octype=sj.FuturesOCType.Auto,
     account=api.futopt_account,
 )
@@ -440,7 +440,7 @@ python -m pip install -U "shioaji==1.5.*"
 uv tool install --force "shioaji==1.5.*"
 ```
 
-Rate-limit ban guardrails include market-data queries (50 / 5 sec),
+Rate-limit ban guardrails include market-data queries (50 / 10 sec),
 accounting queries (25 / 5 sec), and order operations (250 / 10 sec). These
 limits are intentionally broad; correct Shioaji usage should stay far away from
 them. Hitting a rate limit is a strong signal that the program's usage pattern
@@ -451,7 +451,7 @@ process/server session, subscribe to streaming market data instead of polling,
 cache historical data and account snapshots, and avoid `update_status()` loops
 when order/deal callbacks or SSE can provide active reports.
 
-限流 ban 的常見 guardrail 包含行情查詢 5 秒 50 次、帳務查詢 5 秒 25 次、
+限流 ban 的常見 guardrail 包含行情查詢 10 秒 50 次、帳務查詢 5 秒 25 次、
 委託操作 10 秒 250 次。這些限制目前設得很寬；正確 Shioaji 用法應該離
 rate limit 很遠。觸發 rate limit 是程式使用模式有明顯問題的訊號，不是
 合理策略需要貼近限制執行。ban 不是每幾秒重打 `login()` 就能解；反覆登入
@@ -461,14 +461,14 @@ session、用 streaming 訂閱取代輪詢、快取歷史行情與帳務快照�
 
 ### Rate limit exceeded 超過流量限制
 
-For 503 responses, first use [503 Response Triage](#503-response-triagerate-limit-ban-vs-yanked-version) above. This section is the general limit reference.
-遇到 503 時先看上方 [503 Response Triage](#503-response-triagerate-limit-ban-vs-yanked-version) 分流；本節是一般限制參考。
+For 503 responses, first use [503 Response Triage](#503-response-triage-rate-limit-ban-vs-yanked-version) above. This section is the general limit reference.
+遇到 503 時先看上方 [503 Response Triage](#503-response-triage-rate-limit-ban-vs-yanked-version) 分流；本節是一般限制參考。
 
 **Limits 限制:**
 
 | Category 類別 | Limit 限制 |
 |---------------|------------|
-| Quote query 行情查詢 | 50 / 5 sec |
+| Quote query 行情查詢 | 50 / 10 sec |
 | Accounting 帳務 | 25 / 5 sec |
 | Orders 委託 | 250 / 10 sec |
 | Connections 連線 | 5 per person |
