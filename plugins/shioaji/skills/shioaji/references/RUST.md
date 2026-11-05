@@ -136,11 +136,11 @@ pub struct StockOrder {
     pub price: f64,
     pub quantity: i32,
     pub price_type: String,       // "LMT" or "MKT"
-    pub order_type: String,       // "ROD", "IOC", "FOK"
+    pub time_in_force: String,       // "ROD", "IOC", "FOK"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub order_lot: Option<String>, // "Common", "Odd", "IntradayOdd"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub order_cond: Option<String>, // "Cash", "MarginTrading", "ShortSelling"
+    pub order_cond: Option<String>, // Cash, MarginTrading, ShortSelling, SBLShort, SBLShortPriceExempt
 }
 
 #[derive(Debug, Serialize)]
@@ -149,7 +149,7 @@ pub struct FuturesOrder {
     pub price: f64,
     pub quantity: i32,
     pub price_type: String,       // "LMT", "MKT", or "MKP"
-    pub order_type: String,       // "ROD", "IOC", "FOK"
+    pub time_in_force: String,       // "ROD", "IOC", "FOK"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub octype: Option<String>,   // "Auto", "New", "Cover", "DayTrade"; HTTP also accepts "NewPosition"
 }
@@ -332,7 +332,7 @@ Keep order examples disabled in runnable code. Confirm account, production/simul
 //             price: 580.0,
 //             quantity: 1,
 //             price_type: "LMT".into(),
-//             order_type: "ROD".into(),
+//             time_in_force: "ROD".into(),
 //             order_lot: Some("Common".into()),
 //             order_cond: Some("Cash".into()),
 //         }),
@@ -410,7 +410,7 @@ Workflow:
 
 For futures continuous-month aliases such as `TXFR1` / `TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into `SubscribeRequest`. Regular futures codes do not need `target_code`.
 
-Order events use a separate account subscription in production. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` once per account; simulation does not require it.
+Order events use a separate per-account subscription in production and simulation. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` for each account; success starts active reports for that account.
 
 ## 7. OpenAPI Client Generation / OpenAPI 客戶端生成
 
@@ -486,7 +486,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //             price: 580.0,
     //             quantity: 1,
     //             price_type: "LMT".into(),
-    //             order_type: "ROD".into(),
+    //             time_in_force: "ROD".into(),
     //             order_lot: Some("Common".into()),
     //             order_cond: Some("Cash".into()),
     //         }),

@@ -56,7 +56,7 @@ HTTP client 同理：檢查先前 `POST /api/v1/order/place_order` 回應 body �
 
 ### 2.1 Exception 與 HTTP status 對照
 
-Python exception 皆繼承自 `sj.ShioajiError`。後端回 400／401／403／422／503 時，訊息格式為 `StatusCode: {code}, Detail: {訊息}`；其他 status、逾時、連線等例外的格式不同，見下表各列。HTTP API 客戶收到相同 code 的 `{"code": N, "message": ..., "details": ...}`。
+Python exception 皆繼承自 `sj.ShioajiError`。後端回 400／401／403／422／503 時，訊息格式為 `StatusCode: {code}, Detail: {訊息}`；其他 status、逾時、連線、VPN 下單閘道等例外的格式不同，見下表各列。HTTP API 客戶收到相同 code 的 `{"code": N, "message": ..., "details": ...}`。
 
 | Status | Python exception | 意義 |
 |---|---|---|
@@ -64,14 +64,18 @@ Python exception 皆繼承自 `sj.ShioajiError`。後端回 400／401／403／42
 | 401 | `TokenError` | 連線 Token 無效或過期 |
 | 403 | `ShioajiPermissionError` | 權限不足 |
 | 422 | `ValidationError` | 欄位驗證失敗 |
-| 503 | `SystemMaintenance` | 系統維護、強制升版、服務暫停 |
+| 409 | `OrderOutcomeUnknownError`（繼承 `ResponseError`；VPN 直連下單閘道才會出現） | 委託已送出但沒收到確認，**結果不確定**：不要重送，先 `update_status()`／`list_trades()` 對帳 |
+| 503 | `SystemMaintenance` | 系統維護、強制升版、服務暫停；VPN 下單閘道回 `NotConnected` 表示委託未送出 |
+| 504 | `ShioajiTimeoutError` | VPN 下單閘道逾時，結果可能不確定，先對帳 |
 | 其他 code | `ServerError`（訊息格式 `{呼叫}: request {topic} code: {N}, detail: {...}`） | 未分類的伺服器拒絕 |
 | （逾時） | `ShioajiTimeoutError`（訊息格式 `Timeout Topic: {topic}, Corr: {id}, Timeout: {n}ms`） | 請求逾時 |
 | （連線） | `ShioajiConnectionError` | 連線中斷 |
 
+HTTP server（含 Pro sidecar）對 VPN 下單閘道的 409／503／504 會原樣回傳 status，並在 `details.error_code` 帶閘道錯誤碼（如 `OrderOutcomeUnknown`、`NotConnected`），客戶端依此判斷「結果不確定」或「未送出」。
+
 使用 `shioaji server` 的客戶注意：本地 server 的 401 有兩種來源，看訊息分辨：
 
-- `Missing Authorization header`、`Invalid Authorization format, expected: Bearer <api_key>:<secret_key>`、`Invalid token format, expected: <api_key>:<secret_key>` 或 `Invalid API credentials`：本地 server 的 `Authorization` header 認證失敗，檢查啟動 server 用的金鑰與請求 header。只有 server 綁定在非 localhost 時才會檢查 header；綁 `127.0.0.1` 不檢查。
+- `Missing Authorization header`、`Invalid Authorization format, expected: Bearer <api_key>:<secret_key>`、`Invalid token format, expected: <api_key>:<secret_key>` 或 `Invalid API credentials`：本地 server 的 `Authorization` header 認證失敗，檢查啟動 server 用的金鑰與請求 header。只有 server 綁定在非 localhost，或用 `--auth`／`SJ_HTTP_AUTH` 開啟認證時才會檢查 header；預設綁 `127.0.0.1` 不檢查。
 - 其他訊息：後端回的 401 原樣轉發，依下方 2.2 表判讀。
 
 注意：422 是逐欄位的驗證錯誤，依錯誤內容指出的欄位（`loc`）修正請求參數即可。Python 的 `ValidationError` 會把多筆錯誤用 `; ` 串成一個字串（`StatusCode: 422, Detail: {...}; {...}`）；HTTP 回應的 `details` 依後端內容可能是物件、陣列或 null。
@@ -102,7 +106,7 @@ CA 相關 exception 在本地拋出、不帶 status code：
 | 400 | `ip: {ip} not allow.` | 登入 IP 不在 API Key 的白名單內 | 自行處理：至 API 管理頁調整 IP 白名單，或改用允許的網路 |
 | 400 | `Token doesn't have production permission.` | API Key 沒有正式環境權限 | 自行處理：至 API 管理頁確認權限；或先用模擬環境 |
 | 451 | `Too Many Connections.` | 同一 person_id 最多 5 條連線，每次 `api.login()` 都算一條；常見原因是程式結束前沒 `logout()` 或程式沒真正關掉 | 自行處理：每次用完呼叫 `api.logout()`；若都有登出仍發生，關閉殘留程式或重開機後再登入；見 [CONCEPTS.md](CONCEPTS.md) |
-| 400 | `Sign data is timeout.`（登入時出現） | 本機時間與伺服器相差超過 receive_window（Python 預設 30 秒；`shioaji server`／CLI 固定 5 秒） | 自行處理：先校準系統時間，見 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 登入簽章逾時與 <https://sinotrade.github.io/zh/tutor/login/#_1> |
+| 400 | `Sign data is timeout.`（登入時出現） | 本機時間與伺服器相差超過 receive_window（預設 30 秒） | 自行處理：先校準系統時間，見 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 登入簽章逾時與 <https://sinotrade.github.io/zh/tutor/login/#_1> |
 | 503 | `Please update the version of shioaji to at least {版本} ...` | 版本低於最低要求 | 自行處理：用 uv 升級至要求版本（`uv add "shioaji=={版本}"`；CLI 安裝用 `uv tool install --force "shioaji=={版本}"`）後重新登入，見 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) |
 | 400 | `密碼錯誤 {N} 次，請留意英文字母大小寫`（券商原文，錯滿 3 次的訊息附客服電話） | 登入密碼錯誤 | 自行處理：留意大小寫；錯 3 次會鎖定，鎖定後至新理財網重置密碼 |
 | 503 | `登入密碼錯誤3次，請進行密碼重置` | 密碼錯誤三次鎖定 | 自行處理：至新理財網重置密碼後再重新登入 |
@@ -167,11 +171,13 @@ STS 是下單中台，需要經過下單中台的操作（下單、刪改單、�
 | `Not authenticated` / `not authenticated` | 尚未登入就呼叫需登入的功能 | 自行處理：先 `api.login()` |
 | `Invalid {Enum}: {值}`（如 `Invalid Action: buy`） | enum 字串大小寫或拼字錯 | 自行處理：改用正確值（如 `Buy`）或 `sj.constant` 常數 |
 | `{Type} must be {Type} enum or string` / `order must be StockOrder, FuturesOrder, or Order` | 參數型別錯誤 | 自行處理：依訊息修正參數型別 |
-| `Trade {id} not found in cache` | 刪改單的委託不在本地快取 | Python：先帶原委託帳號 `update_status(account)`，再用 `list_trades()` 取回委託後操作。HTTP：先呼叫 `POST /api/v1/order/trades` 並帶帳號（會先更新狀態），再用回傳的 `trade.order.id` |
+| `Trade {id} not found in cache` | 刪改單的委託不在本地快取 | Python：先帶原委託帳號 `update_status(account)`，再用 `list_trades()` 取回委託後操作。HTTP server（1.7.8+）登入後會自動補回快取，仍出現時呼叫 `POST /api/v1/order/trades` 並帶帳號重抓，再用回傳的 `trade.order.id` |
 | `api_key must be at least 10 characters` / `invalid secret_key (base58 decode failed)` | 金鑰貼錯（貼到片段、多了空白或換行） | 自行處理：重新完整複製 API Key／Secret Key |
 | 錯誤訊息帶 `(cached from a previous failure; will retry server in {n}s)` 後綴 | 登入失敗後短時間內重試，回的是本地快取的舊錯誤，**不代表新設定無效** | 自行處理：等提示秒數過後再重試 |
 | `Path: {path} without write permission. Please set SJ_CONTRACTS_PATH to a writable path.` | 商品檔快取目錄不可寫（常見於 Docker／唯讀環境） | 自行處理：把 `SJ_CONTRACTS_PATH` 指到可寫路徑 |
 | `Login To Activate Ca` | 已登入，但登入回應沒有取得對外 IP，無法啟用 CA | 自行處理：重新 `login()` 後再啟用 CA；仍出現至客服群組詢問 |
+| `contracts: wire version mismatch (server {X}, client supports {Y})` | Contract V2 版本不符 | 自行處理：升級 shioaji |
+| `contracts: not populated for {region}/{type}` / `contracts: transient transport failure: ...` | 當日商品檔尚未產製／暫時性傳輸失敗 | 等待重試 |
 | `No stock account found` / `No futures account found` / `{api}: no ... account found` | 未帶帳戶且登入帳號無對應類型帳戶 | 自行處理：確認帳戶類型；無該類帳戶需先開戶 |
 | `combo order requires exactly 2 legs, got {n}` / `Combo orders are not available in paper/simulation mode` | 組合單本地檢核 | 自行處理：組合單須恰為兩腳、僅正式環境支援，見 [COMBO_ORDERS.md](COMBO_ORDERS.md) |
 | `Must specify either price or qty to update` | 改單未帶 price 或 qty | 自行處理：帶上要修改的欄位 |
@@ -191,7 +197,7 @@ STS 是下單中台，需要經過下單中台的操作（下單、刪改單、�
 | `處理中, 請再確認委託狀態` | 委託處理中，結果未定 | 等待重試：`update_status(原委託帳號)`（組合單用 `update_combostatus(原委託帳號)`）確認，**不要直接重送** |
 | `連線逾時,請再確認委託狀態` | 委託送出但結果未知 | **重送前必先 `update_status(原委託帳號)`（組合單用 `update_combostatus(原委託帳號)`）確認**，避免重複下單 |
 | `忙線中, 請稍後再查` | 後台忙碌 | 等待重試 |
-| `買賣值有錯` / `交易條件值有錯` | 參數組合不合法 | 自行處理：檢查 `action`、`price_type`、`order_type`、`order_cond` 組合，見 [ORDERS.md](ORDERS.md) |
+| `買賣值有錯` / `交易條件值有錯` | 參數組合不合法 | 自行處理：檢查 `action`、`price_type`、`time_in_force`、`order_cond` 組合，見 [ORDERS.md](ORDERS.md) |
 | `無此商品代碼` | 合約代碼錯誤 | 自行處理：確認合約，見 [CONTRACTS.md](CONTRACTS.md) |
 | `憑證驗章失敗...` | CA 簽章問題 | 自行處理：重新啟用 CA；仍失敗至客服群組詢問 |
 | `由於風險條件,無法下單` | 風控限制 | 聯絡永豐：所屬營業員 |
@@ -240,7 +246,7 @@ STS 是下單中台，需要經過下單中台的操作（下單、刪改單、�
 
 ## 5. 重試決策摘要
 
-1. **逾時、「處理中」或結果不確定後絕不直接重送委託**（`STS Request Timeout`、`連線逾時`、`處理中`）：先 `update_status(trade=trade)`（或帶原委託帳號）確認委託狀態；組合單改用 `update_combostatus(原委託帳號)`，再檢查刷新後的組合單。重複下單比漏單更糟。
+1. **逾時、「處理中」或結果不確定後絕不直接重送委託**（`STS Request Timeout`、`連線逾時`、`處理中`、409 `OrderOutcomeUnknown`、504）：先 `update_status(trade=trade)`（或帶原委託帳號）確認委託狀態；組合單改用 `update_combostatus(原委託帳號)`，再檢查刷新後的組合單。重複下單比漏單更糟。
 2. **自行處理類**（參數錯、Token 過期、未帶 CA、未更新狀態、金鑰／權限設定）：修正後即可重試；金鑰與權限問題到新理財網 API 管理頁自行調整。
 3. **等待重試類**（維護、忙線、`操作異常`）：等待後再試，不要密集輪詢——可能觸發封鎖。
 4. **聯絡永豐類**（下單中台異常、風控、額度、簽署、被封鎖）：重試無效，請使用者附上完整錯誤訊息至客服群組（[Telegram](https://t.me/joinchat/973EyAQlrfthZTk1) 或 [Discord](https://discord.gg/5nzmWCTnG7)）詢問；額度與風控類也可洽所屬營業員。

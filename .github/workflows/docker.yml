@@ -47,6 +47,20 @@ jobs:
             echo "push=$PUSH"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Wait for PyPI release
+        run: |
+          VERSION="${{ steps.image.outputs.version_no_v }}"
+          # The tag reaches this repo before GitLab uploads the wheels, so wait
+          # until pip can resolve the version instead of failing the build.
+          for i in $(seq 1 60); do
+            # Check the simple index pip actually resolves from, not just the JSON API.
+            if curl -fsS "https://pypi.org/simple/shioaji/" | grep -q "shioaji-${VERSION}-"; then
+              echo "shioaji ${VERSION} is on PyPI"; exit 0
+            fi
+            echo "waiting for shioaji ${VERSION} on PyPI (${i}/60)"; sleep 30
+          done
+          echo "shioaji ${VERSION} did not appear on PyPI within 30 minutes" >&2; exit 1
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -101,6 +115,22 @@ jobs:
             echo "version_no_v=$VERSION_NO_V"
             echo "push=$PUSH"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Wait for GitHub release assets
+        run: |
+          VERSION="${{ steps.image.outputs.version }}"
+          # The tag is pushed before GitLab creates the GitHub Release, so wait
+          # until the Linux CLI tarballs the Dockerfile downloads exist.
+          for i in $(seq 1 60); do
+            ok=true
+            for ARCH in x86_64 aarch64; do
+              URL="https://github.com/sinotrade/shioaji/releases/download/${VERSION}/shioaji-${VERSION}-Linux-${ARCH}.tar.gz"
+              curl -fsSLI -o /dev/null "$URL" || ok=false
+            done
+            if [ "$ok" = true ]; then echo "release assets for ${VERSION} are ready"; exit 0; fi
+            echo "waiting for release assets of ${VERSION} (${i}/60)"; sleep 30
+          done
+          echo "release assets for ${VERSION} did not appear within 30 minutes" >&2; exit 1
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

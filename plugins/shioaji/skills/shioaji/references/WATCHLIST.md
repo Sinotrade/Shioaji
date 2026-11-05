@@ -145,12 +145,12 @@ shioaji watchlist show --id watchlist_id
 
 ```python
 # Create with contracts 建立並加入合約
+contracts = [api.contracts.get("2330"), api.contracts.get("2317")]
+if any(contract is None for contract in contracts):
+    raise LookupError("watchlist contract not found")
 new_wl = api.create_watchlist(
     name="My Watchlist",
-    contracts=[
-        api.Contracts.Stocks["2330"],
-        api.Contracts.Stocks["2317"],
-    ]
+    contracts=contracts,
 )
 print(f"Created: {new_wl.id}")
 
@@ -235,13 +235,16 @@ Replaces all contracts in the watchlist with the provided list.
 ### Python Usage Python 用法
 
 ```python
+contracts = [
+    api.contracts.get("2330"),
+    api.contracts.get("2454"),
+    api.contracts.get("TXFR1"),
+]
+if any(contract is None for contract in contracts):
+    raise LookupError("watchlist contract not found")
 synced = api.sync_watchlist(
     group_id="watchlist_id",
-    contracts=[
-        api.Contracts.Stocks["2330"],
-        api.Contracts.Stocks["2454"],
-        api.Contracts.Futures.TXF.TXFR1,
-    ]
+    contracts=contracts,
 )
 print(f"Synced contracts: {len(synced.contracts)}")
 ```
@@ -282,12 +285,12 @@ shioaji watchlist sync --id watchlist_id --codes 2330,2454
 ### Python Usage Python 用法
 
 ```python
+contracts = [api.contracts.get("2454"), api.contracts.get("TXFR1")]
+if any(contract is None for contract in contracts):
+    raise LookupError("watchlist contract not found")
 updated = api.watchlist_add_contract(
     group_id="watchlist_id",
-    contracts=[
-        api.Contracts.Stocks["2454"],
-        api.Contracts.Futures.TXF.TXFR1,
-    ]
+    contracts=contracts,
 )
 print(f"Updated contracts: {len(updated.contracts)}")
 ```
@@ -327,9 +330,12 @@ shioaji watchlist add --id watchlist_id --codes TXFR1 --security-type FUT
 ### Python Usage Python 用法
 
 ```python
+contract = api.contracts.get("2454")
+if contract is None:
+    raise LookupError("contract 2454 not found")
 updated = api.watchlist_delete_contract(
     group_id="watchlist_id",
-    contracts=[api.Contracts.Stocks["2454"]]
+    contracts=[contract]
 )
 print(f"Remaining contracts: {len(updated.contracts)}")
 ```
