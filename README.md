@@ -1,5 +1,5 @@
 # Shioaji
-![shioaji-logo](https://sinotrade.github.io/img/shioaji-mark-on-light-256.png)![sinopac-logo](https://www.sinotrade.com.tw/Images/logo.png)
+![shioaji-logo](https://sinotrade.github.io/images/shioaji-logo-01.png)![sinopac-logo](https://www.sinotrade.com.tw/Images/logo.png)
 
 
 [![PyPI - Status](https://img.shields.io/pypi/v/shioaji.svg?style=for-the-badge)](https://pypi.org/project/shioaji)
@@ -74,8 +74,6 @@ uv add shioaji
 pip install shioaji
 ```
 
-To pin a version, lock the release line, for example `uv add "shioaji==1.7.*"`. PyPI keeps only the latest two patch releases of each line. Releases with the same first two version parts never make incompatible changes, so a line pin is always safe to upgrade within.
-
 </details>
 
 <a id="install-cli"></a>
@@ -84,12 +82,8 @@ To pin a version, lock the release line, for example `uv add "shioaji==1.7.*"`. 
 
 ```bash
 uv tool install shioaji
-# or only the CLI, on any Python version:
-uv tool install shioaji-cli
 shioaji --help
 ```
-
-The CLI ships in the regular wheels; free-threaded Python 3.14t wheels do not include it, so install the CLI with a regular Python (the `uv tool install` default).
 
 </details>
 
@@ -106,7 +100,7 @@ curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install
 curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | CHANNEL=prerelease sh
 
 # Specific version
-curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | VERSION=v1.5.6 sh
+curl -fsSL https://github.com/Sinotrade/Shioaji/releases/latest/download/install.sh | VERSION=v1.5.9 sh
 ```
 
 **Windows (PowerShell):**
@@ -162,7 +156,7 @@ order = sj.StockOrder(
     quantity=1,
     action=sj.Action.Buy,
     price_type=sj.StockPriceType.LMT,
-    time_in_force=sj.TimeInForce.ROD,  # legacy name order_type= is still accepted
+    order_type=sj.OrderType.ROD,
     order_lot=sj.StockOrderLot.Common,
     account=api.stock_account,
 )
@@ -203,10 +197,6 @@ Once the server is running, the following entry points are available:
 
 
 Open `/docs` to browse all endpoints, inspect request/response schemas, generate code samples in multiple languages, and test directly from the browser.
-
-For agent-facing deployments, the optional [`agent_harness`](docs/agent-harness.md)
-middleware can require short-lived, payload-bound, one-time capabilities on
-broker mutations without adding work to read-only routes.
 
 ### Custom Web Apps
 

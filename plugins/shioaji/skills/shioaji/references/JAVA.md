@@ -222,15 +222,15 @@ public class OrderSpec {
     public double price;
     public int quantity;
     public String price_type;   // "LMT", "MKT"
-    public String time_in_force;   // "ROD", "IOC", "FOK"
+    public String order_type;   // "ROD", "IOC", "FOK"
 
     public OrderSpec(String action, double price, int quantity,
-                     String priceType, String timeInForce) {
+                     String priceType, String orderType) {
         this.action = action;
         this.price = price;
         this.quantity = quantity;
         this.price_type = priceType;
-        this.time_in_force = timeInForce;
+        this.order_type = orderType;
     }
 }
 ```
@@ -548,7 +548,7 @@ Workflow:
 
 For futures continuous-month aliases such as `TXFR1` / `TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into `SubscribeRequest`. Regular futures codes do not need `target_code`.
 
-Order events use a separate per-account subscription in production and simulation. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` for each account; success starts active reports for that account.
+Order events use a separate account subscription in production. Before opening `/api/v1/stream/data/order_event`, call `POST /api/v1/auth/subscribe_trade` once per account; simulation does not require it.
 
 ## 7. Kotlin Variant / Kotlin 版本
 
@@ -594,7 +594,7 @@ data class OrderSpec(
     val price: Double,
     val quantity: Int,
     val price_type: String,
-    val time_in_force: String
+    val order_type: String
 )
 
 data class PlaceOrderRequest(
@@ -875,7 +875,7 @@ fun main() = runBlocking {
     //         price = 580.0,
     //         quantity = 1,
     //         price_type = "LMT",
-    //         time_in_force = "ROD"
+    //         order_type = "ROD"
     //     )
     // ))
     // println("  Trade status: ${orderResp.status}")
