@@ -63,12 +63,13 @@ print(
 | `security_type` | Python info type | Examples of type-specific fields |
 |-----------------|------------------|---------------------------------|
 | `STK` | `StockInfo` | `currency`, `unit`, `day_trade`, `reference`, margin/short fields |
+| `STK` (`region="US"`, 1.8.0b1) | `UsStockInfo` | `instrument_type`, `exchange_mic`, `round_lot`, `industry_l1/l2`, ETF fields |
 | `IND` | `IndexInfo` | `reference`, `open_time`, `close_time` |
 | `FUT` | `FuturesInfo` | `root`, `delivery_month`, `multiplier`, `tick_rule`, limits |
 | `OPT` | `OptionInfo` | `root`, `strike_price`, `option_right`, `expiry_weekday`, `tick_rule` |
 | `WRT` | `WarrantInfo` | `underlying_code`, `call_put`, `strike_price`, `expiry_date` |
 
-Info objects expose `base` plus typed fields. Their `repr()` omits fields whose value is `None`; `dict()` may retain those keys. Do not infer HTTP JSON shape from the Python object—the HTTP info response is flat and uses `security_type` as its discriminator.
+Info objects expose `base` plus typed fields. Their `repr()` omits fields whose value is `None`; `dict()` may retain those keys. Do not infer HTTP JSON shape from the Python object—the HTTP info response is flat and uses `dataset` (`"{region}/{security_type}"`, e.g. `"TW/STK"`) as its discriminator. `UsStockInfo` reprs as `UsStockInfo(code='AAPL', exchange='NASDAQ', …)`; other info classes keep their nested `Contract(...)` repr.
 
 For the complete field list of these Info objects (StockInfo / FuturesInfo / OptionInfo / IndexInfo / WarrantInfo), with types and bilingual descriptions, see [CONTRACT_FIELDS.md](CONTRACT_FIELDS.md).
 
@@ -207,15 +208,82 @@ txo_chain = await api.contracts.options("TXO")
 
 ---
 
+## US Stocks 美股
+
+> **1.8.0b1 pre-release.** US stocks (contracts, orders, active reports,
+> accounting, quotes) ship in 1.8.0b1 (`pip install --pre shioaji` or
+> `shioaji==1.8.0b1`). Only `security_type="STK"` exists for US; HK and other
+> markets are not supported. Orders → [ORDERS.md § US Stock Orders](ORDERS.md#us-stock-orders-美股下單),
+> quotes → [STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情),
+> accounting → [ACCOUNTING.md § IntlAccount](ACCOUNTING.md#intlaccount-美股帳戶).
+> **1.8.0b1 預發行版**起支援美股（商品檔、下單、回報、帳務、行情）；美股只有 STK，港股等其他市場不支援。
+
+A US contract is resolved by `{region, exchange, security_type, code}`.
+`exchange` is one of `NASDAQ`, `NYSE` (incl. NYSE Arca and NYSE American),
+`BATS` (Cboe BZX), or `TXSE` (Texas Stock Exchange). Codes are used exactly as
+listed (`BRK.A`, `ABR-D`, `AAC+`) — never convert `.` to `/` or `-`.
+美股以 `{region, exchange, security_type, code}` 定位；代碼依原樣使用，不可轉換符號。
+
+```python
+aapl = api.contracts.get("AAPL", region="US")                 # search US types
+aapl = api.contracts.get("AAPL", exchange="NASDAQ")            # region inferred from exchange
+brk = api.contracts.get("BRK.A", region="US", security_type="STK", exchange="NYSE")
+api.contracts.get("AAPL", exchange="NYSE")                     # None: listed on NASDAQ
+
+info = api.contracts.info(aapl)          # UsStockInfo, not StockInfo
+print(info.instrument_type, info.exchange_mic, info.industry_l2, info.reference)
+if info.instrument_type == "ETF":
+    print(info.fund_category, info.expense_ratio, info.dividend_frequency)
+```
+
+- `get(code, region=None, security_type=None, exchange=None)`: `region`
+  defaults to the exchange's region, else `TW`. With `exchange`, a contract
+  listed on another exchange returns `None`; an exchange from another region
+  raises `ValueError`.
+- `api.contracts.list("STK", region="US")` returns every US stock base.
+- `UsStockInfo` has US-only fields (`exchange_mic`, `instrument_type`,
+  `round_lot`, `industry_l1/l2`, ETF fields …) and no TW rule fields. US info
+  is sharded by the code's first letter (`A`–`Z`, others `_`); the first
+  `info()` for a letter downloads only that shard.
+- Coded fields are enums (`ExchangeMic`, `InstrumentType`,
+  `ClassificationSource`, `IndustryL1`, `IndustryL2`, `FundCategory`,
+  `DividendFrequency`); codes newer than the SDK come back as the raw
+  `str`/`int`. Compare with `==` against the raw code to work either way.
+- US market rules are not stored per contract: 1-share order unit, prices up
+  to 4 decimals, tick 0.01 at or above USD 1 and 0.0001 below, no price
+  limits, currency USD. Names are English only.
+  美股規則：1 股為單位、4 位小數、1 美元以上跳動 0.01／以下 0.0001、無漲跌停、USD、只有英文名稱。
+
+Field meanings, the 13 `instrument_type` values, the 8 MICs, the
+`reference` definition, and full RBICS / fund-category / dividend-frequency
+code tables are in [CONTRACT_FIELDS.md § UsStockInfo](CONTRACT_FIELDS.md#usstockinfo-attributes-美股資訊屬性).
+
+HTTP and CLI use the same keys:
+
+```bash
+curl "http://localhost:8080/api/v1/data/contracts/AAPL?region=US&exchange=NASDAQ"
+curl "http://localhost:8080/api/v1/data/contracts/BRK.A/info?region=US&security_type=STK"
+shioaji contracts info AAPL --region US --exchange NASDAQ
+```
+
+US `/info` JSON keeps `"security_type": "STK"` and is told apart from TW by
+`"dataset": "US/STK"` (TW stock is `"TW/STK"`; `dataset` is the OpenAPI
+discriminator for every info type); coded fields are raw codes (`"instrument_type": "CS"`,
+`"industry_l2": 5515`; an ETF has `"dividend_frequency": 4`, a stock has `null`).
+`isin` is `null` until licensing is confirmed; `dividend_frequency` is ETF/ETN
+only (weekly ICE fund master), so stocks always return `null`.
+
+---
+
 ## HTTP API
 
 All Contract V2 query endpoints use `GET`. Authenticate exactly as described in [HTTP_API.md](HTTP_API.md).
 
 ```bash
-# Exact code; security_type is optional and can narrow ambiguous codes.
+# Exact code; security_type and exchange are optional and narrow the lookup.
 curl "http://localhost:8080/api/v1/data/contracts/2330?region=TW&security_type=STK"
 
-# Flat typed info; security_type is the OpenAPI discriminator.
+# Flat typed info; `dataset` ("TW/STK", "US/STK", ...) is the OpenAPI discriminator.
 curl "http://localhost:8080/api/v1/data/contracts/2330/info?region=TW&security_type=STK"
 
 # All STK bases, or a one-based page for a large UI.
@@ -234,6 +302,7 @@ The `/info` response is a flat tagged union. Shared identity and type-specific f
 
 ```json
 {
+  "dataset": "TW/STK",
   "security_type": "STK",
   "region": "TW",
   "exchange": "TSE",

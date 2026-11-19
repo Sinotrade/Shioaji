@@ -15,6 +15,7 @@ rules and `ComboTrade` status handling live in
 - [Stock Orders 股票下單](#stock-orders-股票下單)
 - [Futures Orders 期貨下單](#futures-orders-期貨下單)
 - [Options Orders 選擇權下單](#options-orders-選擇權下單)
+- [US Stock Orders 美股下單](#us-stock-orders-美股下單)
 - [Combo Orders 組合單](#combo-orders-組合單)
 - [Modify Orders 改單](#modify-orders-改單)
 - [Cancel Orders 刪單](#cancel-orders-刪單)
@@ -442,6 +443,277 @@ trade = api.place_order(contract, order)
 
 ---
 
+## US Stock Orders 美股下單
+
+Since 1.8.0b1 (pre-release: `pip install --pre shioaji` or
+`shioaji==1.8.0b1`). US stock orders use the same `StockOrder`, `place_order`,
+`update_order`, `cancel_order`, `update_status` and `list_trades` as Taiwan
+orders. They need an IntlAccount (`account_type == sj.AccountType.Intl`, 複委託帳戶) and a US
+contract. HK and other markets cannot be ordered.
+1.8.0b1（預發行版）起支援。美股下單沿用 `StockOrder` 與同一組下單、改單、刪單、查詢 API，但要用複委託國際帳戶（IntlAccount，`account_type == sj.AccountType.Intl`）和美股商品；港股等其他市場不可下單。
+
+Contents: [order fields](#us-order-fields-美股委託欄位) ·
+[local checks and errors](#us-local-checks-and-errors-美股本地檢查與錯誤) ·
+[modify and cancel](#us-modify-and-cancel-美股改單與刪單) ·
+[reservation orders](#us-reservation-orders-and-the-trading-day-美股預約單與換日) ·
+[trade fields](#us-trade-fields-美股委託資料) ·
+[reports and reconciliation](#us-order-reports-美股回報).
+
+```python
+from decimal import Decimal
+
+import shioaji as sj
+
+api = sj.Shioaji(simulation=True)
+api.login(api_key="...", secret_key="...")
+
+contract = api.contracts.get("AAPL", region="US")  # US contract 美股商品
+intl = next(a for a in api.list_accounts() if a.account_type == sj.AccountType.Intl)
+# login() subscribes every account's reports by default (subscribe_trade=True);
+# after login(..., subscribe_trade=False) call api.subscribe_trade(intl) for US reports.
+
+order = sj.StockOrder(
+    action="Buy",
+    price=Decimal("180.25"),  # Decimal / str / int / float; up to 4 decimals 最多 4 位小數
+    quantity=10,            # whole shares (int / str / Decimal) 整數股
+    price_type="LMT",       # LMT / MKT
+    time_in_force="DAY",    # DAY / OPG / ATC (ROD is taken as DAY)
+    account=intl,
+    all_or_none=False,      # optional AON 全部成交否則不成交
+)
+trade = api.place_order(contract, order)
+
+api.update_order(trade, qty=4)   # cancel 4 shares 減量 4 股
+api.cancel_order(trade)          # cancel the rest 刪單
+api.update_status(intl)          # refresh US trades 查詢美股委託成交
+api.list_trades()
+```
+
+### US order fields 美股委託欄位
+
+| Field 欄位 | US rule 美股規則 |
+|------|------|
+| `account` | IntlAccount; omitted = the first IntlAccount. A stock account is rejected. 省略時用第一個國際帳戶（IntlAccount） |
+| `quantity` | `int`, `str` or `Decimal`; whole shares, at least 1 (`Decimal("2.0")` counts as 2). A fraction such as `Decimal("0.5")` raises before sending; a `float` raises `TypeError`. 下單只收整數股，不收 float |
+| `price` | `Decimal`, `str`, `int` or `float` (a float is read through `str()`, so `173.97` stays `173.97`). Above 0 for LMT, never negative, at most 4 decimals; MKT may send 0. LMT 價格大於 0、最多 4 位小數 |
+| `price_type` | `LMT` or `MKT` only |
+| `time_in_force` | `DAY`, `OPG` (at the opening), `ATC` (at the close); `ROD` is sent and reported as `DAY`. `IOC` / `FOK` pass the SDK check but the backend rejects them for US stocks (HTTP 400 `UNSUPPORTED_ORDER_COMBINATION`) 美股後台目前只接受 DAY／OPG／ATC |
+| `all_or_none` | Optional bool, default `False` |
+| `order_lot` | Only `Common` (the default; US quantity is always in shares). Any other lot raises before sending 只接受 Common |
+| `order_cond` | Only `Cash` (the default). Any other condition raises before sending 只接受 Cash |
+| `daytrade_short` | Not supported for US; `True` raises (leave it `False` / unset) |
+| `custom_field` | Not supported for US; setting it raises |
+
+An order at the close is `time_in_force="ATC"`: `MKT` + `ATC` is a market on
+close order, `LMT` + `ATC` a limit on close order. There is no `MOC` / `LOC`
+price type. 收盤單用 `time_in_force="ATC"`：MKT + ATC 為收盤市價單，LMT + ATC 為收盤限價單。
+
+`MKT`/`OPG`/`ATC` have exchange time windows (OPG and ATC must be sent before
+the open/close cut-off); the broker rejects them outside those windows.
+各種委託有交易所時段限制，時段外由後台退單。
+
+### US local checks and errors 美股本地檢查與錯誤
+
+The SDK checks a US order before sending for: the price (above 0 for LMT, at
+most 4 decimals), whole shares, the IntlAccount, and the Taiwan-only
+fields the US wire does not carry (`order_lot` other than `Common`,
+`order_cond` other than `Cash`, `daytrade_short=True`, `custom_field`). The
+backend would silently ignore those fields and place a different order than
+the one asked for, so they raise locally. Every combination rule (which
+`time_in_force` goes with which `price_type`, `all_or_none` limits) is checked
+by the backend, which rejects an unsupported order with HTTP 400
+`UNSUPPORTED_ORDER_COMBINATION`.
+SDK 檢查價格、整數股、國際帳戶（IntlAccount），以及美股電文沒有的台股欄位（order_lot 非 Common、order_cond 非 Cash、daytrade_short=True、custom_field），後台會忽略這些欄位而下出不同的單，所以本地直接拒絕；組合限制由後台檢查並回傳 `UNSUPPORTED_ORDER_COMBINATION`。
+
+Local failures raise `sj.ShioajiValueError` (a `ValueError`) in Python with the
+text `<api> validation error: <reason>`, and HTTP 400 on the server, before
+anything is sent. A `float` quantity raises `TypeError`. Reasons (exact text):
+本地檢查失敗時 Python 丟 `ShioajiValueError`（訊息為 `<api> validation error: <原因>`），HTTP 回 400，不會送出。原因原文如下：
+
+| Cause 原因 | Reason text 訊息 |
+|---|---|
+| Fractional shares 非整數股 | `US order quantity 0.5 is not a whole number of shares; fractional share orders are not supported` |
+| Quantity below 1 數量小於 1 | `US order quantity is a whole number of shares and must be at least 1` |
+| LMT price 0 or less 限價 ≤ 0 | `US LMT order price must be greater than 0` |
+| Negative price 負價 | `US order price must not be negative` |
+| More than 4 decimals 超過 4 位小數 | `US order price allows at most 4 decimal places` |
+| Not an IntlAccount 非國際帳戶 | `US contracts need an IntlAccount, got account type S` |
+| IntlAccount with a Taiwan contract 國際帳戶（IntlAccount）下台股 | `IntlAccounts only trade US contracts` |
+| `order_lot` not Common | `order_lot Odd is not supported for US orders: US quantity is always in shares, use order_lot Common (the default)` |
+| `order_cond` not Cash | `order_cond MarginTrading is not supported for US orders: US orders are cash only, use order_cond Cash (the default)` |
+| `daytrade_short=True` | `daytrade_short is not supported for US orders: leave it False (the default)` |
+| `custom_field` set | `custom_field is not supported for US orders` |
+| US-only value on a Taiwan contract 台股用了美股值 | `time_in_force DAY is only for US contracts (Taiwan: ROD, IOC, FOK)`, `all_or_none is only for US contracts` |
+| HK / JP contract 港股、日股 | `HK orders are not supported yet; only TW and US contracts can be ordered` |
+| US futures / options | `US futures and options are not supported` |
+
+Backend rejections are not retried by the SDK: they come back as an error
+(Python exception, HTTP 400) with the backend text, for example
+`UNSUPPORTED_ORDER_COMBINATION`. Show the text to the user and fix the order;
+do not loop on the same request.
+後台拒絕時 SDK 不會自動重試，錯誤原文回給呼叫端（Python 例外、HTTP 400）；請把原文告訴使用者並修正委託，不要原樣重送。
+
+### US modify and cancel 美股改單與刪單
+
+- **Reduce quantity only 只能減量.** `update_order(trade, qty=n)` cancels `n`
+  more shares; `n` must be a whole number between 1 and the open shares, else
+  `US qty is the whole number of shares to cancel and must be between 1 and <open>`.
+  A price change (`update_order(trade, price=...)`) raises
+  `美股不支援改價，請刪單後重新下單`: cancel and place a new order instead.
+  HTTP `/order/update_price` returns 400 for US trades. 美股不支援改價，要刪單重下。
+- **Cancel 刪單.** `cancel_order(trade)` cancels all open shares.
+- **Active orders only 只能改／刪有效委託.** `update_order` / `cancel_order` of
+  a US trade that is no longer active (`Failed`, `Cancelled`, `Filled`, or no
+  shares left open) raises before sending, e.g.
+  `US order <id> is not active (status Filled, remaining quantity 0) and cannot be updated`
+  (`... cannot be cancelled` for `cancel_order`).
+  Call `update_status(intl)` first if the cached status may be stale.
+  已失敗、已刪除、全部成交或剩餘 0 股的委託不能改單或刪單。
+- **Cancelling too soon 太快刪單.** A cancel sent right after the order, before
+  the broker has accepted it, is rejected by the backend (code `-2054`, HTTP
+  400). The SDK does **not** retry it automatically. Wait for the `New`
+  `IntlOrder` report (or `trade.status.status` to leave `PendingSubmit`), then
+  cancel again. 下單後馬上刪單會被後台拒絕（-2054，HTTP 400），SDK 不會自動重試；等收到委託成功回報後再刪。
+- If the backend reports a fractional order or cancelled quantity for a
+  trade, `update_order` / `cancel_order` of it raises locally (the backend
+  cannot take a fractional quantity on these calls yet).
+- US orders are not available in VPN mode (`vpn=True`).
+  美股不支援 VPN 模式。
+
+### US reservation orders and the trading day 美股預約單與換日
+
+- Orders sent outside US trading hours are reservation orders 預約單 and stay
+  `PreSubmitted`/`PendingSubmit` until the market opens.
+- `trade.order.trade_date` (`YYYYMMDD`) is the US trading day the order
+  belongs to; read it instead of guessing from the Taipei clock.
+- The SDK's local trade cache (`list_trades`, held `Trade` views,
+  `trade_cache_health`) starts a new day at **06:00 Taipei time** for every
+  market, US included. After that rollover `list_trades()` no longer returns
+  orders cached before 06:00; call `api.update_status(intl)` to load what the
+  backend reports now. A reservation order placed before 06:00 Taipei is still
+  a live order at the broker even if it disappears from the local cache: check
+  with `update_status(intl)` before placing it again. The trade report
+  subscription is kept across the rollover.
+  SDK 本地委託快取每天台北 06:00 換日（美股也一樣）；換日後 `list_trades()` 不再列出換日前快取的委託，要用 `api.update_status(intl)` 重新載入後台資料。06:00 前下的預約單即使從本地快取消失，在券商端仍是有效委託，重下之前先用 `update_status(intl)` 確認，避免重複下單；回報訂閱不受影響。
+
+### US trade fields 美股委託資料
+
+- `trade.order` carries `all_or_none`, `currency` (`USD`), `region` (`US`),
+  `session` and `trade_date`; `trade.status.avg_price` is the
+  quantity-weighted average fill price. Taiwan trades leave them `None`.
+- **US numbers are `decimal.Decimal` 美股數值為 Decimal.** For US trades,
+  `trade.order.price` / `quantity`, `trade.status.order_quantity` /
+  `deal_quantity` / `cancel_quantity` / `avg_price` and every deal's `price` /
+  `quantity` are exact `Decimal` values, from reports, `update_status` and
+  `list_trades` alike. Fills and queried quantities may be fractional shares
+  (e.g. `Decimal("0.5")`). `avg_price` is computed exactly and rounded half
+  away from zero at 6 decimal places when it does not end sooner. Taiwan
+  trades keep `float` prices and `int` quantities.
+  美股委託的價格與數量都是精確的 `Decimal`（成交可能有零股小數，例如 0.5 股）；台股維持 float / int。
+- `trade.order.session` is a `sj.TradingSession` (`Regular`, `PreMarket`,
+  `AfterHours`). A session value this SDK version does not know is left
+  `None` with a warning in the log; the trade or report is still delivered.
+  交易時段為 `sj.TradingSession`；未知值留空（記錄警告），不影響委託資料。
+- `trade.status.status_code` / `trade.status.msg` are the `op_code` / `op_msg`
+  of the latest `IntlOrder` report applied to the trade: `"00"` is success; a
+  rejected order reads, for example, `status_code "8"`, `msg "REJECTED"` with
+  `status == Failed`. Surface `msg` to the user when an order fails.
+  `status_code`／`msg` 取自最新一筆美股委託回報的 `op_code`／`op_msg`；`"00"` 為成功，失敗時把 `msg` 告訴使用者。
+
+HTTP: send the US contract (`"region": "US"`) with a `stock_order`; select
+the IntlAccount with `"account": {"account_type": "H", "broker_id": ..., "account_id": ...}`
+(the type matters when the Intl and stock accounts share an account id).
+The HTTP `price` / `quantity` take a JSON number or a decimal string
+(`"price": "180.25"`); US trades answer prices and quantities as exact
+decimal strings (`"price": "180.25"`, `"deal_quantity": "0.5"`). List US
+trades with `POST /api/v1/order/trades` and `{"account_type": "H"}`. CLI:
+`shioaji order place --region US --code AAPL --action Buy --price 180.25 --quantity 10 --tif day`.
+
+### US order reports 美股回報
+
+US active reports come as `OrderState.IntlOrder` (`IORDER`, order accepted /
+reduced / cancelled / rejected) and `OrderState.IntlDeal` (`IDEAL`, one fill)
+on the same `set_order_callback` / `@api.on_order` callback and the same
+`order_event` SSE as Taiwan reports, after `subscribe_trade` of the `H`
+account. They update the same live `trade` before the callback runs.
+美股主動回報為 `IntlOrder`（委託、減量、刪單、退單）與 `IntlDeal`（每筆成交），走同一個 order callback 與 SSE，需先訂閱國際帳戶（IntlAccount）；callback 執行時 `trade` 已更新。
+
+`IntlOrder` payload (`msg[...]` in Python, `data.IntlOrder` in SSE):
+
+| Key | Fields 欄位 |
+|---|---|
+| `event_id` | `v1:IO:...` receipt ID |
+| `operation` | `op_type` (`New`, `UpdateQty`, `Cancel`; a rejected New arrives as `New` with a non-`"00"` code), `op_code` (`"00"` success), `op_msg` |
+| `order` | `id`, `seqno`, `ordno` (`""` when the broker has none, e.g. a failed New), `account` (only `account_type` `"H"`, `broker_id`, `account_id` are reported), `action`, `price` / `quantity` (original order quantity) as `Decimal` or `None`, `price_type` (raw string: `LMT`, `MKT`, ...; `""` when not reported), `time_in_force` (raw string: `DAY`, `OPG`, `ATC`, `IOC`, `FOK`, ...), `aon`, `session` (only when the broker sent a known session) |
+| `status` | `id`, `exchange_ts` (epoch seconds, float), `cancel_quantity`, `order_quantity` (`Decimal` or `None`), `web_id` |
+| `contract` | `code`, `security_type` (`STK`), `region` (`US`), `currency` |
+
+`IntlDeal` payload keys: `event_id` (`v1:ID:...`), `trade_id` (= `order.id` of
+the `IntlOrder`), `seqno`, `ordno`, `exchange_seq` (the fill's match number),
+`broker_id`, `account_id`, `action`, `code`, `region`, `price` and `quantity`
+(`Decimal`; fills may be fractional shares), `web_id`, `ts` (epoch seconds).
+In SSE JSON the decimals are strings.
+`IntlDeal` 的 `price`、`quantity` 為 `Decimal`（可能是零股小數），SSE 中為字串。
+
+```python
+from shioaji import OrderState
+
+def order_cb(stat, msg):
+    if stat == OrderState.IntlOrder:
+        op = msg["operation"]
+        if op["op_code"] != "00":
+            print("US order failed:", op["op_msg"])
+        else:
+            print("US order", op["op_type"], msg["order"]["id"], msg["status"]["order_quantity"])
+    elif stat == OrderState.IntlDeal:
+        print("US fill", msg["code"], msg["price"], msg["quantity"], msg["exchange_seq"])
+
+api.set_order_callback(order_cb)
+```
+
+**Missed reports and reconciliation 缺號與對帳.** `event_id` follows the
+same `v1:<stream>:<reset>:<sequence>` rules as Taiwan
+([event_id](#event_id-deduplication-and-sequence-gaps-去重與跳號判讀)), with
+streams `IO` and `ID`. When a sequence number is skipped,
+`api.trade_cache_health(intl)` turns `Degraded` with reason `SequenceGap` for
+`IntlOrder` / `IntlDeal`; the SDK does not replay or query by itself. After a
+gap, a reconnect, or any doubt, call `api.update_status(intl)` (HTTP
+`/order/trades` with `refresh: true`) to reconcile.
+`event_id` 規則同台股（前綴 `IO`／`ID`）。跳號時 `trade_cache_health(intl)` 變成 `Degraded`（`SequenceGap`），SDK 不會自動補；缺號、重連或有疑慮時呼叫 `api.update_status(intl)` 對帳。
+
+How a US `update_status` reconciles fills 美股對帳如何補成交:
+
+- The query may answer **one cumulative deal** per trade (`seq` `"1"`, `ts`
+  0, the average price and the whole filled quantity) instead of per-fill
+  deals. Missed `IntlDeal` reports are **not replayed** one by one: the trade
+  gets the correct `deal_quantity`, `avg_price` and status, but
+  `trade.status.deals` may hold that single cumulative row.
+  對帳只補累計成交（一筆 seq "1" 的彙總），不會逐筆重播漏掉的成交回報；`deal_quantity`、`avg_price`、狀態會正確。
+- As soon as a real `IntlDeal` fill is known, the cumulative row leaves
+  `deals`; fills are keyed by `exchange_seq`, so a fill seen in both a report
+  and a query is counted once.
+- A new fill that may or may not already be inside the cumulative row is
+  applied without double counting, but health turns `Degraded`
+  (`ProjectionFailed`) until the next `update_status(intl)`.
+- The Python SDK does not reconcile by itself after a reconnect. The HTTP
+  server refills its trade cache with `update_status` for every signed account
+  (the IntlAccount included) after each login (startup, daily maintenance, session
+  recovery).
+  Python SDK 重連後不會自動對帳；HTTP server 每次登入後會對所有已簽署帳戶（含國際帳戶）自動補 trade cache。
+
+`update_status` / `list_trades` for US 美股查詢:
+
+- `api.update_status(intl)` queries the IntlAccount. `api.update_status()`
+  without an account resolves the default stock (or futures) account, so pass
+  the IntlAccount explicitly for US trades. Only `update_status(account)` reconciles health,
+  `update_status(trade=trade)` does not.
+- `api.list_trades()` returns Taiwan and US trades from the local cache
+  together; tell them apart with `trade.order.account.account_type == sj.AccountType.Intl` or
+  `trade.contract.region == "US"`.
+- Use `api.trade_cache_health(intl)` to check the US report streams.
+
+---
+
 ## Combo Orders 組合單
 
 Combo orders have separate rules for two-leg contracts, net-price
@@ -471,8 +743,8 @@ Do not use a deal-event `trade_id` blindly unless you know it matches the same `
 
 ### Change Price 改價
 
-For stocks, only limit orders can change price. Odd-lot orders (intraday or after-hours) and market orders cannot; reduce the quantity or cancel instead.
-股票只有限價單能改價；零股（盤中／盤後）、市價單不能改價，只能減量或刪單。
+For stocks, only limit orders can change price. Odd-lot orders (intraday or after-hours) and market orders cannot; reduce the quantity or cancel instead. US orders can never change price ([US modify and cancel](#us-modify-and-cancel-美股改單與刪單)).
+股票只有限價單能改價；零股（盤中／盤後）、市價單不能改價，只能減量或刪單。美股一律不能改價。
 
 ```python
 api.update_order(trade=trade, price=585)
@@ -666,8 +938,9 @@ curl -X POST http://localhost:8080/api/v1/order/trade_cache_health \
 | `{"account_type":"S"}` | Default stock account 預設股票帳戶 |
 | `{"account_type":"F"}` | Default futures/options account 預設期貨／選擇權帳戶 |
 | `{}` | Same as `S` 視為 `S` |
+| `{"account_type":"H"}` | First IntlAccount (US stock) (1.8.0b1) 第一個國際帳戶（IntlAccount，美股） |
 | `{"broker_id":"9A95","account_id":"1234567"}` | That specific account; `account_type` may be omitted 指定帳戶，`account_type` 可省略 |
-| `account_type` other than `S`/`F` 非 `S`/`F` | HTTP 400 `Invalid account_type` |
+| `account_type` other than `S`/`F`/`H` 非 `S`/`F`/`H` | HTTP 400 `Invalid account_type` |
 
 The response is `{"state": ..., "reasons": [{"event_type": ..., "reason": ...}]}`,
 for example
@@ -813,13 +1086,15 @@ Shioaji 將這個功能稱為 `order_deal_event`：在 `place_order`、`update_o
 | `OrderState.StockDeal` / `SDEAL` | Stock deal / partial fill / fill | dict-like event with `trade_id`, `seqno`, `ordno`, `exchange_seq`, `broker_id`, `account_id`, `action`, `code`, `order_cond`, `order_lot`, `price`, `quantity`, `web_id`, `custom_field`, `ts` | `{"state":"StockDeal","data":{"StockDeal":{...}}}` |
 | `OrderState.FuturesOrder` / `FORDER` | Futures/options order accepted/updated/cancelled | dict-like event with `operation`, `order`, `status`, `contract` | `{"state":"FuturesOrder","data":{"FuturesOrder":{...}}}` |
 | `OrderState.FuturesDeal` / `FDEAL` | Futures/options deal / partial fill / fill | dict-like event with `trade_id`, `seqno`, `ordno`, `exchange_seq`, `broker_id`, `account_id`, `action`, `code`, `price`, `quantity`, `subaccount`, `security_type`, `delivery_month`, `full_code`, `strike_price`, `option_right`, `market_type`, `combo`, `ts` | `{"state":"FuturesDeal","data":{"FuturesDeal":{...}}}` |
+| `OrderState.IntlOrder` / `IORDER` | US stock order accepted/reduced/cancelled/rejected (1.8.0b1) | dict-like event with `operation`, `order`, `status`, `contract` ([fields](#us-order-reports-美股回報)) | `{"state":"IntlOrder","data":{"IntlOrder":{...}}}` |
+| `OrderState.IntlDeal` / `IDEAL` | US stock fill (1.8.0b1) | dict-like event with `trade_id`, `seqno`, `ordno`, `exchange_seq`, `broker_id`, `account_id`, `action`, `code`, `region`, `price`, `quantity`, `web_id`, `ts` | `{"state":"IntlDeal","data":{"IntlDeal":{...}}}` |
 
-All four payloads expose top-level `event_id: str` (1.7.6+). Live reports require a
+All six payloads expose top-level `event_id: str` (1.7.6+; US since 1.8.0b1). Live reports require a
 nonempty ID. Historical `order_deal_records()` returns `""` when no ID was
 saved; skip ID-based deduplication and sequence tracking for these records.
 Treat the ID as an opaque string and preserve it exactly.
 
-四種回報都提供頂層 `event_id: str`（1.7.6+）。即時回報的 ID 必須非空；歷史 `order_deal_records()` 沒有保存 ID 時回傳 `""`，這些紀錄不參與 ID 去重或序號追蹤。請將 ID 視為不透明字串，原樣保留。
+所有回報（含美股 `IntlOrder`／`IntlDeal`）都提供頂層 `event_id: str`（1.7.6+）。即時回報的 ID 必須非空；歷史 `order_deal_records()` 沒有保存 ID 時回傳 `""`，這些紀錄不參與 ID 去重或序號追蹤。請將 ID 視為不透明字串，原樣保留。
 
 Agent decision rules:
 
@@ -915,6 +1190,8 @@ sj.OrderState.StockOrder  # 股票委託回報
 sj.OrderState.StockDeal   # 股票成交回報
 sj.OrderState.FuturesOrder  # 期貨委託回報
 sj.OrderState.FuturesDeal   # 期貨成交回報
+sj.OrderState.IntlOrder     # 美股委託回報 (IORDER, 1.8.0b1)
+sj.OrderState.IntlDeal      # 美股成交回報 (IDEAL, 1.8.0b1)
 ```
 
 ### Handle Different Events 處理不同事件

@@ -14,6 +14,7 @@ Use [MIGRATION.md](MIGRATION.md) when old code uses legacy quote helpers or subm
 - [Async Callbacks 非同步回調](#async-callbacks-非同步回調)
 - [Python Receivers Python 接收器](#python-receivers-python-接收器)
 - [Callback Reference 回調參考](#callback-reference-回調參考)
+- [US Quotes 美股行情](#us-quotes-美股行情)
 - [System Callbacks 系統回調](#system-callbacks-系統回調)
 - [SSE Streaming (HTTP) SSE 串流](#sse-streaming-http-sse-串流)
 - [Best Practices 最佳實踐](#best-practices-最佳實踐)
@@ -232,6 +233,15 @@ api.subscribe(api.contracts.get("2330"), quote_type=sj.QuoteType.KBar)
   `intraday_odd`／`version` 一律拒絕；CLI 不支援 KBar。欄位見回調參考。
 - HTTP is a **dedicated route** (not the generic `/stream/subscribe`): `POST /api/v1/stream/subscribe/kbars` with `{"stocks":[{"security_type":"STK","exchange":"TSE","code":"2330","target_code":null},…]}` (multi-stock), response `{success, message}` without `subscription`; SSE `GET /api/v1/stream/data/kbar`; unsubscribe same body to `/stream/unsubscribe/kbars`.
   HTTP 走專屬路由（非通用 `/stream/subscribe`），body 的 `stocks` 陣列可一次多檔，回應沒有 `subscription` 欄位。
+
+### US Stock Quotes 美股行情
+
+Since 1.8.0b1 (pre-release). Same `api.subscribe` / `api.unsubscribe` with a
+US contract, but only `QuoteType.Tick` and `QuoteType.BidAsk`, its own
+callbacks (`on_us_tick`, `on_us_bidask`, `on_us_halt`) and a separate halt
+feed. US quotes are **production only**: the simulation / test environment
+has no US quote feed. Full reference: [US Quotes 美股行情](#us-quotes-美股行情).
+1.8.0b1（預發行版）起提供。用同一個 `api.subscribe` 帶美股商品，但只有 Tick 與 BidAsk、走獨立 callback 與獨立的暫停事件；美股即時報價**只在正式環境**，模擬／測試環境沒有。完整說明見 [US Quotes 美股行情](#us-quotes-美股行情)。
 
 ### Enriched and Signal Products 即時加值與市場訊號
 
@@ -581,6 +591,184 @@ quote.fixed_count      # int: After-hours fixed-price trade count 盤後定價�
 # Estimate 預估量（broad-market only 僅大盤）
 quote.estimate_amount_sum  # Decimal: Estimated closing turnover 預估收盤總額(元)
 ```
+
+---
+
+## US Quotes 美股行情
+
+> **1.8.0b1 pre-release, production only.** US quotes ship in the 1.8.0b1
+> pre-release (`pip install --pre shioaji` or `shioaji==1.8.0b1`). The feed is
+> only on the production environment; a simulation (`simulation=True`) or test
+> login receives no US quotes, so do not use an empty US stream there as a bug signal.
+> **1.8.0b1 預發行版，只在正式環境。** 模擬／測試環境沒有美股即時報價，收不到資料不代表程式有錯。
+
+US quotes come from one feed per exchange: topics `IS/v1/TIC/{exchange}/{code}`
+(trades) and `IS/v1/QUO/{exchange}/{code}` (best bid/ask, one level), exchange
+`NASDAQ`, `NYSE`, `BATS` or `TXSE` (the contract's base exchange). Only
+`QuoteType.Tick` and `QuoteType.BidAsk` exist: `QuoteType.Quote` raises
+`US quotes support Tick and BidAsk only`, and `intraday_odd=True` raises
+(odd-lot trades are on the tick stream with `odd_lot=True`). US events use their
+own callbacks and never reach the Taiwan `on_tick_stk_v1` / `on_bidask_stk_v1`.
+美股每個交易所一條：成交 `IS/v1/TIC/...`、最佳一檔 `IS/v1/QUO/...`；只有 Tick 與 BidAsk，`QuoteType.Quote` 與 `intraday_odd=True` 會報錯（碎股成交在 Tick 裡以 `odd_lot=True` 標示）。美股事件走獨立 callback，不會進台股 callback。
+
+```python
+import shioaji as sj
+
+api = sj.Shioaji()  # production: US quotes are not on simulation
+api.login(api_key="...", secret_key="...")
+aapl = api.contracts.get("AAPL", region="US")  # base exchange from the contract
+
+@api.on_us_tick()
+def on_us_tick(tick: sj.UsTick):
+    if tick.stale:                    # never act on a stale/delayed quote as realtime
+        return
+    print(tick.code, tick.price, tick.volume, tick.session, tick.odd_lot)
+
+@api.on_us_bidask()
+def on_us_bidask(quote: sj.UsBidAsk):
+    print(quote.code, quote.bid_price[0], quote.ask_price[0], quote.freshness.status)
+
+api.subscribe(aapl, quote_type=sj.QuoteType.Tick)
+api.subscribe(aapl, quote_type=sj.QuoteType.BidAsk)
+# api.unsubscribe(aapl, quote_type=sj.QuoteType.Tick)
+```
+
+- Setter form: `set_on_us_tick_callback` / `set_on_us_bidask_callback` /
+  `set_on_us_halt_callback` and `clear_on_us_tick_callback` /
+  `clear_on_us_bidask_callback` / `clear_on_us_halt_callback`; all take
+  `bind=False` like the Taiwan callbacks.
+- `ShioajiAsync`: same names with `async def` callbacks; `await api.subscribe(...)`,
+  `await api.subscribe_us_halt()`, `await api.unsubscribe_us_halt()`.
+  `api.us_tradable(...)` / `api.us_halts()` stay synchronous reads of the local halt book.
+  `ShioajiAsync` 名稱相同，callback 用 `async def`；`us_tradable`／`us_halts` 是同步讀本地 halt book。
+- There is no US receiver (`get_*_receiver`); use the callbacks.
+- HTTP: `POST /api/v1/stream/subscribe` with a US exchange
+  (`{"security_type":"STK","exchange":"NASDAQ","code":"AAPL","quote_type":"Tick"}`);
+  events arrive as `us_tick` / `us_bidask` on `/api/v1/stream/data` or the
+  dedicated `/api/v1/stream/data/us_tick` and `/api/v1/stream/data/us_bidask`.
+
+### Every trade is on one tick stream 所有成交同一條 Tick
+
+Every trade is published — regular lots, odd lots, pre-market/after-hours and
+special-condition trades — so filter on the flags instead of assuming each tick
+moves the last price.
+所有成交都會發（整股、碎股、盤前盤後、特殊條件），請依旗標判斷，不要假設每筆都更新最新價。
+
+| Field 欄位 | Meaning 說明 |
+|---|---|
+| `price`, `volume` | This trade's price and shares 這筆成交的價格、股數 |
+| `close` | Latest last-eligible **regular-session** price; only moves when `updates_last=True` 正規盤最新可更新成交價 |
+| `open`, `high`, `low`, `price_chg`, `pct_chg`, `chg_type` | Regular-session state; change is vs the previous trading day's official close 正規盤狀態；漲跌以前一交易日官方收盤為基準 |
+| `updates_last` | `True` if this trade updates last/high/low 此筆是否帶動最新價與高低 |
+| `odd_lot` | Odd-lot trade (below a round lot); never updates last 碎股，不帶動最新價 |
+| `trade_cond`, `ext_trade_cond` | Raw trade condition codes (CFAPI 2500 / 1021) 原始條件碼 |
+| `session` | `UsTradingSession.PreMarket` (1), `Regular` (2), `AfterHours` (3), `Unknown` (0) 盤別 |
+| `ext_close`, `ext_high`, `ext_low` | Current pre-market or after-hours last/high/low; `None` during regular session 盤前／盤後那組最新價與高低，正規盤為 None |
+| `amount`, `total_amount` | Decimal dollars (not rounded) 金額為 Decimal，不取整 |
+| `total_volume` | Exchange cumulative volume incl. odd lots 交易所累計量（含碎股） |
+| `bid_side_total_*`, `ask_side_total_*` | Counted on `updates_last` trades only; reset daily 只累計可更新成交，每日歸零 |
+| `datetime`, `exchange_datetime` | tz-aware UTC `datetime` (raw epoch microseconds in `*_us`) UTC 時間 |
+| `serial_num` | Per-symbol sequence shared with bid/ask; resets daily 每檔流水號 |
+
+Prices that have no value yet are `None` (bid/ask levels use `0`).
+尚無值的價格為 `None`（買賣價以 `0` 表示空檔）。
+
+### Trading status and halts 交易狀態與暫停
+
+Halts are **not** on the tick or bid/ask streams. Subscribe to the US halt feed
+(one topic for every US stock, exchange and market-wide event) and ask the SDK
+whether a symbol can trade; a stock is tradable only when the whole market, its
+exchange and the stock itself are all not halted.
+暫停事件不在 Tick／BidAsk 裡。請訂閱美股暫停事件（單一 topic，含個股、交易所、全市場），再向 SDK 查某檔是否可交易：全市場、交易所、個股三層都沒有暫停才算可交易。
+
+```python
+api.subscribe_us_halt()                      # topic IS/v1/HALT/US
+
+@api.on_us_halt()
+def on_us_halt(halt: sj.UsHalt):
+    print(halt.scope, halt.exchange, halt.code, halt.is_halted, halt.halt_reason)
+
+api.us_tradable(aapl)    # False while market, NASDAQ or AAPL is halted
+api.us_halts()           # List[UsHalt]: market-wide, then exchanges, then symbols
+api.unsubscribe_us_halt()  # also clears the halt book
+```
+
+`UsHalt.is_halted` is `True` when `tradable_status` is 2/3 or `instr_status` is
+20/27. Before any halt event arrives, `us_tradable` returns `True`.
+`is_halted` 在 `tradable_status` 為 2／3 或 `instr_status` 為 20／27 時為 True；尚未收到任何事件前 `us_tradable` 回 True。
+
+Async clients use the same names (`await api.subscribe_us_halt()`, `on_us_halt`,
+`set_on_us_halt_callback`, `clear_on_us_halt_callback`). HTTP:
+`POST /api/v1/stream/subscribe/us_halt` (and `/unsubscribe/us_halt`); events
+arrive as `us_halt` on `/api/v1/stream/data` or `/api/v1/stream/data/us_halt`;
+`GET /api/v1/stream/us_tradable?exchange=NASDAQ&code=AAPL` and
+`GET /api/v1/stream/us_halts` read the same state as plain JSON:
+`us_halts` answers `{subscribed, last_seq, gaps, ignored, halts}` (`gaps` counts
+halt `seq` jumps, i.e. events possibly missed) and `us_tradable` answers
+`{exchange, code, tradable, subscribed, last_seq}`. With `subscribed: false`,
+`tradable` is always `true` and means nothing; subscribe first.
+`us_tradable` 回 `subscribed: false` 時 `tradable` 一律為 true、沒有意義，要先訂閱暫停事件。
+
+| Field 欄位 | Values 值 |
+|---|---|
+| `scope` | `UsHaltScope.Symbol` 個股, `Market` 全市場; `Exchange` 交易所 is reserved and not sent yet (exchange halts arrive per symbol) 交易所層級保留、目前不發，交易所暫停以逐檔送出 |
+| `exchange`, `code` | Exchange for symbol/exchange scope; `code` only for symbol scope 交易所；個股才有代碼 |
+| `tradable_status` (1708) | `1` normal 正常; `2` halted 暫停 and `3` suspended 停止 both mean not tradable (LULD volatility pauses arrive as `3`) 2 與 3 都算暫停（LULD 波動暫停是 3）; `0` not received yet, treated as tradable 尚未收到、視為正常 |
+| `halt_reason` (1012) | `0` none 無; `4` news pending / `5` news released 新聞; `43` LULD pause 漲跌幅暫停; `47`/`48`/`49` market-wide circuit breaker level 1/2/3 全市場熔斷; `19`–`24` resumptions 恢復 |
+| `instr_status` (705) | `20` market-wide paused 全市場暫停, `27` halted 暫停交易, `21` quotes resumed 恢復報價, `24` trading resumed 恢復交易, `0` none |
+| `market_phase` (1709) | `1` closed 收盤, `2` pre-market 盤前, `4` regular 正規盤, `10` after-hours 盤後, `0` unknown |
+| `session`, `seq` | Same session enum as quotes; `seq` is this feed's own sequence 盤別；本 topic 流水號 |
+
+US stocks can halt intraday (LULD pauses, news, regulatory halts, market-wide
+circuit breakers). The SDK only knows events received since `subscribe_us_halt()`;
+there is no query for halts that started before subscribing, so a newly
+connected client must not read "no halt seen" as tradable. When telling a user
+a stock cannot trade, include `halt_reason`.
+美股盤中會暫停（LULD、新聞、監管、熔斷）。SDK 只知道訂閱之後收到的事件，剛連上時「沒看到暫停」不等於可交易；向使用者說明時附上 `halt_reason`。
+
+Tick and bid/ask still carry the raw `tradable_status` and `market_phase` of the
+symbol; prefer `session` for the trading session. `UsBidAsk.quote_cond` (2003)
+is `0` normal, `43` crossed (bid above ask), `54` locked (bid equals ask); a
+crossed or locked quote is a real market state, not a data error.
+Tick／BidAsk 仍帶個股的 `tradable_status`、`market_phase` 原始值；盤別優先用 `session`。`quote_cond` 交叉、鎖定是市場真實狀態，不是資料錯誤。
+
+### Freshness 新鮮度
+
+Every `UsTick` / `UsBidAsk` has `freshness` (`QuoteFreshness`), stamped when the
+client receives the message. Agents must check it before treating a quote as
+realtime.
+每筆美股行情都帶 `freshness`，在 client 收到時計算；agent 使用前必須先檢查。
+
+| Field 欄位 | Meaning 說明 |
+|---|---|
+| `source_ts` | Exchange time `exchange_datetime` when present, otherwise `datetime` (when the data vendor received it); epoch µs UTC 來源時間（優先用交易所時間） |
+| `receive_ts` | Local receive time, epoch µs UTC 本機收到時間 |
+| `age_us` / `age` | Transport delay `receive_ts - source_ts` (µs / seconds); negative = source clock ahead 傳輸延遲 |
+| `stale_after_us` | Threshold used 判斷門檻 |
+| `feed` | `"Realtime"` or `"Delayed"` 來源類型 |
+| `status` | `FreshnessStatus.Realtime`, `Stale`, or `Delayed` |
+| `stale` | `True` unless `status == Realtime` 非即時即為 True |
+
+Policy 規則:
+- `Realtime` only when the feed is realtime **and** the transport delay
+  (`age`) is within the threshold.
+- `Stale`: realtime feed but the delay exceeds the threshold, or no source time.
+- Staleness measures **transport delay only**, never the time since the previous
+  trade. Illiquid symbols, warrants and pre/after-hours sessions can go minutes
+  between trades and are still realtime; a long gap between messages is not
+  stale. 只看傳輸延遲，不看距離上一筆多久；冷門股、盤前盤後幾分鐘才一筆仍是即時。
+- `Delayed`: the feed itself is delayed (any path other than the realtime
+  `IS/v1` root); **never** reported as realtime, whatever the age.
+- Threshold default **3000 ms**; override with env `SJ_US_QUOTE_STALE_AFTER_MS`
+  or `sj.set_us_quote_stale_after_ms(ms)` (`sj.get_us_quote_stale_after_ms()`).
+- HTTP/SSE JSON carries the same object: `"freshness": {"source_ts", "receive_ts",
+  "age_us", "stale_after_us", "feed", "status", "stale"}`; `session` is a string
+  (`"PreMarket"`, `"Regular"`, `"AfterHours"`, `"Unknown"`) and decimals are strings.
+
+When answering a user about a US price, say how old it is and whether it is
+realtime; if `stale` is true, say the quote is stale/delayed rather than quoting
+it as the current price.
+回答美股價格時要說明資料時間與是否即時；`stale` 為 True 時要明講是延遲／過時資料。
 
 ---
 

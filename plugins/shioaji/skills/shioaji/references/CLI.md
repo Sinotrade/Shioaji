@@ -58,6 +58,7 @@
     - [portfolio profit-loss-summary](#portfolio-profit-loss-summary)
     - [portfolio trading-limits](#portfolio-trading-limits)
     - [portfolio settlements](#portfolio-settlements)
+    - [portfolio dividends](#portfolio-dividends)
 13. [reserve -- Stock Reserve & Earmarking / 股票預收券款](#reserve----stock-reserve--earmarking--股票預收券款)
     - [reserve summary](#reserve-summary)
     - [reserve detail](#reserve-detail)
@@ -193,8 +194,8 @@ shioaji
 │   ├── accounts
 │   ├── usage
 │   ├── ca-expiretime     --person-id <PERSON_ID>
-│   ├── subscribe-trade   [--account-type S] [--account]
-│   └── unsubscribe-trade [--account-type S] [--account]
+│   ├── subscribe-trade   [--account-type S|F|H] [--account]
+│   └── unsubscribe-trade [--account-type S|F|H] [--account]
 ├── apps
 │   ├── list
 │   ├── upload      --name <NAME> (--dir <DIR> | --file <PATH>...)
@@ -211,8 +212,8 @@ shioaji
 │   └── regulatory  [--type punish]
 ├── contracts
 │   ├── list        --type <TYPE> [--region TW] [--page] [--page-size]
-│   ├── get         <CODE> [--type <TYPE>] [--region TW]
-│   ├── info        <CODE> [--type <TYPE>] [--region TW]
+│   ├── get         <CODE> [--type <TYPE>] [--region TW] [--exchange <EXCHANGE>]
+│   ├── info        <CODE> [--type <TYPE>] [--region TW] [--exchange <EXCHANGE>]
 │   ├── futures     [--root <ROOT> | --underlying <CODE>] [--region TW]
 │   ├── options     --root <ROOT> [--month] [--right C|P] [--strike-min] [--strike-max] [--expiry-weekday] [--region TW]
 │   ├── warrants    --underlying <CODE> [--code] [--call-put C|P] [--strike-min] [--strike-max] [--expiry-from] [--expiry-to] [--region TW]
@@ -222,22 +223,23 @@ shioaji
 │   ├── tick-bands  <RULE> --type FUT|OPT [--region TW]
 │   └── watch       [--region TW] [--type <TYPE>]
 ├── order
-│   ├── place       --code <CODE> --action <ACTION> --quantity <QTY> [--price 0] [--price-type lmt] [--tif rod] [--order-lot] [--order-cond] [--octype] [--account] [--security-type STK] [--no-wait]
+│   ├── place       --code <CODE> --action <ACTION> --quantity <QTY> [--price 0] [--price-type lmt] [--tif rod] [--order-lot] [--order-cond] [--octype] [--account] [--security-type STK] [--region TW] [--aon] [--no-wait]
 │   ├── cancel      --id <ID> [--no-wait]
 │   ├── list        [--account]
 │   ├── update-price --id <ID> --price <PRICE> [--no-wait]
 │   ├── update-qty  --id <ID> --quantity <QTY> [--no-wait]
 │   └── events
 ├── portfolio
-│   ├── balance     [--account]
-│   ├── positions   [--account-type S] [--account] [--unit common]
+│   ├── balance     [--account-type] [--account] [--currency]
+│   ├── positions   [--account-type S] [--account] [--unit common] [--region] [--currency]
 │   ├── margin      [--account]
-│   ├── position-detail     --detail-id <ID> [--account-type S] [--account]
-│   ├── profit-loss         [--account-type S] [--account] [--begin-date] [--end-date] [--unit common]
+│   ├── position-detail     --detail-id <ID> [--account-type S] [--account] [--region] [--currency]
+│   ├── profit-loss         [--account-type S] [--account] [--begin-date] [--end-date] [--unit common] [--region] [--currency]
 │   ├── profit-loss-detail  --detail-id <ID> [--account-type S] [--account] [--unit common]
 │   ├── profit-loss-summary [--account-type S] [--account] [--begin-date] [--end-date]
 │   ├── trading-limits      [--account]
-│   └── settlements         [--account]
+│   ├── settlements         [--account-type] [--account]
+│   └── dividends           [--account] [--begin-date] [--end-date] [--region] [--currency]
 ├── reserve
 │   ├── summary     [--account]
 │   ├── detail      [--account]
@@ -433,11 +435,12 @@ Subscribe to per-account order/deal events. Mirrors Python `api.subscribe_trade(
 shioaji auth subscribe-trade                              # default stock account
 shioaji auth subscribe-trade --account-type F             # default futures account
 shioaji auth subscribe-trade --account 9A95-9816502       # specific account
+shioaji auth subscribe-trade --account-type H             # first IntlAccount: US order reports (1.8.0b1)
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--account-type` | S | Account type: S (stock) or F (futures) |
+| `--account-type` | S | Account type: S (stock), F (futures) or H (IntlAccount, US stock; 1.8.0b1) |
 | `--account` | (default account) | Account in BROKER_ID-ACCOUNT_ID format (e.g. 9A00-1234567) |
 
 ### auth unsubscribe-trade
@@ -451,7 +454,7 @@ shioaji auth unsubscribe-trade --account 9A95-9816502 --account-type S
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--account-type` | S | Account type: S (stock) or F (futures) |
+| `--account-type` | S | Account type: S (stock), F (futures) or H (IntlAccount, US stock) |
 | `--account` | (default account) | Account in BROKER_ID-ACCOUNT_ID format |
 
 ---
@@ -588,6 +591,9 @@ The CLI resolves the contract code, subscribes to the appropriate SSE endpoint, 
 
 > `--quote-type` only accepts tick/bid_ask/quote. Realtime KBar, enriched index data, and market signals are NOT available via the CLI stream command — use Python or HTTP ([STREAMING.md](STREAMING.md) / [STREAMING_ENRICHED.md](STREAMING_ENRICHED.md) / [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md)).
 > `--quote-type` 僅接受 tick/bid_ask/quote。即時K棒、即時加值資料與市場訊號 CLI 不支援，請用 Python 或 HTTP。
+>
+> US quotes and the US halt feed are not available via the CLI either (`data stream` has no `--region`); use Python or HTTP SSE `us_tick` / `us_bidask` / `us_halt` ([STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情)).
+> 美股行情與暫停事件 CLI 也不支援（`data stream` 沒有 `--region`），請用 Python 或 HTTP SSE。
 
 Indices support only the `quote` type — pass `--quote-type quote` explicitly; the default `tick` is rejected with `Error: index contracts only support quote streaming`.
 
@@ -607,6 +613,9 @@ shioaji data snapshots --codes TXFR1,MXFR1 --security-type FUT --exchange TAIFEX
 | `--codes` | (required) | Comma-separated security codes |
 | `--security-type` | STK | Security type: STK, FUT, OPT, IND |
 | `--exchange` | TSE | Exchange: TSE, OTC, TAIFEX |
+
+> `data ticks`, `data kbars` and `data snapshots` look codes up in Taiwan only (no `--region`), so US snapshots, ticks and K-bars (1.8.0b1) are not available via the CLI; use Python or HTTP ([MARKET_DATA.md § US Market Data](MARKET_DATA.md#us-market-data-美股歷史行情與快照)).
+> `data ticks`／`kbars`／`snapshots` 只查台股代碼（沒有 `--region`），美股快照、逐筆與 K 棒請用 Python 或 HTTP。
 
 ### data daily-quotes
 
@@ -697,15 +706,18 @@ shioaji contracts list --type STK --page 1 --page-size 500
 # Exact Base lookup and flat typed Info.
 shioaji contracts get 2330 --type STK
 shioaji contracts info IX0001 --type IND
+
+# US stock (1.8.0b1): codes are used verbatim.
+shioaji contracts info BRK.A --region US --exchange NYSE
 ```
 
 | Command | Required | Optional | Meaning |
 |---------|----------|----------|---------|
 | `list` | `--type STK\|IND\|FUT\|OPT\|WRT` | `--region`, `--page`, `--page-size` | All Base rows for one type unless pagination is supplied |
-| `get` | positional `CODE` | `--type`, `--region` | One Base by exchange/master code; omitting type performs generic lookup |
-| `info` | positional `CODE` | `--type`, `--region` | Flat typed Info; WRT must use `warrants` |
+| `get` | positional `CODE` | `--type`, `--region`, `--exchange` | One Base by exchange/master code; omitting type performs generic lookup |
+| `info` | positional `CODE` | `--type`, `--region`, `--exchange` | Flat typed Info; WRT must use `warrants` |
 
-`--region` defaults to `TW`. `--page-size` without `--page` implies page 1. There is no command that aggregates every security type.
+`--region` defaults to `TW`; `--region US` (1.8.0b1) looks up US stocks. `--exchange` narrows `get`/`info`: TW `TSE`/`OTC`/`OES`/`TAIFEX`, US `NASDAQ`/`NYSE`/`BATS`/`TXSE`; a contract listed elsewhere is not found. `--page-size` without `--page` implies page 1. There is no command that aggregates every security type.
 
 ### contracts futures/options/warrants
 
@@ -771,7 +783,19 @@ For continuous-month futures such as `TXFR1` / `TXFR2`, the CLI preserves the re
 
 # Target a specific account
 # shioaji order place --code 2330 --action Buy --price 600 --quantity 1 --account 9A95-1234567
+
+# US stock: 10 shares of AAPL, day order, IntlAccount
+# shioaji order place --region US --code AAPL --action Buy --price 180.25 --quantity 10 --tif day
 ```
+
+US stock orders (`--region US`, 1.8.0b1) use the IntlAccount
+(`--account` is read as an IntlAccount), whole shares, `--price-type` lmt/mkt
+and `--tif` day/opg/atc (`rod` is sent as `day`; at the close is
+`--tif atc`, there is no moc/loc price type). `order update-qty` cancels that
+many shares; `order update-price` is rejected for US orders (cancel and place
+again). `--price` is read as an exact decimal (at most 4 decimals for US), and
+US trades print prices and quantities as decimal strings (fills may be
+fractional shares, e.g. `0.5`). See ORDERS.md, US Stock Orders.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -779,13 +803,15 @@ For continuous-month futures such as `TXFR1` / `TXFR2`, the CLI preserves the re
 | `--action` | (required) | Buy or Sell |
 | `--price` | 0 | Order price (0 for market orders) |
 | `--quantity` | (required) | Order quantity |
-| `--price-type` | lmt | Price type: lmt, mkt (stock); lmt, mkt, mkp (futures) |
-| `--tif` | rod | Time in force: rod, ioc, fok (alias `--time-in-force`; legacy `--order-type` still accepted) |
-| `--order-lot` | (none) | Stock order lot type (e.g. Common, Odd, etc.) |
-| `--order-cond` | (none) | Stock order condition |
+| `--price-type` | lmt | Price type: lmt, mkt (stock and US stock); lmt, mkt, mkp (futures) |
+| `--tif` | rod | Time in force: rod, ioc, fok; US stock: day, opg, atc (ioc / fok are rejected by the backend for US) (at the close: mkt + atc is market on close, lmt + atc limit on close) (alias `--time-in-force`; legacy `--order-type` still accepted) |
+| `--order-lot` | (none) | Stock order lot type (e.g. Common, Odd, etc.); US stock: Common only, any other lot is rejected |
+| `--order-cond` | (none) | Stock order condition; US stock: Cash only, any other condition is rejected |
 | `--octype` | (none) | Futures open/close type |
 | `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format |
 | `--security-type` | STK | Security type hint for contract lookup |
+| `--region` | TW | Contract market region; `US` places a US stock order with the IntlAccount |
+| `--aon` | false | US only: all-or-none; the backend rejects unsupported combinations (UNSUPPORTED_ORDER_COMBINATION) |
 | `--no-wait` | false | Skip waiting for order events after placing |
 
 By default, after placing an order the CLI connects to the order event SSE stream and waits up to 30 seconds for confirmation. Use `--no-wait` to skip.
@@ -816,7 +842,7 @@ shioaji order list --account 9A95-9816502
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--account` | (default stock account + default futures account) | Account in `BROKER_ID-ACCOUNT_ID` format. Required to surface trades placed on non-default accounts. |
+| `--account` | (default stock account + default futures account) | Account in `BROKER_ID-ACCOUNT_ID` format. Required to surface trades placed on non-default accounts, including US trades on the IntlAccount: without `--account` only the S and F accounts are listed. |
 
 ### order update-price
 
@@ -854,7 +880,7 @@ Stream real-time order and deal events via SSE. Press Ctrl+C to stop.
 shioaji order events
 ```
 
-Displays all order/deal events (stock orders, stock deals, futures orders, futures deals) as they arrive.
+Displays all order/deal events (stock orders, stock deals, futures orders, futures deals, and US `IntlOrder` / `IntlDeal` since 1.8.0b1) as they arrive. US reports need `shioaji auth subscribe-trade --account-type H` first.
 
 ---
 
@@ -866,16 +892,19 @@ shioaji portfolio <SUBCOMMAND>
 
 ### portfolio balance
 
-Get account balance (stock account).
+Get account balance (stock account). With `--account-type H` it returns `IntlAccountBalance` (`currency`, `balance`, `buying_power`).
 
 ```bash
 shioaji portfolio balance
 shioaji portfolio balance --account 9A00-1234567
+shioaji portfolio balance --account-type H --currency USD --format json
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--account-type` | `S` | Account type: `S` (stock) or `H` (IntlAccount) |
 | `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format (e.g. 9A00-1234567) |
+| `--currency` | (none) | IntlAccount only: currency of the balance (default USD); ignored for a stock account |
 
 ### portfolio positions
 
@@ -886,17 +915,21 @@ shioaji portfolio positions
 shioaji portfolio positions --account-type F
 shioaji portfolio positions --unit share
 shioaji portfolio positions --account 9A00-1234567
+shioaji portfolio positions --account-type H          # US stock (1.8.0b1)
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--account-type` | S | Account type: S (stock) or F (futures) |
+| `--account-type` | S | Account type: S (stock), F (futures) or H (IntlAccount, US stock) |
 | `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format |
-| `--unit` | common | Unit: common or share |
+| `--unit` | common | Unit: common or share (ignored for the IntlAccount) |
+| `--region` | (TW) | IntlAccount only: region; TW or omitted is read as US |
+| `--currency` | (region's) | IntlAccount only: currency of the amounts (US is USD) |
 
 ### portfolio margin
 
-Get margin info (futures account).
+Get margin info (futures account). IntlAccounts are not supported and fail locally with `UnsupportedAccountOperation`.
+國際帳戶（IntlAccount）不支援，會本地報錯。
 
 ```bash
 shioaji portfolio margin
@@ -921,8 +954,9 @@ shioaji portfolio position-detail --detail-id 0 --account 9A00-1234567
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--detail-id` | (required) | Detail ID from `portfolio positions` |
-| `--account-type` | S | Account type: S (stock) or F (futures) |
+| `--account-type` | S | Account type: S (stock), F (futures) or H (IntlAccount, US stock) |
 | `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format |
+| `--region`, `--currency` | (TW), (region's) | IntlAccount only, same as `positions` |
 
 ### portfolio profit-loss
 
@@ -938,11 +972,12 @@ shioaji portfolio profit-loss --unit share --account 9A00-1234567
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--account-type` | S | Account type: S (stock) or F (futures) |
+| `--account-type` | S | Account type: S (stock), F (futures) or H (IntlAccount, US stock) |
 | `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format |
 | `--begin-date` | today | Begin date (YYYY-MM-DD) |
 | `--end-date` | today | End date (YYYY-MM-DD) |
-| `--unit` | common | Unit: common or share |
+| `--unit` | common | Unit: common or share (ignored for the IntlAccount) |
+| `--region`, `--currency` | (TW), (region's) | IntlAccount only, same as `positions` |
 
 ### portfolio profit-loss-detail
 
@@ -957,10 +992,10 @@ shioaji portfolio profit-loss-detail --detail-id 0 --account-type F
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--detail-id` | (required) | Detail ID from `portfolio profit-loss` |
-| `--account-type` | S | Account type: S (stock) or F (futures) |
+| `--detail-id` | (required) | Detail ID from `portfolio profit-loss`: the integer `id` (S/F), or the IntlAccount row's `detail_id` string unchanged |
+| `--account-type` | S | Account type: S (stock), F (futures) or H (IntlAccount, US stock) |
 | `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format |
-| `--unit` | common | Unit: common or share |
+| `--unit` | common | Unit: common or share (ignored for the IntlAccount) |
 
 ### portfolio profit-loss-summary
 
@@ -982,8 +1017,8 @@ shioaji portfolio profit-loss-summary --account-type F
 
 ### portfolio trading-limits
 
-Get trading limits (stock account).
-查詢股票帳戶交易額度。
+Get trading limits (stock account). IntlAccounts are not supported and fail locally with `UnsupportedAccountOperation`.
+查詢股票帳戶交易額度。國際帳戶（IntlAccount）不支援，會本地報錯。
 
 ```bash
 shioaji portfolio trading-limits
@@ -996,17 +1031,43 @@ shioaji portfolio trading-limits --account 9A00-1234567
 
 ### portfolio settlements
 
-Get the settlement list (date / amount / T offset rows, stock account). Uses `POST /api/v1/portfolio/settlements`; the legacy single T/T+1/T+2 endpoint is intentionally not exposed.
-查詢交割列表（date / amount / T 偏移列，股票帳戶）。使用 `POST /api/v1/portfolio/settlements`；舊版單一 T/T+1/T+2 端點刻意不提供 CLI。
+Get the settlement list (date / amount / T offset rows, stock account). Uses `POST /api/v1/portfolio/settlements`; the legacy single T/T+1/T+2 endpoint is intentionally not exposed. With `--account-type H` it returns `IntlSettlement` rows (`trade_date`, `settlement_date`, `net_amount` with fees, positive = cash in, `currency`), unsettled rows only.
+查詢交割列表（date / amount / T 偏移列，股票帳戶）。使用 `POST /api/v1/portfolio/settlements`；舊版單一 T/T+1/T+2 端點刻意不提供 CLI。`--account-type H` 回傳 `IntlSettlement`（僅未交割，淨額含費用，正數為收）。
 
 ```bash
 shioaji portfolio settlements
 shioaji portfolio settlements --account 9A00-1234567
+shioaji portfolio settlements --account-type H --format json
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--account-type` | `S` | Account type: `S` (stock) or `H` (IntlAccount) |
 | `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format (e.g. 9A00-1234567) |
+
+### portfolio dividends
+
+Get cash dividends by pay date (IntlAccount only; a Taiwan account fails locally with `UnsupportedAccountOperation`). Uses `POST /api/v1/portfolio/list_dividends`.
+查詢現金股利（依發放日，僅限國際帳戶 IntlAccount；台股帳戶本地報錯）。
+
+```bash
+shioaji portfolio dividends
+shioaji portfolio dividends --begin-date 2026-01-01 --end-date 2026-03-31 --format json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--account` | default IntlAccount | Account in BROKER_ID-ACCOUNT_ID format |
+| `--begin-date` | today | Begin pay date (YYYY-MM-DD) |
+| `--end-date` | today | End pay date (YYYY-MM-DD) |
+| `--region` | (none) | Region; missing or TW means US for the IntlAccount |
+| `--currency` | region's currency | Currency of the amounts (US -> USD) |
+
+IntlAccounts on `positions`, `position-detail`, `profit-loss`, `profit-loss-detail`: pass `--account-type H`. `--region` / `--currency` follow the same rules; `--unit` is ignored; `profit-loss-detail --detail-id` takes the opaque `detail_id` string from `profit-loss`. See [ACCOUNTING.md](ACCOUNTING.md#intlaccount-美股帳戶).
+國際帳戶（IntlAccount）在上述指令加 `--account-type H`；`--unit` 會被忽略；`profit-loss-detail --detail-id` 傳 `profit-loss` 回傳的 `detail_id` 字串。
+
+`balance` and `settlements` take `--account-type H` for US stock accounts (`balance --currency`, default USD). `margin` and `trading-limits` reject IntlAccounts locally.
+`balance`、`settlements` 用 `--account-type H` 查美股（`balance --currency` 預設 USD）。`margin`、`trading-limits` 對國際帳戶（IntlAccount）本地報錯。
 
 ---
 

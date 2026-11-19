@@ -306,7 +306,7 @@ All paths are prefixed with `/api/v1/` unless otherwise noted.
 | GET | `/api/v1/data/regulatory_notice` | Yes | Get regulatory notice data |
 | POST | `/api/v1/data/short_stock_sources` | Yes | Get short stock sources |
 | GET | `/api/v1/data/contracts?security_type=<TYPE>` | Yes | List Base contracts for one type; optional pagination |
-| GET | `/api/v1/data/contracts/{code}` | Yes | Look up one Base contract; `security_type` is optional |
+| GET | `/api/v1/data/contracts/{code}` | Yes | Look up one Base contract; `region`, `security_type`, `exchange` are optional |
 | GET | `/api/v1/data/contracts/{code}/info` | Yes | Get flat typed STK/IND/FUT/OPT info |
 | GET | `/api/v1/data/contracts/futures` | Yes | Query futures by root or underlying |
 | GET | `/api/v1/data/contracts/options?root=<ROOT>` | Yes | Query one option-root shard |
@@ -351,6 +351,7 @@ All paths are prefixed with `/api/v1/` unless otherwise noted.
 | POST | `/api/v1/portfolio/profit_loss` | Yes | Get profit and loss |
 | POST | `/api/v1/portfolio/profit_loss_detail` | Yes | Get profit and loss detail |
 | POST | `/api/v1/portfolio/profitloss_sum` | Yes | Get profit and loss summary |
+| POST | `/api/v1/portfolio/list_dividends` | Yes | Get cash dividends (IntlAccounts only) |
 
 ### Stream / 即時串流
 
@@ -382,6 +383,13 @@ All stream data endpoints use Server-Sent Events (SSE). Connect with `Accept: te
 | GET | `/api/v1/stream/data/quote_stk` | Yes | Stock quote data stream |
 | GET | `/api/v1/stream/data/quote_fop` | Yes | Futures/options quote data stream |
 | GET | `/api/v1/stream/data/quote_idx` | Yes | Index quote data stream |
+| GET | `/api/v1/stream/data/us_tick` | Yes | US trade stream with `freshness` (1.8.0b1; production only) — [STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情) |
+| GET | `/api/v1/stream/data/us_bidask` | Yes | US best bid/ask stream with `freshness` (1.8.0b1; production only) |
+| POST | `/api/v1/stream/subscribe/us_halt` | Yes | Subscribe the US halt feed `IS/v1/HALT/US` (no body) |
+| POST | `/api/v1/stream/unsubscribe/us_halt` | Yes | Unsubscribe the US halt feed and clear the halt book |
+| GET | `/api/v1/stream/data/us_halt` | Yes | US halt / resumption event stream |
+| GET | `/api/v1/stream/us_halts` | Yes | Currently halted entries seen since subscribing (JSON, not SSE) |
+| GET | `/api/v1/stream/us_tradable` | Yes | `?exchange=NASDAQ&code=AAPL`: tradable per received halt events (JSON, not SSE) |
 | GET | `/api/v1/stream/data/kbar` | Yes | Realtime KBar stream |
 | GET | `/api/v1/stream/data/calculated_index` | Yes | Calculated index stream |
 | GET | `/api/v1/stream/data/index_contribution` | Yes | Index contribution stream |
@@ -546,8 +554,8 @@ Request:
 }
 ```
 
-- `account_type`: `"S"` (stock) or `"F"` (futures/options).
-- Omit `broker_id`/`account_id` to subscribe the default account of `account_type`.
+- `account_type`: `"S"` (stock), `"F"` (futures/options) or `"H"` (IntlAccount, US stock; 1.8.0b1). Subscribe the IntlAccount to receive US `IntlOrder` / `IntlDeal` reports.
+- Omit `broker_id`/`account_id` to subscribe the default account of `account_type` (for the IntlAccount, the first one).
 
 Response (200):
 
@@ -610,6 +618,8 @@ Get K-bar (OHLCV) data.
   "end": "2024-01-31"
 }
 ```
+
+US contracts (1.8.0b1): the three endpoints above also take US stocks; send `"region": "US"` and the real exchange (e.g. `{"security_type": "STK", "region": "US", "exchange": "NASDAQ", "code": "AAPL"}`). Snapshots may mix Taiwan and US contracts (max 2500) and return rows in request order, each tagged `"region": "TW"` (Snapshot) or `"US"` (UsSnapshot, integer UTC-ns `ts`, `trade_date`). A US ticks reply is `UsTicks` (integer UTC-ns `ts` column, `session`, `updates_last`, `odd_lot`, nullable bid/ask); `date` is the US Eastern trade date and `time_start` / `time_end` (`"RangeTime"`) are UTC times; at most 100000 rows per reply. US K-bars use the same `KBars` JSON with UTC bar-end `datetime`, regular session only. History starts 2026-10-27. Details: [MARKET_DATA.md § US Market Data](MARKET_DATA.md#us-market-data-美股歷史行情與快照).
 
 #### POST `/api/v1/data/daily_quotes`
 
@@ -691,21 +701,58 @@ Omit both `page` and `page_size` to return all Base records for the selected typ
 
 #### GET `/api/v1/data/contracts/{code}`
 
-Look up one Base contract by exchange/master code. Optional query parameters are `region` and `security_type`. When `security_type` is omitted, the server searches types in that region; provide it when the code is ambiguous or the caller requires an exact type.
+Look up one Base contract by `{region, exchange, security_type, code}`. Optional query parameters are `region` (default `TW`), `security_type`, and `exchange`. When `security_type` is omitted, the server searches types in that region; provide it when the code is ambiguous or the caller requires an exact type. With `exchange`, a contract listed on another exchange returns 404; an exchange from another region (e.g. `region=TW&exchange=NASDAQ`) returns 400. US exchanges are `NASDAQ`, `NYSE`, `BATS`, `TXSE` (1.8.0b1; see [CONTRACTS.md § US Stocks](CONTRACTS.md#us-stocks-美股)).
 
 ```bash
 curl "http://localhost:8080/api/v1/data/contracts/IX0001?region=TW&security_type=IND"
+curl "http://localhost:8080/api/v1/data/contracts/AAPL?region=US&exchange=NASDAQ"
 ```
 
 #### GET `/api/v1/data/contracts/{code}/info`
 
-Return flat typed Info for STK, IND, FUT, or OPT. The optional `security_type` has the same narrowing behavior as Base lookup. `security_type` is the OpenAPI discriminator, and Base fields are flattened beside type-specific fields—there is no nested `base` object. WRT requires an underlying and must use the warrants collection below.
+Return flat typed Info for STK, IND, FUT, or OPT. The optional `security_type` and `exchange` have the same narrowing behavior as Base lookup. `dataset` is the OpenAPI discriminator (see below), and Base fields are flattened beside type-specific fields—there is no nested `base` object. WRT requires an underlying and must use the warrants collection below.
 
 ```bash
 curl "http://localhost:8080/api/v1/data/contracts/2330/info?region=TW&security_type=STK"
 ```
 
 For TW stocks, a missing source currency is normalized to `TWD`. Boolean and integer fields are emitted as JSON booleans and numbers, not strings.
+
+Every info record carries `dataset` = `"{region}/{security_type}"` (`TW/STK`, `US/STK`, `TW/IND`, `TW/FUT`, `TW/OPT`, `TW/WRT`). It is the single OpenAPI discriminator of the info `oneOf` (with an explicit mapping), so generated clients should dispatch on `dataset`, not `security_type`: US stocks (`region=US`, 1.8.0b1) also use `"security_type": "STK"` but have a different shape (`UsStockContractInfoRecord` vs `StockContractInfoRecord`). US info has no TW rule fields and emits coded fields as raw codes: strings for `exchange_mic`, `instrument_type`, `classification_source`; integers for `industry_l1`, `industry_l2`, `fund_category`, `dividend_frequency`. `isin` is `null` until licensing is confirmed, and `dividend_frequency` is set only for ETF/ETN (weekly ICE fund master); stocks return `null`. Codes newer than the server's SDK are passed through unchanged, so clients should tolerate unknown values. Code tables: [CONTRACT_FIELDS.md § UsStockInfo](CONTRACT_FIELDS.md#usstockinfo-attributes-美股資訊屬性).
+
+```bash
+curl "http://localhost:8080/api/v1/data/contracts/AAPL/info?region=US&security_type=STK"
+```
+
+```json
+{
+  "dataset": "US/STK",
+  "security_type": "STK",
+  "region": "US",
+  "exchange": "NASDAQ",
+  "code": "AAPL",
+  "exchange_mic": "XNGS",
+  "name": "Apple Inc.",
+  "short_name": "APPLE",
+  "underlying_code": null,
+  "instrument_type": "CS",
+  "isin": null,
+  "currency": "USD",
+  "round_lot": 100,
+  "reference": 227.5,
+  "reference_date": "2026-10-05",
+  "trading_suspended": false,
+  "industry_l1": 55,
+  "industry_l2": 5515,
+  "classification_source": "direct",
+  "fund_category": null,
+  "fund_sponsor": null,
+  "expense_ratio": null,
+  "benchmark_index": null,
+  "dividend_frequency": null,
+  "update_date": "2026-10-06"
+}
+```
 
 #### Type-specific collections
 
@@ -876,6 +923,46 @@ login session. Available since 1.5.12 (#234).
 }
 ```
 
+US stock order (IntlAccount; quantity in shares; `time_in_force`
+DAY/OPG/ATC (IOC/FOK are rejected by the backend with 400), ROD is taken as DAY, ATC is at the close; `price_type`
+LMT/MKT; optional `all_or_none`). The server checks only the price, whole
+shares, the IntlAccount and the Taiwan-only fields the US wire does not carry
+(`order_lot` other than `Common`, `order_cond` other than `Cash`,
+`daytrade_short: true`, `custom_field`; each is a 400); a combination the broker does not
+accept is answered by the backend with 400 `UNSUPPORTED_ORDER_COMBINATION`.
+Give `account_type: "H"` when selecting the account, since an
+Intl account can share its `account_id` with a stock account. The trade's
+`order` adds `all_or_none`, `currency`, `region`, `session` (`Regular`,
+`PreMarket` or `AfterHours`; omitted when unknown), `trade_date`, and
+`status.avg_price` is the average fill price. `/order/update_qty` cancels
+`quantity` more shares; `/order/update_price` returns 400 for US trades
+(cancel and place again). See ORDERS.md, US Stock Orders.
+
+US numbers are exact decimal strings. In a US `Trade`, `order.price`,
+`order.quantity`, `status.order_quantity` / `deal_quantity` /
+`cancel_quantity`, `status.avg_price` and each deal's `price` / `quantity`
+are JSON strings such as `"180.25"` or `"0.5"` (fills may be fractional
+shares). Parse them as decimals, not floats. Taiwan trades keep JSON numbers.
+The OpenAPI schema documents each of these fields as `oneOf` a number
+(Taiwan) or a string (US). `stock_order.price` / `quantity` accept a number
+or a decimal string; a US order takes whole shares only (`"2.0"` counts as
+2, `"0.5"` returns 400) and a price with at most 4 decimals.
+
+```json
+{
+  "contract": { "security_type": "STK", "region": "US", "exchange": "NASDAQ", "code": "AAPL" },
+  "stock_order": {
+    "action": "Buy",
+    "price": 180.25,
+    "quantity": 10,
+    "price_type": "LMT",
+    "time_in_force": "DAY",
+    "all_or_none": false,
+    "account": { "account_type": "H", "broker_id": "9A95", "account_id": "1234567" }
+  }
+}
+```
+
 #### POST `/api/v1/order/cancel_order`
 
 ```json
@@ -918,6 +1005,12 @@ running server and are filtered to the resolved `broker_id` and `account_id`.
 They are a local snapshot, not an authoritative reconciliation: use
 `refresh: true` when active reports may have been missed or final status must be
 confirmed.
+
+US trades (1.8.0b1) live under the IntlAccount: send `{"account_type": "H"}`
+(first IntlAccount) or the IntlAccount's `broker_id` / `account_id`. A refreshed US
+trade may carry one cumulative deal (`seq` `"1"`, `ts` 0) for everything filled
+so far instead of one deal per fill; see ORDERS.md, US Order Reports. The same `account_type: "H"` works
+for `/order/trade_cache_health`.
 
 #### POST `/api/v1/order/place_comboorder`
 
@@ -1019,11 +1112,12 @@ All portfolio endpoints accept `AccountRequest` (or extended request) as JSON bo
 
 #### POST `/api/v1/portfolio/account_balance`
 
-Get account balance. Body: `AccountRequest`.
+Get account balance. Body: `AccountRequest` plus optional `currency` (IntlAccounts only, default `USD`; ignored for Taiwan accounts). Taiwan accounts return `AccountBalance`; IntlAccounts (`account_type: "H"`) return `IntlAccountBalance` (`account_type`, `currency`, `balance`, `buying_power`, decimals as strings). `balance` is the account cash balance, not affected by orders; `buying_power` is the cash available to place orders (deducted when a buy order is placed, restored when cancelled, excludes margin financing).
 
 #### POST `/api/v1/portfolio/margin`
 
 Get margin info. Body: `AccountRequest` (resolves to futures account).
+IntlAccounts are not supported: returns 400 with `UnsupportedAccountOperation` locally, no upstream request. 國際帳戶（IntlAccount）不支援，會本地報錯。
 
 #### POST `/api/v1/portfolio/position_unit`
 
@@ -1051,15 +1145,17 @@ Get position detail.
 
 #### POST `/api/v1/portfolio/settlements`
 
-Get settlement list. Body: `AccountRequest`.
+Get settlement list. Body: `AccountRequest`. Taiwan accounts return `Settlement[]` (`date`, `amount`, `T`). IntlAccounts (`account_type: "H"`) return `IntlSettlement[]` (`account_type`, `trade_date`, `settlement_date`, `net_amount` as a decimal string, `currency`): unsettled rows only, one per trade date and side, fees included; `net_amount` > 0 is cash in.
 
 #### POST `/api/v1/portfolio/settlement`
 
 Get settlements (legacy format). Body: `AccountRequest`.
+IntlAccounts are not supported: returns 400 with `UnsupportedAccountOperation` locally, no upstream request; use `/api/v1/portfolio/settlements`. 國際帳戶（IntlAccount）不支援，會本地報錯。
 
 #### POST `/api/v1/portfolio/trading_limits`
 
 Get trading limits. Body: `AccountRequest`.
+IntlAccounts are not supported: returns 400 with `UnsupportedAccountOperation` locally, no upstream request. 國際帳戶（IntlAccount）不支援，會本地報錯。
 
 #### POST `/api/v1/portfolio/profit_loss`
 
@@ -1086,6 +1182,8 @@ Get profit and loss detail.
 }
 ```
 
+For an IntlAccount, `detail_id` is the opaque string from the profit_loss row (an integer is rejected with 400); an invalid id returns 400 `INVALID_DETAIL_ID` from the backend.
+
 #### POST `/api/v1/portfolio/profitloss_sum`
 
 Get profit and loss summary.
@@ -1097,6 +1195,21 @@ Get profit and loss summary.
   "end_date": "2024-01-31"
 }
 ```
+
+#### POST `/api/v1/portfolio/list_dividends`
+
+Get cash dividends by pay date. IntlAccounts only (`account_type` defaults to `H`; a Taiwan account returns 400 `UnsupportedAccountOperation`). Returns `IntlDividend[]` (`withholding_tax`: source-country withholding tax on the dividend; US stocks: US withholding, ADR: the issuer country's).
+
+```json
+{
+  "begin_date": "2026-01-01",
+  "end_date": "2026-03-31",
+  "region": "US",
+  "currency": "USD"
+}
+```
+
+IntlAccounts (`account_type: "H"`) on `position_unit`, `position_detail` and `profit_loss` accept optional `region` (missing or `TW` means `US`) and `currency` (defaults to the region's); `unit` is ignored. Rows are `IntlPosition` / `IntlPositionDetail` / `IntlProfitLoss` / `IntlProfitLossDetail` with `Decimal` values as strings. See [ACCOUNTING.md](ACCOUNTING.md#intlaccount-美股帳戶).
 
 ### Stream Endpoints (SSE)
 

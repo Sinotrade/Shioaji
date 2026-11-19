@@ -2,17 +2,19 @@
 name: shioaji
 description: >-
   Shioaji (SJ) is SinoPac/永豐金證券's API for trading Taiwan markets
-  (台股/期權 on TWSE, TPEX, TAIFEX). Use for any Shioaji task, or for
-  Taiwan trading automation where Shioaji may apply: Python sync/async
-  code, the `shioaji` CLI, the local HTTP API server with SSE streaming,
-  or HTTP clients in JS/TS, Go, C/C++, C#, Rust, Java/Kotlin. Covers
-  login, API keys and CA, contracts, placing and managing orders
-  (下單/改單/刪單), order reports, real-time quotes and K-bars (即時行情),
-  historical data, market signals, accounts and positions, watchlists,
-  reserve orders, migration, and troubleshooting errors. Also use when
-  someone wants to start using Shioaji or get SinoPac API access for the
-  first time. US/HK markets are not supported yet. Not for other brokers
-  or generic indicators without Shioaji data.
+  (台股/期權 on TWSE, TPEX, TAIFEX) and, since the 1.8.0b1 pre-release,
+  US stocks (美股複委託 on NASDAQ, NYSE, BATS, TXSE). Use for any Shioaji
+  task, or for Taiwan or US stock trading automation where Shioaji may
+  apply: Python sync/async code, the `shioaji` CLI, the local HTTP API
+  server with SSE streaming, or HTTP clients in JS/TS, Go, C/C++, C#,
+  Rust, Java/Kotlin. Covers login, API keys and CA, contracts, placing
+  and managing orders (下單/改單/刪單), order reports, real-time quotes
+  and K-bars (即時行情), historical data, market signals, accounts and
+  positions, dividends, watchlists, reserve orders, migration, and
+  troubleshooting errors. Also use when someone wants to start using
+  Shioaji or get SinoPac API access for the first time. HK and other
+  markets are not supported. Not for other brokers or generic indicators
+  without Shioaji data.
 ---
 
 # Shioaji Trading API
@@ -20,6 +22,9 @@ description: >-
 Shioaji is SinoPac's **cross-language, cross-platform** trading API for Taiwan financial markets (TWSE/TPEX/TAIFEX). It includes Python bindings, a CLI, and an HTTP API server that lets **any programming language** trade Taiwan markets.
 
 Shioaji 是永豐金證券的**跨語言、跨平台**交易 API，提供 Python 綁定、CLI 與 HTTP API 伺服器，讓**任何程式語言**都能透過 HTTP API 交易台灣市場。
+
+> **US stocks 美股 (1.8.0b1 pre-release 預發行版).** US stock contracts, orders, active reports, accounting, realtime quotes, snapshots and historical ticks / K-bars are supported from 1.8.0b1, a pre-release: install it with `pip install --pre shioaji` (or `uv add --prerelease allow shioaji`) or pin `shioaji==1.8.0b1`; a plain `pip install shioaji` keeps the stable version without US support. US trading needs an Intl (`H`, 複委託) account. HK and other markets are not supported. Start from [US stock references](#us-stocks--美股).
+> 1.8.0b1 預發行版起支援美股（商品檔、下單、回報、帳務、即時行情、快照與歷史逐筆／K 棒），用 `pip install --pre shioaji` 或指定 `shioaji==1.8.0b1` 安裝；一般 `pip install shioaji` 仍是不含美股的穩定版。美股要用複委託（H）帳戶；港股等其他市場不支援。
 
 Three access layers / 三種存取層：
 
@@ -82,19 +87,38 @@ Routing rule: choose the functional reference first, then add the access-method 
 | Install this Shioaji plugin/skill into Claude, Codex, Cursor, or another agent environment | [AGENTS.md](references/AGENTS.md) |
 | Use or troubleshoot `agent_harness`, approval capabilities, protected HTTP mutations, `X-Shioaji-Agent-Capability`, or mutation `403` responses | [AGENT_HARNESS.md](references/AGENT_HARNESS.md) + the matching order/reserve reference |
 | Contract V2 lookup, typed info, lazy cache behavior, update events, or 1.5 `api.Contracts` compatibility | [CONTRACTS.md](references/CONTRACTS.md) (+ [CONTRACT_FIELDS.md](references/CONTRACT_FIELDS.md) for full Info field lists) |
-| Orders, callbacks/HTTP SSE, event IDs, historical empty IDs, deduplication and sequence gaps / 股票／期貨／選擇權下單、改單、刪單；主動回報、事件 ID、歷史空 ID、去重與跳號 | [ORDERS.md](references/ORDERS.md) |
+| Orders, callbacks/HTTP SSE, event IDs, historical empty IDs, deduplication and sequence gaps / 股票／期貨／選擇權／美股下單、改單、刪單；主動回報、事件 ID、歷史空 ID、去重與跳號 | [ORDERS.md](references/ORDERS.md) |
 | Build or enumerate combo contracts with `api.contracts.combo_futures`; validate managed `BaseContract` vs legacy directed `ComboBase` legs; subscribe/query futures combo market data; place, price, cancel, or troubleshoot combo orders; derive canonical leg order/actions and `combo_type`; use `update_combostatus` / `list_combotrades` | [COMBO_ORDERS.md](references/COMBO_ORDERS.md) |
 | Reserve shares for disposition/attention stocks | [RESERVE.md](references/RESERVE.md) |
 | Subscribe real-time quotes, tick/bidask/quote/index callbacks, realtime KBar 即時K棒, SSE streams | [STREAMING.md](references/STREAMING.md) |
 | Query authoritative index components or subscribe enriched index data 即時加值資料: calculated index 自算指數, index-components rankings/group projections 成分股排行與產業群組投影, legacy index/industry contribution | [STREAMING_ENRICHED.md](references/STREAMING_ENRICHED.md) |
 | Subscribe market signals 市場訊號: price-limit alerts 漲跌停訊號, rapid price moves 急拉急殺, volume burst 爆量大單, simtrade/suspend status filter 試撮/暫停 | [STREAMING_SIGNALS.md](references/STREAMING_SIGNALS.md) |
 | **Historical** ticks, K-bars (date-range query 歷史K棒區間查詢), snapshots, ranking scanners 盤後排行 `api.scanners`, credit enquiry | [MARKET_DATA.md](references/MARKET_DATA.md) |
-| Account balance, margin, positions, P&L, settlements, limits | [ACCOUNTING.md](references/ACCOUNTING.md) |
+| Account balance, margin, positions, P&L, settlements, limits, US (IntlAccount) positions/P&L/dividends | [ACCOUNTING.md](references/ACCOUNTING.md) |
 | Manage watchlists (CRUD, add/remove contracts) | [WATCHLIST.md](references/WATCHLIST.md) |
 | Non-blocking mode, quote binding, stop orders, advanced patterns | [ADVANCED.md](references/ADVANCED.md) |
 | Interpret an error code / error message the user received, order rejection reasons | [ERROR_CODES.md](references/ERROR_CODES.md) (+ [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md)) |
 | Errors, connection issues, troubleshooting | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md) |
 | Inspect Server dashboard request rates, per-endpoint latency/errors, desired subscriptions versus physical topics, or configure Parquet monitoring history | [OBSERVABILITY.md](references/OBSERVABILITY.md) |
+
+### US Stocks / 美股
+
+US stocks (1.8.0b1 pre-release) reuse the same functions; each functional reference has a US section. Load the one for the task:
+美股（1.8.0b1 預發行版）沿用同一組函式，各功能文件都有美股一節，依任務載入：
+
+| US task 美股任務 | Load |
+|---|---|
+| Look up US contracts, `UsStockInfo` fields, exchanges, code tables 美股商品檔 | [CONTRACTS.md § US Stocks](references/CONTRACTS.md#us-stocks-美股) + [CONTRACT_FIELDS.md § UsStockInfo](references/CONTRACT_FIELDS.md#usstockinfo-attributes-美股資訊屬性) |
+| Place / reduce / cancel US orders, IntlAccount, price and time-in-force rules, local errors, reservation orders 美股下單、減量、刪單 | [ORDERS.md § US Stock Orders](references/ORDERS.md#us-stock-orders-美股下單) |
+| US order reports `IntlOrder` / `IntlDeal`, `event_id` gaps, reconciliation with `update_status` 美股回報與對帳 | [ORDERS.md § US Order Reports](references/ORDERS.md#us-order-reports-美股回報) |
+| US positions, tax lots, realized P&L, dividends; what IntlAccounts cannot query yet 美股庫存、損益、股利 | [ACCOUNTING.md § IntlAccount](references/ACCOUNTING.md#intlaccount-美股帳戶) |
+| US tick / bid-ask quotes, halts, quote freshness (production only) 美股即時報價、暫停、新鮮度 | [STREAMING.md § US Quotes](references/STREAMING.md#us-quotes-美股行情) |
+| US snapshots (`UsSnapshot`, mixed with Taiwan), historical ticks (`UsTicks`, UTC times, 100000-row cap) and K-bars 美股快照、歷史逐筆與 K 棒 | [MARKET_DATA.md § US Market Data](references/MARKET_DATA.md#us-market-data-美股歷史行情與快照) |
+| US stocks in watchlists 美股自選股 | [WATCHLIST.md § US Stocks](references/WATCHLIST.md#us-stocks-美股自選股) |
+| US over CLI / HTTP | [CLI.md](references/CLI.md) / [HTTP_API.md](references/HTTP_API.md) (search `US` / `Intl`) |
+
+US quotes exist only on the production environment; simulation has no US quote feed. HK and US options/futures are not supported.
+美股即時報價只在正式環境，模擬環境沒有；港股與美股期權、期貨不支援。
 
 **Common confusions 容易混淆（選檔前先看）:**
 

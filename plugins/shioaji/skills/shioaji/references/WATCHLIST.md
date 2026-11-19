@@ -194,6 +194,34 @@ shioaji watchlist create --name "Empty List"
 shioaji watchlist create --name "Futures" --codes TXFR1 --security-type FUT
 ```
 
+### US Stocks 美股自選股
+
+Since 1.8.0b1 a watchlist contract carries `region` next to `exchange`. A US
+stock must be sent with `region="US"` and its real exchange (`NASDAQ`, `NYSE`,
+`BATS` or `TXSE`), which is what a US contract from Contract V2 already holds.
+1.8.0b1 起自選股合約帶 `region`；美股要帶 `region="US"` 與實際交易所（NASDAQ／NYSE／BATS／TXSE），用 Contract V2 查到的美股商品即可。
+
+```python
+aapl = api.contracts.get("AAPL", region="US")    # BaseContract(region="US", exchange="NASDAQ")
+if aapl is None:
+    raise LookupError("US contract not found")
+wl = api.create_watchlist(name="US", contracts=[aapl])
+
+# Building one by hand: region defaults to "TW", so pass region="US".
+brk = sj.BaseContract("STK", "NYSE", "BRK.A", region="US")
+api.watchlist_add_contract(wl.id, [brk])
+```
+
+- `sj.BaseContract(...)` without `region` is `TW` even with a US exchange, and
+  is saved that way: always pass `region="US"` (or use the contract from
+  `api.contracts.get(..., region="US")`).
+- HTTP bodies need `"region": "US"` too, e.g.
+  `{"security_type": "STK", "region": "US", "exchange": "NASDAQ", "code": "AAPL"}`;
+  a contract without `region` is read as `TW`.
+- The CLI `--codes` lookup has no `--region`, so US stocks cannot be added
+  from the CLI; use Python or HTTP.
+  CLI 的 `--codes` 沒有 `--region`，無法加入美股，請用 Python 或 HTTP。
+
 ---
 
 ## Delete Watchlist 刪除清單

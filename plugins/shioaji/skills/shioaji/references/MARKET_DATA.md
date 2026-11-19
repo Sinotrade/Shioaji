@@ -3,6 +3,9 @@
 This document covers historical data, snapshots, daily quotes, credit enquiries, short stock sources, scanners, and disposition/attention stocks in Shioaji.
 本文件說明 Shioaji 中的歷史資料查詢、快照、每日行情、資券餘額查詢、券源查詢、掃描器排行及處置/注意股。
 
+US stocks (`region="US"`, 1.8.0b1) use the same `api.snapshots()`, `api.ticks()` and `api.kbars()`; their return types, UTC timestamps and limits are in [US Market Data](#us-market-data-美股歷史行情與快照). Everything else in this file is Taiwan only.
+美股（1.8.0b1）沿用同一組 `api.snapshots()`／`api.ticks()`／`api.kbars()`，回傳型別、UTC 時間與限制見 [US Market Data](#us-market-data-美股歷史行情與快照)；本文件其餘功能僅限台股。
+
 Use [MIGRATION.md](MIGRATION.md) when old code imports enums from submodules. This file owns `Snapshot`, `Ticks`, `KBars`, scanner, and regulatory response handling. Python examples below use Python wrapper objects; HTTP/CLI clients must use the HTTP/CLI response notes in this file and fetch `/openapi.json` only when exact installed-server fields are required.
 
 ---
@@ -24,6 +27,13 @@ Use this table before writing parsers or deciding why a market-data response is 
 | Regulatory notice | `NoticeResp`; Python may expose `date` / `datetime` values | `NoticeResp` JSON | `shioaji data regulatory --type notice --format json` follows HTTP JSON; non-JSON formats transpose to rows | Use for attention stocks; do not assume Python date objects in HTTP JSON. |
 
 ## Market Data Time Handling 行情資料時間處理
+
+> **US contracts are the exception.** US `UsSnapshot.ts`, `UsTicks.ts` and US
+> `api.kbars().ts` are true UTC epoch nanoseconds; decode them as UTC
+> (`pd.to_datetime(ts, utc=True)`) and convert to `America/New_York` if needed.
+> See [US Market Data](#us-market-data-美股歷史行情與快照). The rules below
+> are for Taiwan contracts.
+> **美股例外**：美股的 `ts` 是真正的 UTC epoch ns，要當 UTC 解；下面規則只適用台股。
 
 For market-data fields in this file, do not treat Shioaji Python `ts` values as
 UTC and do not add 8 hours. Historical `api.ticks().ts` and `api.kbars().ts`
@@ -79,8 +89,8 @@ trade, deal, or account timestamp behavior from it.
 
 ## Snapshots 即時快照
 
-Get current snapshot for multiple contracts (max 500 per request).
-取得多個合約的當前快照（每次最多 500 個）。
+Get current snapshot for multiple contracts (max 2500 per request, Taiwan and US contracts combined). US contracts return `UsSnapshot`; see [US Snapshots](#us-snapshots-美股快照).
+取得多個合約的當前快照（每次最多 2500 個，台美合計）。美股合約回 `UsSnapshot`，見 [US Snapshots](#us-snapshots-美股快照)。
 
 ### Python
 
@@ -686,6 +696,207 @@ session calendar and fill no-trade minutes explicitly.
 
 ---
 
+## US Market Data 美股歷史行情與快照
+
+US stocks (`region="US"`, 1.8.0b1 pre-release) use the same `api.snapshots()`,
+`api.ticks()` and `api.kbars()`. The SDK picks the US path from the contract
+(`region="US"` or a US exchange); Taiwan behaviour of all three is unchanged.
+美股（1.8.0b1 預發行版）沿用同一組函式，依合約的 region／交易所走美股路徑；
+台股行為不變。
+
+| Rule | US behaviour 美股行為 |
+|---|---|
+| History 可查區間 | From 2026-10-27. |
+| Environment 環境 | The IDC test site has no US data and returns empty results. 測試站 IDC 沒有美股資料，回空。 |
+| Time 時間 | `ts` is true **UTC** epoch ns (not Taiwan wall clock). Decode as UTC; do not add or subtract hours by hand. ts 是真正的 UTC。 |
+| Numbers 數值 | Market-data values are `float` (not `Decimal`, unlike US orders and accounting). 行情用 float。 |
+| Session 時段 | `api.ticks()` and `api.kbars()` currently return the regular session only. 目前只有正規盤。 |
+
+```python
+import shioaji as sj
+
+aapl = api.contracts.get("AAPL", region="US")
+tsmc = api.contracts.get("2330")
+if aapl is None or tsmc is None:
+    raise LookupError("contract not found")
+```
+
+### US Snapshots 美股快照
+
+`api.snapshots()` accepts Taiwan and US contracts mixed (max 2500 in total) and
+returns rows in input order: `Snapshot` (`region == "TW"`) for Taiwan,
+`UsSnapshot` (`region == "US"`) for US. Dispatch on `region` or `isinstance`.
+台美可混在同一次呼叫（合計最多 2500 檔），依輸入順序回傳；用 `region` 或
+`isinstance` 分辨。
+
+```python
+for snap in api.snapshots([tsmc, aapl]):
+    if isinstance(snap, sj.UsSnapshot):          # snap.region == "US"
+        print(snap.code, snap.datetime, snap.trade_date, snap.session,
+              snap.close, snap.ext_close)
+    else:                                        # Snapshot, snap.region == "TW"
+        print(snap.code, snap.close)
+```
+
+```python
+us.ts                # int: UTC epoch ns
+us.datetime          # datetime: same instant, tz-aware UTC
+us.trade_date        # date: US Eastern trade date 美東交易日
+us.code, us.exchange # str
+us.open, us.high, us.low, us.close  # float; pre-market: open/high/low 0, close = previous close
+us.reference         # float: reference price 參考價
+us.tick_type         # TickType
+us.change_price      # float
+us.change_rate       # float
+us.change_type       # ChangeType
+us.average_price     # float
+us.volume, us.total_volume          # int
+us.amount, us.total_amount          # float
+us.yesterday_volume  # int | None
+us.volume_ratio      # float | None
+us.buy_price, us.sell_price         # float | None
+us.buy_volume, us.sell_volume       # int | None
+us.ext_close, us.ext_high, us.ext_low  # float | None: extended hours; None without an extended-hours trade
+us.session           # UsTradingSession: PreMarket / Regular / AfterHours / Unknown
+us.tradable_status   # int
+us.last_price        # float
+```
+
+Before the regular session `open`, `high` and `low` are `0` and `close` is the
+previous close. 盤前 open/high/low 為 0，close 為前一日收盤價。
+
+### US K-bars 美股 K 棒
+
+`api.kbars(contract, start, end)` returns the same `KBars` type. For US:
+美股回傳同樣的 `KBars`：
+
+- `ts` is UTC epoch ns and marks the **bar end** (1-minute bars).
+  ts 是 UTC，代表 K 棒結束時間。
+- Regular session only: bars from US Eastern 09:31 to 16:00 (13:00 on early-close days).
+  只含正規盤（美東 09:31 到 16:00，提早收盤日到 13:00）。
+- `Amount` is an estimate. Amount 為估算值。
+- One request covers at most 30 days, same as Taiwan. 單次最多 30 天。
+- There are no US daily (1D) bars yet. 美股日 K 尚未提供。
+
+```python
+import pandas as pd
+
+kbars = api.kbars(aapl, start="2026-11-17", end="2026-11-18")
+df = pd.DataFrame({**kbars})
+df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert("America/New_York")
+```
+
+### US Ticks 美股逐筆
+
+`api.ticks()` takes the same parameters (`date`, `query_type`, `time_start`,
+`time_end`, `last_cnt`) and returns `UsTicks` for a US contract:
+美股合約回 `UsTicks`，參數相同但語意如下：
+
+- `date` is the **US Eastern trade date**. date 是美東交易日。
+- `time_start` / `time_end` (RangeTime) are **UTC** times and may cross UTC
+  midnight: `21:00` to `01:00` means US Eastern 16:00 to 20:00 in winter (EST, UTC-5).
+  If start is later than end after conversion, the result is empty.
+  RangeTime 的起訖是 UTC 時刻，可跨 UTC 午夜；換算後起點晚於終點回空。
+- Only the regular session is returned (US Eastern 09:30 to the close),
+  including closing-auction trades that arrive after the close with
+  `session == 3`. Do not filter on `session == 2`.
+  目前只回正規盤，含收盤後才到、`session == 3` 的收盤集合競價成交；不要只篩 `session == 2`。
+- Rows with the same `ts` are separate trades in trade order; do not dedupe on `ts`.
+  同一 ts 多筆是不同成交，順序即成交順序。
+- A reply holds at most **100000** rows with no error or flag. If
+  `len(ticks.ts) == 100000`, continue with RangeTime from the last `ts` as a
+  UTC time. 每次最多 10 萬筆，不報錯也沒有旗標；剛好 10 萬筆就從最後一筆 ts 的 UTC 時刻續查。
+
+```python
+# 2026-11-18 US Eastern 09:30 to 10:00 = 14:30 to 15:00 UTC (EST, UTC-5)
+ticks = api.ticks(
+    contract=aapl,
+    date="2026-11-18",
+    query_type=sj.TicksQueryType.RangeTime,
+    time_start="14:30:00",
+    time_end="15:00:00",
+)
+ticks.datetime[0]   # tz-aware UTC datetime
+```
+
+```python
+ticks.ts            # List[int]: UTC epoch ns
+ticks.datetime      # List[datetime]: tz-aware UTC
+ticks.close         # List[float]
+ticks.volume        # List[int]
+ticks.bid_price     # List[float | None]
+ticks.bid_volume    # List[int | None]
+ticks.ask_price     # List[float | None]
+ticks.ask_volume    # List[int | None]
+ticks.tick_type     # List[int]
+ticks.session       # List[int]: 1 pre-market, 2 regular, 3 after-hours
+ticks.updates_last  # List[bool]
+ticks.odd_lot       # List[bool]: odd-lot trade 零股成交
+```
+
+Fetching a full day past the 100000-row cap. The continuation starts at a
+whole UTC second, so drop the rows of that second from the first part and let
+the next reply return them, instead of deduplicating on `ts`:
+超過 10 萬筆時分段續查；續查從整秒開始，先把前一段該秒的列去掉，不要用 ts 去重：
+
+```python
+import datetime as dt
+
+LIMIT = 100_000
+date = "2026-11-18"
+parts = []
+ticks = api.ticks(contract=aapl, date=date)              # AllDay
+while len(ticks.ts) == LIMIT:
+    last = dt.datetime.fromtimestamp(ticks.ts[-1] // 1_000_000_000, tz=dt.timezone.utc)
+    cut = int(last.timestamp()) * 1_000_000_000          # start of that UTC second
+    parts.append({k: [v for v, ts in zip(col, ticks.ts) if ts < cut]
+                  for k, col in {**ticks}.items()})
+    ticks = api.ticks(
+        contract=aapl,
+        date=date,
+        query_type=sj.TicksQueryType.RangeTime,
+        time_start=last.strftime("%H:%M:%S"),
+        time_end="23:59:59",                             # UTC; after the closing auction
+    )
+parts.append({**ticks})
+```
+
+### US HTTP 美股 HTTP
+
+HTTP uses the same endpoints. Send `"region": "US"` and the real exchange in
+each contract object. HTTP 用同樣的 endpoint，合約要帶 `"region": "US"` 與實際交易所。
+
+```bash
+curl -X POST http://localhost:8080/api/v1/data/snapshots \
+  -H "Content-Type: application/json" \
+  -d '{"contracts": [
+        {"security_type": "STK", "exchange": "TSE", "code": "2330"},
+        {"security_type": "STK", "region": "US", "exchange": "NASDAQ", "code": "AAPL"}
+      ]}'
+
+curl -X POST http://localhost:8080/api/v1/data/ticks \
+  -H "Content-Type: application/json" \
+  -d '{"contract": {"security_type": "STK", "region": "US", "exchange": "NASDAQ", "code": "AAPL"},
+       "date": "2026-11-18", "query_type": "RangeTime",
+       "time_start": "14:30:00", "time_end": "15:00:00"}'
+```
+
+- Snapshots: each row carries `region` (`"TW"` / `"US"`), the OpenAPI
+  discriminator. US rows have integer `ts` (UTC ns), `trade_date`
+  (`YYYY-MM-DD`), `session` as a name (`"PreMarket"`, `"Regular"`,
+  `"AfterHours"`, `"Unknown"`) and `null` for missing optional fields.
+  Taiwan rows keep `datetime`.
+- Ticks: a US reply is `UsTicks` JSON: an integer `ts` column (UTC ns),
+  `session` as names, and `null` in the bid/ask columns.
+- K-bars: same `KBars` JSON; for US the `datetime` strings have no offset and
+  are UTC (bar end).
+
+The CLI `data snapshots` / `ticks` / `kbars` commands look codes up in Taiwan
+only, so use Python or HTTP for US data. CLI 的 data 指令只查台股代碼，美股請用
+Python 或 HTTP。
+
+---
+
 ## Daily Quotes 每日行情
 
 Get daily market quotes for all stocks.
@@ -767,6 +978,7 @@ kbars = api.kbars(
 | Index 指數 | 2020-03-02 |
 | Stock 股票 | 2020-03-02 |
 | Futures 期貨 | 2020-03-22 |
+| US stock 美股 | 2026-10-27 |
 
 ---
 
