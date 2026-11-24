@@ -383,7 +383,7 @@ All stream data endpoints use Server-Sent Events (SSE). Connect with `Accept: te
 | GET | `/api/v1/stream/data/quote_stk` | Yes | Stock quote data stream |
 | GET | `/api/v1/stream/data/quote_fop` | Yes | Futures/options quote data stream |
 | GET | `/api/v1/stream/data/quote_idx` | Yes | Index quote data stream |
-| GET | `/api/v1/stream/data/us_tick` | Yes | US trade stream with `freshness` (1.8.0b1; production only) — [STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情) |
+| GET | `/api/v1/stream/data/us_tick` | Yes | US trade stream with `freshness` (1.8.0b1; production only); carries both `Tick` (trimmed) and `TickFull` subscriptions — [STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情) |
 | GET | `/api/v1/stream/data/us_bidask` | Yes | US best bid/ask stream with `freshness` (1.8.0b1; production only) |
 | POST | `/api/v1/stream/subscribe/us_halt` | Yes | Subscribe the US halt feed `IS/v1/HALT/US` (no body) |
 | POST | `/api/v1/stream/unsubscribe/us_halt` | Yes | Unsubscribe the US halt feed and clear the halt book |
@@ -619,7 +619,7 @@ Get K-bar (OHLCV) data.
 }
 ```
 
-US contracts (1.8.0b1): the three endpoints above also take US stocks; send `"region": "US"` and the real exchange (e.g. `{"security_type": "STK", "region": "US", "exchange": "NASDAQ", "code": "AAPL"}`). Snapshots may mix Taiwan and US contracts (max 2500) and return rows in request order, each tagged `"region": "TW"` (Snapshot) or `"US"` (UsSnapshot, integer UTC-ns `ts`, `trade_date`). A US ticks reply is `UsTicks` (integer UTC-ns `ts` column, `session`, `updates_last`, `odd_lot`, nullable bid/ask); `date` is the US Eastern trade date and `time_start` / `time_end` (`"RangeTime"`) are UTC times; at most 100000 rows per reply. US K-bars use the same `KBars` JSON with UTC bar-end `datetime`, regular session only. History starts 2026-10-27. Details: [MARKET_DATA.md § US Market Data](MARKET_DATA.md#us-market-data-美股歷史行情與快照).
+US contracts (1.8.0b1): the three endpoints above also take US stocks; send `"region": "US"` and the real exchange (e.g. `{"security_type": "STK", "region": "US", "exchange": "NASDAQ", "code": "AAPL"}`). Snapshots may mix Taiwan and US contracts (max 2500) and return rows in request order, each tagged `"region": "TW"` (Snapshot) or `"US"` (UsSnapshot, integer UTC-ns `ts`, `trade_date`). A US ticks reply is `UsTicks` (integer UTC-ns `ts` column, `session`, `updates_last`, `odd_lot`, nullable bid/ask); `date` is the US Eastern trade date (rolls over at 20:00 ET from around 2026-12-06) and `time_start` / `time_end` (`"RangeTime"`) are UTC times; at most 100000 rows per reply. US K-bars use the same `KBars` JSON with UTC bar-end `datetime`, regular session only. History starts 2026-10-27. Details: [MARKET_DATA.md § US Market Data](MARKET_DATA.md#us-market-data-美股歷史行情與快照).
 
 #### POST `/api/v1/data/daily_quotes`
 
@@ -1139,9 +1139,12 @@ Get position detail.
 ```json
 {
   "account_type": "S",
-  "detail_id": 12345
+  "detail_id": 12345,
+  "unit": "Common"
 }
 ```
+
+`unit`: `"Common"` (default) or `"Share"` (odd lots in shares 零股以股數); Taiwan stock only, ignored for futures and IntlAccounts.
 
 #### POST `/api/v1/portfolio/settlements`
 
@@ -1240,7 +1243,17 @@ Subscription request:
 }
 ```
 
-`quote_type`: `"Tick"`, `"BidAsk"`, `"Quote"`.
+`quote_type`: `"Tick"`, `"BidAsk"`, `"Quote"`, and for US stocks only `"TickFull"`.
+
+US stocks (`"exchange"`: `NASDAQ`/`NYSE`/`BATS`/`TXSE`): `"Tick"` subscribes the
+trimmed trade stream (`IS/v1/TICL`, only trades that update last price,
+high/low and inner/outer volume; odd lots and pre/post-market are left out and
+`serial_num` skips, while `total_volume` stays cumulative), `"TickFull"` the
+full stream (`IS/v1/TIC`, every trade incl. odd lots; `serial_num` is shared with BidAsk).
+Both arrive as `us_tick` events; subscribing both for one contract delivers
+the shared trades twice. `"TickFull"` on a Taiwan contract is rejected.
+Details: [STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情).
+美股 `"Tick"` 是精簡成交（只含更新最新價的成交，零股與盤前盤後不送、序號會跳號，累計量仍完整），`"TickFull"` 是全部成交（含零股；`serial_num` 與 BidAsk 共用，只訂 `TickFull` 也會跳號）；兩者都以 `us_tick` 事件送出，同一檔兩個都訂會重複收到。台股不能用 `"TickFull"`。
 
 For HTTP subscriptions to futures continuous-month aliases such as `TXFR1`/`TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into the subscribe body. Regular futures codes do not need this. If `target_code` is missing for `TXFR1`/`TXFR2`, the server can return `200` while the SSE stream only emits heartbeats.
 

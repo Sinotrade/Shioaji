@@ -446,7 +446,7 @@ trade = api.place_order(contract, order)
 ## US Stock Orders 美股下單
 
 Since 1.8.0b1 (pre-release: `pip install --pre shioaji` or
-`shioaji==1.8.0b1`). US stock orders use the same `StockOrder`, `place_order`,
+`shioaji==1.8.0b2`). US stock orders use the same `StockOrder`, `place_order`,
 `update_order`, `cancel_order`, `update_status` and `list_trades` as Taiwan
 orders. They need an IntlAccount (`account_type == sj.AccountType.Intl`, 複委託帳戶) and a US
 contract. HK and other markets cannot be ordered.

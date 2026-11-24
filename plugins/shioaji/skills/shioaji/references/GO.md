@@ -216,7 +216,7 @@ type SubscriptionRequest struct {
 	Exchange     string `json:"exchange"`      // TSE, OTC, TAIFEX
 	Code         string `json:"code"`
 	TargetCode   string `json:"target_code,omitempty"`
-	QuoteType    string `json:"quote_type"`    // Tick, BidAsk, Quote
+	QuoteType    string `json:"quote_type"`    // Tick, BidAsk, Quote; TickFull (US only)
 	IntradayOdd  bool   `json:"intraday_odd,omitempty"`
 }
 

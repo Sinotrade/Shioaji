@@ -711,6 +711,7 @@ US stocks (`region="US"`, 1.8.0b1 pre-release) use the same `api.snapshots()`,
 | Time 時間 | `ts` is true **UTC** epoch ns (not Taiwan wall clock). Decode as UTC; do not add or subtract hours by hand. ts 是真正的 UTC。 |
 | Numbers 數值 | Market-data values are `float` (not `Decimal`, unlike US orders and accounting). 行情用 float。 |
 | Session 時段 | `api.ticks()` and `api.kbars()` currently return the regular session only. 目前只有正規盤。 |
+| Trade date 交易日 | `date` / `trade_date` is the US Eastern trade date. From around 2026-12-06 trade date D covers [D-1 20:00 ET, D 20:00 ET), so overnight trades and volume between 21:00 and 24:00 ET (session 4) belong to the next trade date. Regular-session dates are unchanged. 約 2026-12-06 起美股交易日以美東 20:00 換日（前一日 20:00 到當日 20:00），21:00–24:00 的夜盤成交與量歸下一交易日；正規盤日期不變。 |
 
 ```python
 import shioaji as sj
@@ -741,7 +742,7 @@ for snap in api.snapshots([tsmc, aapl]):
 ```python
 us.ts                # int: UTC epoch ns
 us.datetime          # datetime: same instant, tz-aware UTC
-us.trade_date        # date: US Eastern trade date 美東交易日
+us.trade_date        # date: US Eastern trade date, rolls over at 20:00 ET from around 2026-12-06 美東交易日
 us.code, us.exchange # str
 us.open, us.high, us.low, us.close  # float; pre-market: open/high/low 0, close = previous close
 us.reference         # float: reference price 參考價
@@ -757,7 +758,7 @@ us.volume_ratio      # float | None
 us.buy_price, us.sell_price         # float | None
 us.buy_volume, us.sell_volume       # int | None
 us.ext_close, us.ext_high, us.ext_low  # float | None: extended hours; None without an extended-hours trade
-us.session           # UsTradingSession: PreMarket / Regular / AfterHours / Unknown
+us.session           # UsTradingSession: PreMarket / Regular / AfterHours / Overnight / Unknown (unknown wire values decode as Unknown 未知值解成 Unknown)
 us.tradable_status   # int
 us.last_price        # float
 ```
@@ -792,7 +793,7 @@ df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert("America/New_York")
 `time_end`, `last_cnt`) and returns `UsTicks` for a US contract:
 美股合約回 `UsTicks`，參數相同但語意如下：
 
-- `date` is the **US Eastern trade date**. date 是美東交易日。
+- `date` is the **US Eastern trade date** (from around 2026-12-06 it rolls over at 20:00 ET, see the table above). date 是美東交易日（約 12/06 起美東 20:00 換日）。
 - `time_start` / `time_end` (RangeTime) are **UTC** times and may cross UTC
   midnight: `21:00` to `01:00` means US Eastern 16:00 to 20:00 in winter (EST, UTC-5).
   If start is later than end after conversion, the result is empty.
@@ -829,7 +830,7 @@ ticks.bid_volume    # List[int | None]
 ticks.ask_price     # List[float | None]
 ticks.ask_volume    # List[int | None]
 ticks.tick_type     # List[int]
-ticks.session       # List[int]: 1 pre-market, 2 regular, 3 after-hours
+ticks.session       # List[int]: 1 pre-market, 2 regular, 3 after-hours, 4 overnight (21:00-04:00 ET, from around 2026-12-06)
 ticks.updates_last  # List[bool]
 ticks.odd_lot       # List[bool]: odd-lot trade 零股成交
 ```
@@ -884,7 +885,7 @@ curl -X POST http://localhost:8080/api/v1/data/ticks \
 - Snapshots: each row carries `region` (`"TW"` / `"US"`), the OpenAPI
   discriminator. US rows have integer `ts` (UTC ns), `trade_date`
   (`YYYY-MM-DD`), `session` as a name (`"PreMarket"`, `"Regular"`,
-  `"AfterHours"`, `"Unknown"`) and `null` for missing optional fields.
+  `"AfterHours"`, `"Overnight"`, `"Unknown"`) and `null` for missing optional fields.
   Taiwan rows keep `datetime`.
 - Ticks: a US reply is `UsTicks` JSON: an integer `ts` column (UTC ns),
   `session` as names, and `null` in the bid/ask columns.

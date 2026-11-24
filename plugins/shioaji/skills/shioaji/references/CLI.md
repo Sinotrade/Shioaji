@@ -233,7 +233,7 @@ shioaji
 │   ├── balance     [--account-type] [--account] [--currency]
 │   ├── positions   [--account-type S] [--account] [--unit common] [--region] [--currency]
 │   ├── margin      [--account]
-│   ├── position-detail     --detail-id <ID> [--account-type S] [--account] [--region] [--currency]
+│   ├── position-detail     --detail-id <ID> [--account-type S] [--account] [--unit common] [--region] [--currency]
 │   ├── profit-loss         [--account-type S] [--account] [--begin-date] [--end-date] [--unit common] [--region] [--currency]
 │   ├── profit-loss-detail  --detail-id <ID> [--account-type S] [--account] [--unit common]
 │   ├── profit-loss-summary [--account-type S] [--account] [--begin-date] [--end-date]
@@ -583,7 +583,7 @@ shioaji data stream --code 2330 --intraday-odd
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--code` | (required) | Security code |
-| `--quote-type` | tick | Quote type: tick, bid_ask, quote |
+| `--quote-type` | tick | Quote type: tick, bid_ask, quote (`tick_full` is US-only; see the US note below) |
 | `--security-type` | STK | Security type: STK, FUT, OPT, IND |
 | `--intraday-odd` | false | Include intraday odd lot trades |
 
@@ -947,6 +947,7 @@ Get position detail by detail id (the `id` field from `portfolio positions`).
 
 ```bash
 shioaji portfolio position-detail --detail-id 0
+shioaji portfolio position-detail --detail-id 0 --unit share
 shioaji portfolio position-detail --detail-id 0 --account-type F
 shioaji portfolio position-detail --detail-id 0 --account 9A00-1234567
 ```
@@ -956,6 +957,7 @@ shioaji portfolio position-detail --detail-id 0 --account 9A00-1234567
 | `--detail-id` | (required) | Detail ID from `portfolio positions` |
 | `--account-type` | S | Account type: S (stock), F (futures) or H (IntlAccount, US stock) |
 | `--account` | (none) | Account in BROKER_ID-ACCOUNT_ID format |
+| `--unit` | common | Taiwan stock only: common (lots 張) or share (shares 股, odd lots 零股); ignored for F and H |
 | `--region`, `--currency` | (TW), (region's) | IntlAccount only, same as `positions` |
 
 ### portfolio profit-loss

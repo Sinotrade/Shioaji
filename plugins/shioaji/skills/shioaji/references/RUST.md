@@ -171,7 +171,7 @@ pub struct SubscribeRequest {
     pub code: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target_code: Option<String>,
-    pub quote_type: String,       // "Tick", "BidAsk", "Quote"
+    pub quote_type: String,       // "Tick", "BidAsk", "Quote"; "TickFull" (US only)
 }
 
 #[derive(Debug, Deserialize)]

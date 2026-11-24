@@ -272,7 +272,7 @@ export interface SubscriptionRequest {
   exchange: "TSE" | "OTC" | "TAIFEX";
   code: string;
   target_code?: string;
-  quote_type: "Tick" | "BidAsk" | "Quote";
+  quote_type: "Tick" | "BidAsk" | "Quote" | "TickFull"; // TickFull: US stocks only
   intraday_odd?: boolean;
 }
 

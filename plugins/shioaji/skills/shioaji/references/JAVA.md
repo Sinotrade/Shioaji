@@ -277,7 +277,7 @@ public class SubscribeRequest {
     public String exchange;
     public String code;
     public String target_code;
-    public String quote_type;  // "Tick", "BidAsk", "Quote"
+    public String quote_type;  // "Tick", "BidAsk", "Quote"; "TickFull" (US only)
 
     public SubscribeRequest(String securityType, String exchange,
                             String code, String quoteType) {

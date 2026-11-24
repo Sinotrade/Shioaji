@@ -58,7 +58,7 @@ Use this table before generating accounting code. Python returns wrapper objects
 | Account balance | `api.account_balance(...)` -> `AccountBalance`, or `IntlAccountBalance` for an IntlAccount (`currency=` IntlAccount only, default USD) | `POST /api/v1/portfolio/account_balance` -> `AccountBalance { acc_balance, date, errmsg }`, or `IntlAccountBalance { account_type, currency, balance, buying_power }` for an IntlAccount | `shioaji portfolio balance` (`--account-type H [--currency USD]` for an IntlAccount); JSON follows HTTP shape | Default account is stock. Taiwan accounts ignore `currency`. Check `errmsg` before trusting `acc_balance`; in simulation, Taiwan accounts get a zero/default balance that must not be treated as real buying power; IntlAccounts query the paper account. |
 | Futures margin | `api.margin(...)` -> `Margin` | `POST /api/v1/portfolio/margin` -> `Margin` | `shioaji portfolio margin`; JSON follows HTTP shape | Requires futures/options account. If the caller supplies a stock account, fix account selection before interpreting fields. Simulation can return default zero margin. IntlAccounts are not supported: the SDK fails locally with `UnsupportedAccountOperation` (Python `ShioajiValueError`, HTTP 400) before sending any request. 國際帳戶（IntlAccount）不支援，會本地報錯。 |
 | Positions | `api.list_positions(...)` -> `List[StockPosition | FuturePosition]`; IntlAccount -> `List[IntlPosition]` | `POST /api/v1/portfolio/position_unit` -> `Vec<Position>` (IntlAccount rows carry `account_type: "H"`) | `shioaji portfolio positions`; `--account-type H` for US stock; JSON follows HTTP shape | Empty list can be normal. Before calling it failure, verify account type (`S`/`F`/`H`) and `unit` (`Common` vs `Share`; ignored for H). |
-| Position detail | `api.list_position_detail(detail_id=...)` -> `List[StockPositionDetail | FuturePositionDetail]`; IntlAccount -> `List[IntlPositionDetail]` (tax lots) | `POST /api/v1/portfolio/position_detail` -> `Vec<PositionDetail>` | `shioaji portfolio position-detail --detail-id <ID>`; JSON follows HTTP shape | Call `list_positions()` first in Python or query positions first over HTTP/CLI, then use the intended position `id` as `detail_id` (same for an IntlAccount). Empty detail usually means wrong/stale `detail_id` or account. |
+| Position detail | `api.list_position_detail(detail_id=...)` -> `List[StockPositionDetail | FuturePositionDetail]`; IntlAccount -> `List[IntlPositionDetail]` (tax lots) | `POST /api/v1/portfolio/position_detail` -> `Vec<PositionDetail>` | `shioaji portfolio position-detail --detail-id <ID>`; JSON follows HTTP shape | Taiwan stock odd lots need `unit=Share` (default `Common` counts lots). Call `list_positions()` first in Python or query positions first over HTTP/CLI, then use the intended position `id` as `detail_id` (same for an IntlAccount). Empty detail usually means wrong/stale `detail_id` or account. |
 | Realized P&L | `api.list_profit_loss(...)` -> `List[StockProfitLoss | FutureProfitLoss]`; IntlAccount -> `List[IntlProfitLoss]` (sells only) | `POST /api/v1/portfolio/profit_loss` -> `Vec<ProfitLoss>` | `shioaji portfolio profit-loss`; dates default to today; JSON follows HTTP shape | Empty list can mean no realized P&L in the date range. Check date range, account type, and `unit` before changing logic. H dividends are not P&L rows: use `list_dividends`. |
 | P&L detail | `api.list_profit_loss_detail(detail_id=...)` -> `List[StockProfitDetail | FutureProfitDetail]`; IntlAccount -> `List[IntlProfitLossDetail]` | `POST /api/v1/portfolio/profit_loss_detail` -> `Vec<ProfitDetail>` | `shioaji portfolio profit-loss-detail --detail-id <ID>`; JSON follows HTTP shape | Call `list_profit_loss()` first and pass the selected P&L row id. For stock detail, `quantity` is an integer. IntlAccounts pass the row's `detail_id` **string** unchanged (an int fails locally); a tampered or foreign id returns HTTP 400 `INVALID_DETAIL_ID`. |
 | Dividends (IntlAccount only) | `api.list_dividends(...)` -> `List[IntlDividend]` | `POST /api/v1/portfolio/list_dividends` -> `Vec<IntlDividend>` | `shioaji portfolio dividends`; dates default to today | Cash dividends only, by pay date. A Taiwan account fails locally with `UnsupportedAccountOperation`. Stock dividends appear as `NonTrade` lots in `list_position_detail`. |
@@ -253,6 +253,10 @@ details = api.list_position_detail()
 
 # Get specific position detail by ID 依 ID 取得特定持倉明細
 details = api.list_position_detail(detail_id=0)
+
+# Odd-lot quantities in shares 零股以股數顯示
+from shioaji import Unit
+details = api.list_position_detail(detail_id=0, unit=Unit.Share)
 ```
 
 ### Parameters 參數
@@ -263,6 +267,7 @@ details = api.list_position_detail(detail_id=0)
 | `detail_id` | `int` | `0` | Position detail ID (from list_positions cache) 持倉明細 ID |
 | `timeout` | `int` | `30000` | Timeout ms 超時毫秒 |
 | `cb` | `Callable` | `None` | Callback 回呼函數 |
+| `unit` | `Unit` | `Common` | Taiwan stock only; `Share` returns quantities in shares (odd lots), ignored for futures and IntlAccounts 僅台股；`Share` 以股數回傳（零股），期貨與國際帳戶忽略 |
 
 Note: `detail_id` is resolved from the position cache populated by `list_positions()`. Call `list_positions()` first.
 注意：`detail_id` 從 `list_positions()` 填充的快取中解析。請先呼叫 `list_positions()`。
@@ -272,13 +277,16 @@ Note: `detail_id` is resolved from the position cache populated by `list_positio
 ```bash
 curl -X POST http://localhost:8080/api/v1/portfolio/position_detail \
   -H "Content-Type: application/json" \
-  -d '{"account_id": "your_account_id", "detail_id": 0}'
+  -d '{"account_id": "your_account_id", "detail_id": 0, "unit": "Share"}'
 ```
+
+`unit` defaults to `"Common"`; Taiwan stock only. `unit` 預設 `"Common"`，僅台股。
 
 ### CLI Example CLI 範例
 
 ```bash
 shioaji portfolio position-detail --detail-id 0
+shioaji portfolio position-detail --detail-id 0 --unit share
 shioaji portfolio position-detail --detail-id 0 --account-type F
 shioaji portfolio position-detail --detail-id 0 --account 9A00-1234567 --format json
 ```
@@ -622,7 +630,7 @@ shioaji portfolio trading-limits --account 9A00-1234567 --format json
 
 ## IntlAccount 美股帳戶
 
-Since 1.8.0b1 (pre-release: `pip install --pre shioaji` or `shioaji==1.8.0b1`). IntlAccounts (US stocks, 複委託) reuse the same portfolio functions, but the SDK picks a dedicated return type from the account's `account_type`. Every IntlAccount row carries `account_type == "H"`; all prices, quantities and amounts are `Decimal` (fractional shares allowed), and missing values are `None` instead of `0`.
+Since 1.8.0b1 (pre-release: `pip install --pre shioaji` or `shioaji==1.8.0b2`). IntlAccounts (US stocks, 複委託) reuse the same portfolio functions, but the SDK picks a dedicated return type from the account's `account_type`. Every IntlAccount row carries `account_type == "H"`; all prices, quantities and amounts are `Decimal` (fractional shares allowed), and missing values are `None` instead of `0`.
 1.8.0b1（預發行版）起支援。國際帳戶（IntlAccount，美股複委託）沿用同一組帳務函式，SDK 依帳號的 `account_type` 決定回傳型別。每列都帶 `account_type == "H"`；價格、數量、金額一律 `Decimal`（可為零股小數），缺值為 `None`，不補 0。
 
 | Function 函式 | Taiwan return 台股回傳 | IntlAccount return IntlAccount 回傳 |
@@ -775,14 +783,15 @@ In simulation (paper trading) mode, the following endpoints return default/empty
 - `trading_limits()` - returns zero limits 回傳零額度
 - `list_profit_loss_summary()` - returns empty summary 回傳空彙總
 - `list_position_detail()` - returns empty for Taiwan accounts 台股帳戶回傳空值
-- `list_profit_loss_detail()` / `list_dividends()` - return empty 回傳空值（國際帳戶 IntlAccount 亦同）
+- `list_profit_loss_detail()` - returns empty for Taiwan accounts 台股帳戶回傳空值
+- `list_dividends()` - returns empty 回傳空值（國際帳戶 IntlAccount 亦同）
 
 The following endpoints **do** switch to paper-trading server endpoints:
 以下端點**會**切換到模擬伺服器端點：
 
 - `list_positions()` - uses paper position endpoint 使用模擬持倉端點
 - `list_profit_loss()` - uses paper P&L endpoint 使用模擬損益端點
-- `account_balance()` / `settlements()` / `list_position_detail()` for IntlAccounts - use `api/v1/paper/account_balance` / `api/v1/paper/settlements` / `api/v1/paper/position_detail`, same request and reply shapes as live 國際帳戶（IntlAccount）使用模擬端點，格式同正式。Paper tax lots: fills of the same buy order on the same trade date form one lot, oldest first (FIFO); `cost` includes the buy fee and the lots add up to `cost_basis` of `list_positions`; after a partial sell `quantity` is what is left and `original_quantity` the bought quantity. 模擬庫存明細依 FIFO，同一張買單同一交易日合成一批，cost 含買進手續費。
+- `account_balance()` / `settlements()` / `list_position_detail()` / `list_profit_loss_detail()` for IntlAccounts - use `api/v1/paper/account_balance` / `api/v1/paper/settlements` / `api/v1/paper/position_detail` / `api/v1/paper/profit_loss_detail` (detail_id `paper.YYYYMMDD.ORDER` from `list_profit_loss`), same request and reply shapes as live 國際帳戶（IntlAccount）使用模擬端點，格式同正式。Paper tax lots: fills of the same buy order on the same trade date form one lot, oldest first (FIFO); `cost` includes the buy fee and the lots add up to `cost_basis` of `list_positions`; after a partial sell `quantity` is what is left and `original_quantity` the bought quantity. 模擬庫存明細依 FIFO，同一張買單同一交易日合成一批，cost 含買進手續費。
   - In simulation, the IntlAccount `buying_power` already deducts the hold of open buy orders. When paper cannot compute it (for example an open market buy order with no reference price), the paper `account_balance` returns HTTP 503 and the SDK raises a `SystemMaintenance` error; retry later. 模擬國際帳戶（IntlAccount） buying_power 已扣買單圈存；paper 算不出（例如市價買單沒有參考價）會回 503，SDK 拋 SystemMaintenance 錯誤，稍後再查。
 
 ---
