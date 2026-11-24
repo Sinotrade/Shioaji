@@ -212,7 +212,7 @@ txo_chain = await api.contracts.options("TXO")
 
 > **1.8.0b1 pre-release.** US stocks (contracts, orders, active reports,
 > accounting, quotes) ship in 1.8.0b1 (`pip install --pre shioaji` or
-> `shioaji==1.8.0b2`). Only `security_type="STK"` exists for US; HK and other
+> `shioaji==1.8.0b3`). Only `security_type="STK"` exists for US; HK and other
 > markets are not supported. Orders → [ORDERS.md § US Stock Orders](ORDERS.md#us-stock-orders-美股下單),
 > quotes → [STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情),
 > accounting → [ACCOUNTING.md § IntlAccount](ACCOUNTING.md#intlaccount-美股帳戶).

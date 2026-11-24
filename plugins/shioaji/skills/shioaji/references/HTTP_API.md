@@ -1246,14 +1246,16 @@ Subscription request:
 `quote_type`: `"Tick"`, `"BidAsk"`, `"Quote"`, and for US stocks only `"TickFull"`.
 
 US stocks (`"exchange"`: `NASDAQ`/`NYSE`/`BATS`/`TXSE`): `"Tick"` subscribes the
-trimmed trade stream (`IS/v1/TICL`, only trades that update last price,
-high/low and inner/outer volume; odd lots and pre/post-market are left out and
-`serial_num` skips, while `total_volume` stays cumulative), `"TickFull"` the
+trimmed trade stream (`IS/v1/TICL`: regular-session trades that update last
+price, high/low and inner/outer volume, plus pre-market, after-hours and
+overnight round-lot trades at a valid price, which carry `updates_last=false`;
+odd lots and special-condition trades are left out and `serial_num` skips,
+while `total_volume` stays cumulative), `"TickFull"` the
 full stream (`IS/v1/TIC`, every trade incl. odd lots; `serial_num` is shared with BidAsk).
 Both arrive as `us_tick` events; subscribing both for one contract delivers
 the shared trades twice. `"TickFull"` on a Taiwan contract is rejected.
 Details: [STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情).
-美股 `"Tick"` 是精簡成交（只含更新最新價的成交，零股與盤前盤後不送、序號會跳號，累計量仍完整），`"TickFull"` 是全部成交（含零股；`serial_num` 與 BidAsk 共用，只訂 `TickFull` 也會跳號）；兩者都以 `us_tick` 事件送出，同一檔兩個都訂會重複收到。台股不能用 `"TickFull"`。
+美股 `"Tick"` 是精簡成交（正規盤會更新最新價的成交，加上盤前、盤後、夜盤的整股有效價成交，後者 `updates_last=false`；零股與特殊條件成交不送、序號會跳號，累計量仍完整），`"TickFull"` 是全部成交（含零股；`serial_num` 與 BidAsk 共用，只訂 `TickFull` 也會跳號）；兩者都以 `us_tick` 事件送出，同一檔兩個都訂會重複收到。台股不能用 `"TickFull"`。
 
 For HTTP subscriptions to futures continuous-month aliases such as `TXFR1`/`TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into the subscribe body. Regular futures codes do not need this. If `target_code` is missing for `TXFR1`/`TXFR2`, the server can return `200` while the SSE stream only emits heartbeats.
 

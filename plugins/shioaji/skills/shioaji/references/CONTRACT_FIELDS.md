@@ -172,7 +172,7 @@ update_date            # date: data date 資料日期
 ### UsStockInfo Attributes 美股資訊屬性
 
 > **1.8.0b1 pre-release.** US stocks ship in 1.8.0b1 (`pip install --pre
-> shioaji` or `shioaji==1.8.0b2`). Ordering and quotes: see
+> shioaji` or `shioaji==1.8.0b3`). Ordering and quotes: see
 > [CONTRACTS.md § US Stocks](CONTRACTS.md#us-stocks-美股).
 > **1.8.0b1 預發行版**起支援美股；下單與行情見 CONTRACTS.md 美股一節。
 

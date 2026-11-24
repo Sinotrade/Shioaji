@@ -630,7 +630,7 @@ shioaji portfolio trading-limits --account 9A00-1234567 --format json
 
 ## IntlAccount 美股帳戶
 
-Since 1.8.0b1 (pre-release: `pip install --pre shioaji` or `shioaji==1.8.0b2`). IntlAccounts (US stocks, 複委託) reuse the same portfolio functions, but the SDK picks a dedicated return type from the account's `account_type`. Every IntlAccount row carries `account_type == "H"`; all prices, quantities and amounts are `Decimal` (fractional shares allowed), and missing values are `None` instead of `0`.
+Since 1.8.0b1 (pre-release: `pip install --pre shioaji` or `shioaji==1.8.0b3`). IntlAccounts (US stocks, 複委託) reuse the same portfolio functions, but the SDK picks a dedicated return type from the account's `account_type`. Every IntlAccount row carries `account_type == "H"`; all prices, quantities and amounts are `Decimal` (fractional shares allowed), and missing values are `None` instead of `0`.
 1.8.0b1（預發行版）起支援。國際帳戶（IntlAccount，美股複委託）沿用同一組帳務函式，SDK 依帳號的 `account_type` 決定回傳型別。每列都帶 `account_type == "H"`；價格、數量、金額一律 `Decimal`（可為零股小數），缺值為 `None`，不補 0。
 
 | Function 函式 | Taiwan return 台股回傳 | IntlAccount return IntlAccount 回傳 |

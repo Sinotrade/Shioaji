@@ -237,12 +237,12 @@ api.subscribe(api.contracts.get("2330"), quote_type=sj.QuoteType.KBar)
 ### US Stock Quotes 美股行情
 
 Since 1.8.0b1 (pre-release). Same `api.subscribe` / `api.unsubscribe` with a
-US contract, but only `QuoteType.Tick` (trimmed: last-price-updating trades),
+US contract, but only `QuoteType.Tick` (trimmed: regular-session last-price trades plus extended-hours round-lot trades),
 `QuoteType.TickFull` (US only: every trade incl. odd lots) and
 `QuoteType.BidAsk`, its own callbacks (`on_us_tick`, `on_us_bidask`,
 `on_us_halt`) and a separate halt feed. US quotes are **production only**: the simulation / test environment
 has no US quote feed. Full reference: [US Quotes 美股行情](#us-quotes-美股行情).
-1.8.0b1（預發行版）起提供。用同一個 `api.subscribe` 帶美股商品，但只有 Tick（精簡，只含更新最新價的成交）、TickFull（只限美股，含零股的全部成交）與 BidAsk、走獨立 callback 與獨立的暫停事件；美股即時報價**只在正式環境**，模擬／測試環境沒有。完整說明見 [US Quotes 美股行情](#us-quotes-美股行情)。
+1.8.0b1（預發行版）起提供。用同一個 `api.subscribe` 帶美股商品，但只有 Tick（精簡：正規盤更新最新價的成交，加上盤前盤後與夜盤的整股成交）、TickFull（只限美股，含零股的全部成交）與 BidAsk、走獨立 callback 與獨立的暫停事件；美股即時報價**只在正式環境**，模擬／測試環境沒有。完整說明見 [US Quotes 美股行情](#us-quotes-美股行情)。
 
 ### Enriched and Signal Products 即時加值與市場訊號
 
@@ -598,7 +598,7 @@ quote.estimate_amount_sum  # Decimal: Estimated closing turnover 預估收盤總
 ## US Quotes 美股行情
 
 > **1.8.0b1 pre-release, production only.** US quotes ship in the 1.8.0b1
-> pre-release (`pip install --pre shioaji` or `shioaji==1.8.0b2`). The feed is
+> pre-release (`pip install --pre shioaji` or `shioaji==1.8.0b3`). The feed is
 > only on the production environment; a simulation (`simulation=True`) or test
 > login receives no US quotes, so do not use an empty US stream there as a bug signal.
 > **1.8.0b1 預發行版，只在正式環境。** 模擬／測試環境沒有美股即時報價，收不到資料不代表程式有錯。
@@ -608,15 +608,15 @@ the contract's base exchange). Three quote types exist for US stocks:
 
 | `quote_type` | Topic | What arrives |
 |---|---|---|
-| `QuoteType.Tick` (`"tick"`, default) | `IS/v1/TICL/{exchange}/{code}` | Trimmed trades: only trades that update last price, high/low and inner/outer volume (`updates_last=True`) |
-| `QuoteType.TickFull` (`"tick_full"`, US only) | `IS/v1/TIC/{exchange}/{code}` | Every trade: odd lots, pre-market/after-hours and volume-only trades included |
+| `QuoteType.Tick` (`"tick"`, default) | `IS/v1/TICL/{exchange}/{code}` | Trimmed trades: regular-session trades that update last price, high/low and inner/outer volume (`updates_last=True`), plus pre-market, after-hours and overnight round-lot trades at a valid price (`updates_last=False`) |
+| `QuoteType.TickFull` (`"tick_full"`, US only) | `IS/v1/TIC/{exchange}/{code}` | Every trade: odd lots, special-condition and volume-only trades included |
 | `QuoteType.BidAsk` (`"bid_ask"`) | `IS/v1/QUO/{exchange}/{code}` | Best bid/ask, one level |
 
 `QuoteType.Quote` raises `US quotes support Tick, TickFull and BidAsk only`,
 and `intraday_odd=True` raises (odd-lot trades are on `TickFull` with
 `odd_lot=True`). US events use their own callbacks and never reach the Taiwan
 `on_tick_stk_v1` / `on_bidask_stk_v1`.
-美股每個交易所一條。`QuoteType.Tick`（預設）訂精簡成交 `IS/v1/TICL/...`：只有會更新最新價、高低與內外盤的成交；`QuoteType.TickFull`（`"tick_full"`，只限美股）訂完整成交 `IS/v1/TIC/...`：含零股、盤前盤後與只更新量的成交；`QuoteType.BidAsk` 訂最佳一檔 `IS/v1/QUO/...`。`QuoteType.Quote` 與 `intraday_odd=True` 會報錯。美股事件走獨立 callback，不會進台股 callback。
+美股每個交易所一條。`QuoteType.Tick`（預設）訂精簡成交 `IS/v1/TICL/...`：正規盤會更新最新價、高低與內外盤的成交，加上盤前、盤後、夜盤的整股有效價成交（`updates_last=False`）；`QuoteType.TickFull`（`"tick_full"`，只限美股）訂完整成交 `IS/v1/TIC/...`：另含零股、特殊條件與只更新量的成交；`QuoteType.BidAsk` 訂最佳一檔 `IS/v1/QUO/...`。`QuoteType.Quote` 與 `intraday_odd=True` 會報錯。美股事件走獨立 callback，不會進台股 callback。
 
 **Tick vs TickFull (US stocks only) 美股 Tick 與 TickFull 差異**
 
@@ -660,7 +660,7 @@ def on_us_tick(tick: sj.UsTick):
 def on_us_bidask(quote: sj.UsBidAsk):
     print(quote.code, quote.bid_price[0], quote.ask_price[0], quote.freshness.status)
 
-api.subscribe(aapl, quote_type=sj.QuoteType.Tick)        # trimmed: last-price-updating trades
+api.subscribe(aapl, quote_type=sj.QuoteType.Tick)        # trimmed: last-price trades + extended-hours round lots
 # api.subscribe(aapl, quote_type=sj.QuoteType.TickFull) # every trade incl. odd lots (pick one)
 api.subscribe(aapl, quote_type=sj.QuoteType.BidAsk)
 # api.unsubscribe(aapl, quote_type=sj.QuoteType.Tick)
@@ -695,8 +695,11 @@ api.subscribe(aapl, quote_type=sj.QuoteType.BidAsk)
 
 `TickFull` publishes every trade — regular lots, odd lots, pre-market/after-hours
 and special-condition trades — so filter on the flags instead of assuming each
-tick moves the last price. `Tick` (trimmed) only carries `updates_last=True`
-trades, with the same fields.
+tick moves the last price. `Tick` (trimmed) carries regular-session `updates_last=True` trades plus
+pre-market, after-hours and overnight round-lot trades at a valid price; those
+extended-hours trades have `updates_last=False` and leave `close`/`high`/`low` at
+their regular-session values, so split by `session`, read the trade price from
+`price` and extended-hours high/low from `ext_high`/`ext_low`. Same fields.
 `TickFull` 每筆成交都會發（整股、碎股、盤前盤後、特殊條件），請依旗標判斷，不要假設每筆都更新最新價；`Tick`（精簡）只發 `updates_last=True` 的成交，欄位相同。
 
 | Field 欄位 | Meaning 說明 |
