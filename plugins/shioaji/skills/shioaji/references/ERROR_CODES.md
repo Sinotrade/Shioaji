@@ -107,7 +107,7 @@ CA 相關 exception 在本地拋出、不帶 status code：
 | 400 | `Token doesn't have production permission.` | API Key 沒有正式環境權限 | 自行處理：至 API 管理頁確認權限；或先用模擬環境 |
 | 451 | `Too Many Connections.` | 同一 person_id 最多 5 條連線，每次 `api.login()` 都算一條；常見原因是程式結束前沒 `logout()` 或程式沒真正關掉 | 自行處理：每次用完呼叫 `api.logout()`；若都有登出仍發生，關閉殘留程式或重開機後再登入；見 [CONCEPTS.md](CONCEPTS.md) |
 | 400 | `Sign data is timeout.`（登入時出現） | 本機時間與伺服器相差超過 receive_window（預設 30 秒） | 自行處理：先校準系統時間，見 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 登入簽章逾時與 <https://sinotrade.github.io/zh/tutor/login/#_1> |
-| 503 | `Please update the version of shioaji to at least {版本} ...` | 版本低於最低要求 | 自行處理：用 uv 升級至要求版本（`uv add "shioaji=={版本}"`；CLI 安裝用 `uv tool install --force "shioaji=={版本}"`）後重新登入，見 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) |
+| 503 | `Please update the version of shioaji to at least {版本} ...` | 版本低於最低要求 | 自行處理：用 `uv sync -P shioaji` 升到同版本線最新版；要求的版本在較新的版本線時用 `uv add "shioaji==X.Y.*"` 換線（CLI 安裝用 `uv tool upgrade shioaji`，換線用 `uv tool install --force "shioaji==X.Y.*"`），之後重新登入，見 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) |
 | 400 | `密碼錯誤 {N} 次，請留意英文字母大小寫`（券商原文，錯滿 3 次的訊息附客服電話） | 登入密碼錯誤 | 自行處理：留意大小寫；錯 3 次會鎖定，鎖定後至新理財網重置密碼 |
 | 503 | `登入密碼錯誤3次，請進行密碼重置` | 密碼錯誤三次鎖定 | 自行處理：至新理財網重置密碼後再重新登入 |
 | 503 | `操作異常，請1分鐘後再重新登入` | 兩種可能：(1) 操作過於頻繁，Token 被移除；(2) 已被封鎖 | 等待重試：停止重試迴圈，等 1 分鐘後重新登入即可；若等待後仍持續出現，可能已被封鎖，請至客服群組找管理員處理 |

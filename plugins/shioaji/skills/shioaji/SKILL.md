@@ -2,7 +2,7 @@
 name: shioaji
 description: >-
   Shioaji (SJ) is SinoPac/永豐金證券's API for trading Taiwan markets
-  (台股/期權 on TWSE, TPEX, TAIFEX) and, since the 1.8.0b1 pre-release,
+  (台股/期權 on TWSE, TPEX, TAIFEX) and, since 1.8.0,
   US stocks (美股複委託 on NASDAQ, NYSE, BATS, TXSE). Use for any Shioaji
   task, or for Taiwan or US stock trading automation where Shioaji may
   apply: Python sync/async code, the `shioaji` CLI, the local HTTP API
@@ -23,8 +23,8 @@ Shioaji is SinoPac's **cross-language, cross-platform** trading API for Taiwan f
 
 Shioaji 是永豐金證券的**跨語言、跨平台**交易 API，提供 Python 綁定、CLI 與 HTTP API 伺服器，讓**任何程式語言**都能透過 HTTP API 交易台灣市場。
 
-> **US stocks 美股 (1.8.0b1 pre-release 預發行版).** US stock contracts, orders, active reports, accounting, realtime quotes, snapshots and historical ticks / K-bars are supported from 1.8.0b1, a pre-release: install it with `pip install --pre shioaji` (or `uv add --prerelease allow shioaji`) or pin `shioaji==1.8.0b3`; a plain `pip install shioaji` keeps the stable version without US support. US trading needs an Intl (`H`, 複委託) account. HK and other markets are not supported. Start from [US stock references](#us-stocks--美股).
-> 1.8.0b1 預發行版起支援美股（商品檔、下單、回報、帳務、即時行情、快照與歷史逐筆／K 棒），用 `pip install --pre shioaji` 或指定 `shioaji==1.8.0b3` 安裝；一般 `pip install shioaji` 仍是不含美股的穩定版。美股要用複委託（H）帳戶；港股等其他市場不支援。
+> **US stocks 美股 (1.8.0).** US stock contracts, orders, active reports, accounting, realtime quotes, snapshots and historical ticks / K-bars are supported from 1.8.0. Install it with `uv add "shioaji==1.8.*"`; a project pinned to `shioaji==1.7.*` must switch its pin the same way, because `uv sync -P shioaji` only upgrades within the pinned line. US trading needs an Intl (`H`, 複委託) account. HK and other markets are not supported. Start from [US stock references](#us-stocks--美股).
+> 1.8.0 起支援美股（商品檔、下單、回報、帳務、即時行情、快照與歷史逐筆／K 棒），用 `uv add "shioaji==1.8.*"` 安裝；已鎖 `shioaji==1.7.*` 的專案也要用同一個指令換版本線，`uv sync -P shioaji` 只會在原版本線內升級。美股要用複委託（H）帳戶；港股等其他市場不支援。
 
 Three access layers / 三種存取層：
 
@@ -103,8 +103,8 @@ Routing rule: choose the functional reference first, then add the access-method 
 
 ### US Stocks / 美股
 
-US stocks (1.8.0b1 pre-release) reuse the same functions; each functional reference has a US section. Load the one for the task:
-美股（1.8.0b1 預發行版）沿用同一組函式，各功能文件都有美股一節，依任務載入：
+US stocks (1.8.0) reuse the same functions; each functional reference has a US section. Load the one for the task:
+美股（1.8.0 起）沿用同一組函式，各功能文件都有美股一節，依任務載入：
 
 | US task 美股任務 | Load |
 |---|---|
@@ -112,13 +112,13 @@ US stocks (1.8.0b1 pre-release) reuse the same functions; each functional refere
 | Place / reduce / cancel US orders, IntlAccount, price and time-in-force rules, local errors, reservation orders 美股下單、減量、刪單 | [ORDERS.md § US Stock Orders](references/ORDERS.md#us-stock-orders-美股下單) |
 | US order reports `IntlOrder` / `IntlDeal`, `event_id` gaps, reconciliation with `update_status` 美股回報與對帳 | [ORDERS.md § US Order Reports](references/ORDERS.md#us-order-reports-美股回報) |
 | US positions, tax lots, realized P&L, dividends; what IntlAccounts cannot query yet 美股庫存、損益、股利 | [ACCOUNTING.md § IntlAccount](references/ACCOUNTING.md#intlaccount-美股帳戶) |
-| US tick / bid-ask quotes (`QuoteType.Tick` = trimmed: regular-session last-price trades plus extended-hours round-lot trades, `QuoteType.TickFull` = every trade incl. odd lots, US only), halts, quote freshness (production only) 美股即時報價（Tick 精簡、TickFull 全部成交）、暫停、新鮮度 | [STREAMING.md § US Quotes](references/STREAMING.md#us-quotes-美股行情) |
+| US tick / bid-ask quotes (`QuoteType.Tick` = trimmed: regular-session last-price trades plus extended-hours round-lot trades, `QuoteType.TickFull` = every trade incl. odd lots, US only), halts, quote freshness 美股即時報價（Tick 精簡、TickFull 全部成交）、暫停、新鮮度 | [STREAMING.md § US Quotes](references/STREAMING.md#us-quotes-美股行情) |
 | US snapshots (`UsSnapshot`, mixed with Taiwan), historical ticks (`UsTicks`, UTC times, 100000-row cap) and K-bars 美股快照、歷史逐筆與 K 棒 | [MARKET_DATA.md § US Market Data](references/MARKET_DATA.md#us-market-data-美股歷史行情與快照) |
 | US stocks in watchlists 美股自選股 | [WATCHLIST.md § US Stocks](references/WATCHLIST.md#us-stocks-美股自選股) |
 | US over CLI / HTTP | [CLI.md](references/CLI.md) / [HTTP_API.md](references/HTTP_API.md) (search `US` / `Intl`) |
 
-US quotes exist only on the production environment; simulation has no US quote feed. HK and US options/futures are not supported.
-美股即時報價只在正式環境，模擬環境沒有；港股與美股期權、期貨不支援。
+HK and US options/futures are not supported.
+港股與美股期權、期貨不支援。
 
 **Common confusions 容易混淆（選檔前先看）:**
 

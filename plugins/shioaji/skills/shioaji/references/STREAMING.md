@@ -236,13 +236,12 @@ api.subscribe(api.contracts.get("2330"), quote_type=sj.QuoteType.KBar)
 
 ### US Stock Quotes 美股行情
 
-Since 1.8.0b1 (pre-release). Same `api.subscribe` / `api.unsubscribe` with a
+Since 1.8.0. Same `api.subscribe` / `api.unsubscribe` with a
 US contract, but only `QuoteType.Tick` (trimmed: regular-session last-price trades plus extended-hours round-lot trades),
 `QuoteType.TickFull` (US only: every trade incl. odd lots) and
-`QuoteType.BidAsk`, its own callbacks (`on_us_tick`, `on_us_bidask`,
-`on_us_halt`) and a separate halt feed. US quotes are **production only**: the simulation / test environment
-has no US quote feed. Full reference: [US Quotes 美股行情](#us-quotes-美股行情).
-1.8.0b1（預發行版）起提供。用同一個 `api.subscribe` 帶美股商品，但只有 Tick（精簡：正規盤更新最新價的成交，加上盤前盤後與夜盤的整股成交）、TickFull（只限美股，含零股的全部成交）與 BidAsk、走獨立 callback 與獨立的暫停事件；美股即時報價**只在正式環境**，模擬／測試環境沒有。完整說明見 [US Quotes 美股行情](#us-quotes-美股行情)。
+`QuoteType.BidAsk`, its own callbacks (`on_tick_stk_us_v1`, `on_bidask_stk_us_v1`,
+`on_halt_stk_us_v1`) and a separate halt feed. Full reference: [US Quotes 美股行情](#us-quotes-美股行情).
+1.8.0 起提供。用同一個 `api.subscribe` 帶美股商品，但只有 Tick（精簡：正規盤更新最新價的成交，加上盤前盤後與夜盤的整股成交）、TickFull（只限美股，含零股的全部成交）與 BidAsk、走獨立 callback 與獨立的暫停事件。完整說明見 [US Quotes 美股行情](#us-quotes-美股行情)。
 
 ### Enriched and Signal Products 即時加值與市場訊號
 
@@ -597,11 +596,8 @@ quote.estimate_amount_sum  # Decimal: Estimated closing turnover 預估收盤總
 
 ## US Quotes 美股行情
 
-> **1.8.0b1 pre-release, production only.** US quotes ship in the 1.8.0b1
-> pre-release (`pip install --pre shioaji` or `shioaji==1.8.0b3`). The feed is
-> only on the production environment; a simulation (`simulation=True`) or test
-> login receives no US quotes, so do not use an empty US stream there as a bug signal.
-> **1.8.0b1 預發行版，只在正式環境。** 模擬／測試環境沒有美股即時報價，收不到資料不代表程式有錯。
+> **1.8.0.** US quotes ship in 1.8.0.
+> **1.8.0 起提供。**
 
 US quotes come from one feed per exchange (`NASDAQ`, `NYSE`, `BATS` or `TXSE`,
 the contract's base exchange). Three quote types exist for US stocks:
@@ -632,12 +628,12 @@ and `intraday_odd=True` raises (odd-lot trades are on `TickFull` with
   `TickFull` and `BidAsk` together. Use `TickFull` when you need each odd lot
   or extended-hours print.
   `TickFull` 送每一筆成交。`serial_num` 是每檔 Tick 與 BidAsk 共用的流水號（每日歸零），同時訂 `TickFull` 與 `BidAsk` 合起來才連號；需要每筆零股或盤前盤後成交時才用。
-- Both use the same `UsTick` type and the same `on_us_tick` callback (HTTP:
-  the same `us_tick` SSE event). Subscribing **both** for one contract
+- Both use the same `UsTick` type and the same `on_tick_stk_us_v1` callback (HTTP:
+  the same `tick_stk_us` SSE event). Subscribing **both** for one contract
   delivers the trades that are on both streams **twice**; the SDK does not
   de-duplicate, and the order between the two streams is not guaranteed.
   Pick one per contract.
-  兩者都是 `UsTick`、同一個 `on_us_tick` callback（HTTP 同為 `us_tick` 事件）。同一檔兩個都訂，重疊的成交會收到兩次，SDK 不去重，兩條之間的先後也不保證；每檔請擇一。
+  兩者都是 `UsTick`、同一個 `on_tick_stk_us_v1` callback（HTTP 同為 `tick_stk_us` 事件）。同一檔兩個都訂，重疊的成交會收到兩次，SDK 不去重，兩條之間的先後也不保證；每檔請擇一。
 - Taiwan contracts are unaffected: `QuoteType.Tick` is unchanged, and
   `QuoteType.TickFull` on a Taiwan contract raises
   `QuoteType.TickFull (tick_full) is only available for US stocks`.
@@ -650,14 +646,14 @@ api = sj.Shioaji()  # production: US quotes are not on simulation
 api.login(api_key="...", secret_key="...")
 aapl = api.contracts.get("AAPL", region="US")  # base exchange from the contract
 
-@api.on_us_tick()
-def on_us_tick(tick: sj.UsTick):
+@api.on_tick_stk_us_v1()
+def on_tick_stk_us_v1(tick: sj.UsTick):
     if tick.stale:                    # never act on a stale/delayed quote as realtime
         return
     print(tick.code, tick.price, tick.volume, tick.session, tick.odd_lot)
 
-@api.on_us_bidask()
-def on_us_bidask(quote: sj.UsBidAsk):
+@api.on_bidask_stk_us_v1()
+def on_bidask_stk_us_v1(quote: sj.UsBidAsk):
     print(quote.code, quote.bid_price[0], quote.ask_price[0], quote.freshness.status)
 
 api.subscribe(aapl, quote_type=sj.QuoteType.Tick)        # trimmed: last-price trades + extended-hours round lots
@@ -666,12 +662,12 @@ api.subscribe(aapl, quote_type=sj.QuoteType.BidAsk)
 # api.unsubscribe(aapl, quote_type=sj.QuoteType.Tick)
 ```
 
-- Setter form: `set_on_us_tick_callback` / `set_on_us_bidask_callback` /
-  `set_on_us_halt_callback` and `clear_on_us_tick_callback` /
-  `clear_on_us_bidask_callback` / `clear_on_us_halt_callback`; all take
+- Setter form: `set_on_tick_stk_us_v1_callback` / `set_on_bidask_stk_us_v1_callback` /
+  `set_on_halt_stk_us_v1_callback` and `clear_on_tick_stk_us_v1_callback` /
+  `clear_on_bidask_stk_us_v1_callback` / `clear_on_halt_stk_us_v1_callback`; all take
   `bind=False` like the Taiwan callbacks.
 - `ShioajiAsync`: same names with `async def` callbacks; `await api.subscribe(...)`,
-  `await api.subscribe_us_halt()`, `await api.unsubscribe_us_halt()`.
+  `await api.subscribe_halt_stk_us()`, `await api.unsubscribe_halt_stk_us()`.
   `api.us_tradable(...)` / `api.us_halts()` stay synchronous reads of the local halt book.
   `ShioajiAsync` 名稱相同，callback 用 `async def`；`us_tradable`／`us_halts` 是同步讀本地 halt book。
 - There is no US receiver (`get_*_receiver`); use the callbacks.
@@ -687,8 +683,8 @@ api.subscribe(aapl, quote_type=sj.QuoteType.BidAsk)
 - HTTP: `POST /api/v1/stream/subscribe` with a US exchange
   (`{"security_type":"STK","exchange":"NASDAQ","code":"AAPL","quote_type":"Tick"}`,
   or `"quote_type":"TickFull"` for every trade);
-  events arrive as `us_tick` / `us_bidask` on `/api/v1/stream/data` or the
-  dedicated `/api/v1/stream/data/us_tick` and `/api/v1/stream/data/us_bidask`.
+  events arrive as `tick_stk_us` / `bidask_stk_us` on `/api/v1/stream/data` or the
+  dedicated `/api/v1/stream/data/tick_stk_us` and `/api/v1/stream/data/bidask_stk_us`.
   Unsubscribe with the same `quote_type`: `Tick` and `TickFull` are separate subscriptions.
 
 ### UsTick fields 美股成交欄位
@@ -730,25 +726,25 @@ exchange and the stock itself are all not halted.
 暫停事件不在 Tick／BidAsk 裡。請訂閱美股暫停事件（單一 topic，含個股、交易所、全市場），再向 SDK 查某檔是否可交易：全市場、交易所、個股三層都沒有暫停才算可交易。
 
 ```python
-api.subscribe_us_halt()                      # topic IS/v1/HALT/US
+api.subscribe_halt_stk_us()                      # topic IS/v1/HALT/US
 
-@api.on_us_halt()
-def on_us_halt(halt: sj.UsHalt):
+@api.on_halt_stk_us_v1()
+def on_halt_stk_us_v1(halt: sj.UsHalt):
     print(halt.scope, halt.exchange, halt.code, halt.is_halted, halt.halt_reason)
 
 api.us_tradable(aapl)    # False while market, NASDAQ or AAPL is halted
 api.us_halts()           # List[UsHalt]: market-wide, then exchanges, then symbols
-api.unsubscribe_us_halt()  # also clears the halt book
+api.unsubscribe_halt_stk_us()  # also clears the halt book
 ```
 
 `UsHalt.is_halted` is `True` when `tradable_status` is 2/3 or `instr_status` is
 20/27. Before any halt event arrives, `us_tradable` returns `True`.
 `is_halted` 在 `tradable_status` 為 2／3 或 `instr_status` 為 20／27 時為 True；尚未收到任何事件前 `us_tradable` 回 True。
 
-Async clients use the same names (`await api.subscribe_us_halt()`, `on_us_halt`,
-`set_on_us_halt_callback`, `clear_on_us_halt_callback`). HTTP:
-`POST /api/v1/stream/subscribe/us_halt` (and `/unsubscribe/us_halt`); events
-arrive as `us_halt` on `/api/v1/stream/data` or `/api/v1/stream/data/us_halt`;
+Async clients use the same names (`await api.subscribe_halt_stk_us()`, `on_halt_stk_us_v1`,
+`set_on_halt_stk_us_v1_callback`, `clear_on_halt_stk_us_v1_callback`). HTTP:
+`POST /api/v1/stream/subscribe/halt_stk_us` (and `/unsubscribe/halt_stk_us`); events
+arrive as `halt_stk_us` on `/api/v1/stream/data` or `/api/v1/stream/data/halt_stk_us`;
 `GET /api/v1/stream/us_tradable?exchange=NASDAQ&code=AAPL` and
 `GET /api/v1/stream/us_halts` read the same state as plain JSON:
 `us_halts` answers `{subscribed, last_seq, gaps, ignored, halts}` (`gaps` counts
@@ -768,7 +764,7 @@ halt `seq` jumps, i.e. events possibly missed) and `us_tradable` answers
 | `session`, `seq` | Same session enum as quotes; `seq` is this feed's own sequence 盤別；本 topic 流水號 |
 
 US stocks can halt intraday (LULD pauses, news, regulatory halts, market-wide
-circuit breakers). The SDK only knows events received since `subscribe_us_halt()`;
+circuit breakers). The SDK only knows events received since `subscribe_halt_stk_us()`;
 there is no query for halts that started before subscribing, so a newly
 connected client must not read "no halt seen" as tradable. When telling a user
 a stock cannot trade, include `halt_reason`.

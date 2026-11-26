@@ -435,12 +435,12 @@ Subscribe to per-account order/deal events. Mirrors Python `api.subscribe_trade(
 shioaji auth subscribe-trade                              # default stock account
 shioaji auth subscribe-trade --account-type F             # default futures account
 shioaji auth subscribe-trade --account 9A95-9816502       # specific account
-shioaji auth subscribe-trade --account-type H             # first IntlAccount: US order reports (1.8.0b1)
+shioaji auth subscribe-trade --account-type H             # first IntlAccount: US order reports (1.8.0)
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--account-type` | S | Account type: S (stock), F (futures) or H (IntlAccount, US stock; 1.8.0b1) |
+| `--account-type` | S | Account type: S (stock), F (futures) or H (IntlAccount, US stock; 1.8.0) |
 | `--account` | (default account) | Account in BROKER_ID-ACCOUNT_ID format (e.g. 9A00-1234567) |
 
 ### auth unsubscribe-trade
@@ -534,6 +534,18 @@ shioaji data ticks --code TXFR1 --security-type FUT --exchange TAIFEX
 | `--all` | false | Fetch all ticks for the day (overrides --last) |
 | `--security-type` | STK | Security type: STK, FUT, OPT, IND |
 | `--exchange` | TSE | Exchange: TSE, OTC, TAIFEX |
+| `--region` | TW | Market region: TW or US 市場 |
+| `--full` | false | US only: every trade, like realtime `tick_full` (odd lots, special-condition trades); default is the realtime `tick` (TICL) definition. Not about row count. 美股：每一筆成交（同即時 tick_full），不是筆數 |
+| `--sessions` | (regular only) | US only: comma-separated `pre_market,regular,after_hours,overnight` (or `1-4`) 美股時段 |
+| `--offset` | 0 | US only: rows to skip, from the tail with `--last`, else from the head; at most 100000 rows per call, so page with `--all --offset N` 美股：略過筆數 |
+
+US options are available from 1.8.0; on a
+Taiwan contract they return a validation error. 美股選項自 1.8.0 起提供；台股合約使用會回驗證錯誤。
+
+```bash
+shioaji data ticks --code AAPL --region US --date 2026-11-18 --all --full \
+  --sessions pre_market,regular,after_hours --offset 100000
+```
 
 ### data kbars
 
@@ -551,6 +563,8 @@ shioaji data kbars --code 2330 --start 2024-01-01 --end 2024-01-31
 | `--end` | today | End date (YYYY-MM-DD) |
 | `--security-type` | STK | Security type: STK, FUT, OPT, IND |
 | `--exchange` | TSE | Exchange: TSE, OTC, TAIFEX |
+| `--region` | TW | Market region: TW or US 市場 |
+| `--sessions` | (regular only) | US only (from 1.8.0): comma-separated `pre_market,regular,after_hours,overnight` (or `1-4`); US rows then carry `Session` 美股時段（1.8.0 起） |
 
 ### data scanner
 
@@ -592,7 +606,7 @@ The CLI resolves the contract code, subscribes to the appropriate SSE endpoint, 
 > `--quote-type` only accepts tick/bid_ask/quote. Realtime KBar, enriched index data, and market signals are NOT available via the CLI stream command — use Python or HTTP ([STREAMING.md](STREAMING.md) / [STREAMING_ENRICHED.md](STREAMING_ENRICHED.md) / [STREAMING_SIGNALS.md](STREAMING_SIGNALS.md)).
 > `--quote-type` 僅接受 tick/bid_ask/quote。即時K棒、即時加值資料與市場訊號 CLI 不支援，請用 Python 或 HTTP。
 >
-> US quotes and the US halt feed are not available via the CLI either (`data stream` has no `--region`); use Python or HTTP SSE `us_tick` / `us_bidask` / `us_halt` ([STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情)).
+> US quotes and the US halt feed are not available via the CLI either (`data stream` has no `--region`); use Python or HTTP SSE `tick_stk_us` / `bidask_stk_us` / `halt_stk_us` ([STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情)).
 > 美股行情與暫停事件 CLI 也不支援（`data stream` 沒有 `--region`），請用 Python 或 HTTP SSE。
 
 Indices support only the `quote` type — pass `--quote-type quote` explicitly; the default `tick` is rejected with `Error: index contracts only support quote streaming`.
@@ -614,7 +628,7 @@ shioaji data snapshots --codes TXFR1,MXFR1 --security-type FUT --exchange TAIFEX
 | `--security-type` | STK | Security type: STK, FUT, OPT, IND |
 | `--exchange` | TSE | Exchange: TSE, OTC, TAIFEX |
 
-> `data ticks`, `data kbars` and `data snapshots` look codes up in Taiwan only (no `--region`), so US snapshots, ticks and K-bars (1.8.0b1) are not available via the CLI; use Python or HTTP ([MARKET_DATA.md § US Market Data](MARKET_DATA.md#us-market-data-美股歷史行情與快照)).
+> `data ticks`, `data kbars` and `data snapshots` look codes up in Taiwan only (no `--region`), so US snapshots, ticks and K-bars (1.8.0) are not available via the CLI; use Python or HTTP ([MARKET_DATA.md § US Market Data](MARKET_DATA.md#us-market-data-美股歷史行情與快照)).
 > `data ticks`／`kbars`／`snapshots` 只查台股代碼（沒有 `--region`），美股快照、逐筆與 K 棒請用 Python 或 HTTP。
 
 ### data daily-quotes
@@ -707,7 +721,7 @@ shioaji contracts list --type STK --page 1 --page-size 500
 shioaji contracts get 2330 --type STK
 shioaji contracts info IX0001 --type IND
 
-# US stock (1.8.0b1): codes are used verbatim.
+# US stock (1.8.0): codes are used verbatim.
 shioaji contracts info BRK.A --region US --exchange NYSE
 ```
 
@@ -717,7 +731,7 @@ shioaji contracts info BRK.A --region US --exchange NYSE
 | `get` | positional `CODE` | `--type`, `--region`, `--exchange` | One Base by exchange/master code; omitting type performs generic lookup |
 | `info` | positional `CODE` | `--type`, `--region`, `--exchange` | Flat typed Info; WRT must use `warrants` |
 
-`--region` defaults to `TW`; `--region US` (1.8.0b1) looks up US stocks. `--exchange` narrows `get`/`info`: TW `TSE`/`OTC`/`OES`/`TAIFEX`, US `NASDAQ`/`NYSE`/`BATS`/`TXSE`; a contract listed elsewhere is not found. `--page-size` without `--page` implies page 1. There is no command that aggregates every security type.
+`--region` defaults to `TW`; `--region US` (1.8.0) looks up US stocks. `--exchange` narrows `get`/`info`: TW `TSE`/`OTC`/`OES`/`TAIFEX`, US `NASDAQ`/`NYSE`/`BATS`/`TXSE`; a contract listed elsewhere is not found. `--page-size` without `--page` implies page 1. There is no command that aggregates every security type.
 
 ### contracts futures/options/warrants
 
@@ -788,7 +802,7 @@ For continuous-month futures such as `TXFR1` / `TXFR2`, the CLI preserves the re
 # shioaji order place --region US --code AAPL --action Buy --price 180.25 --quantity 10 --tif day
 ```
 
-US stock orders (`--region US`, 1.8.0b1) use the IntlAccount
+US stock orders (`--region US`, 1.8.0) use the IntlAccount
 (`--account` is read as an IntlAccount), whole shares, `--price-type` lmt/mkt
 and `--tif` day/opg/atc (`rod` is sent as `day`; at the close is
 `--tif atc`, there is no moc/loc price type). `order update-qty` cancels that
@@ -880,7 +894,7 @@ Stream real-time order and deal events via SSE. Press Ctrl+C to stop.
 shioaji order events
 ```
 
-Displays all order/deal events (stock orders, stock deals, futures orders, futures deals, and US `IntlOrder` / `IntlDeal` since 1.8.0b1) as they arrive. US reports need `shioaji auth subscribe-trade --account-type H` first.
+Displays all order/deal events (stock orders, stock deals, futures orders, futures deals, and US `IntlOrder` / `IntlDeal` since 1.8.0) as they arrive. US reports need `shioaji auth subscribe-trade --account-type H` first.
 
 ---
 
@@ -915,7 +929,7 @@ shioaji portfolio positions
 shioaji portfolio positions --account-type F
 shioaji portfolio positions --unit share
 shioaji portfolio positions --account 9A00-1234567
-shioaji portfolio positions --account-type H          # US stock (1.8.0b1)
+shioaji portfolio positions --account-type H          # US stock (1.8.0)
 ```
 
 | Flag | Default | Description |

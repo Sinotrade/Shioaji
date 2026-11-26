@@ -3,8 +3,8 @@
 This document covers historical data, snapshots, daily quotes, credit enquiries, short stock sources, scanners, and disposition/attention stocks in Shioaji.
 本文件說明 Shioaji 中的歷史資料查詢、快照、每日行情、資券餘額查詢、券源查詢、掃描器排行及處置/注意股。
 
-US stocks (`region="US"`, 1.8.0b1) use the same `api.snapshots()`, `api.ticks()` and `api.kbars()`; their return types, UTC timestamps and limits are in [US Market Data](#us-market-data-美股歷史行情與快照). Everything else in this file is Taiwan only.
-美股（1.8.0b1）沿用同一組 `api.snapshots()`／`api.ticks()`／`api.kbars()`，回傳型別、UTC 時間與限制見 [US Market Data](#us-market-data-美股歷史行情與快照)；本文件其餘功能僅限台股。
+US stocks (`region="US"`, 1.8.0) use the same `api.snapshots()`, `api.ticks()` and `api.kbars()`; their return types, UTC timestamps and limits are in [US Market Data](#us-market-data-美股歷史行情與快照). Everything else in this file is Taiwan only.
+美股（1.8.0）沿用同一組 `api.snapshots()`／`api.ticks()`／`api.kbars()`，回傳型別、UTC 時間與限制見 [US Market Data](#us-market-data-美股歷史行情與快照)；本文件其餘功能僅限台股。
 
 Use [MIGRATION.md](MIGRATION.md) when old code imports enums from submodules. This file owns `Snapshot`, `Ticks`, `KBars`, scanner, and regulatory response handling. Python examples below use Python wrapper objects; HTTP/CLI clients must use the HTTP/CLI response notes in this file and fetch `/openapi.json` only when exact installed-server fields are required.
 
@@ -698,10 +698,10 @@ session calendar and fill no-trade minutes explicitly.
 
 ## US Market Data 美股歷史行情與快照
 
-US stocks (`region="US"`, 1.8.0b1 pre-release) use the same `api.snapshots()`,
+US stocks (`region="US"`, 1.8.0) use the same `api.snapshots()`,
 `api.ticks()` and `api.kbars()`. The SDK picks the US path from the contract
 (`region="US"` or a US exchange); Taiwan behaviour of all three is unchanged.
-美股（1.8.0b1 預發行版）沿用同一組函式，依合約的 region／交易所走美股路徑；
+美股（1.8.0 起）沿用同一組函式，依合約的 region／交易所走美股路徑；
 台股行為不變。
 
 | Rule | US behaviour 美股行為 |
@@ -710,7 +710,7 @@ US stocks (`region="US"`, 1.8.0b1 pre-release) use the same `api.snapshots()`,
 | Environment 環境 | The IDC test site has no US data and returns empty results. 測試站 IDC 沒有美股資料，回空。 |
 | Time 時間 | `ts` is true **UTC** epoch ns (not Taiwan wall clock). Decode as UTC; do not add or subtract hours by hand. ts 是真正的 UTC。 |
 | Numbers 數值 | Market-data values are `float` (not `Decimal`, unlike US orders and accounting). 行情用 float。 |
-| Session 時段 | `api.ticks()` and `api.kbars()` currently return the regular session only. 目前只有正規盤。 |
+| Session 時段 | `api.ticks()` and `api.kbars()` return the regular session by default. From 1.8.0 `sessions=` adds pre-market, after-hours and overnight. 預設只回正規盤；1.8.0 起可用 `sessions=` 加入盤前、盤後與夜盤。 |
 | Trade date 交易日 | `date` / `trade_date` is the US Eastern trade date. From around 2026-12-06 trade date D covers [D-1 20:00 ET, D 20:00 ET), so overnight trades and volume between 21:00 and 24:00 ET (session 4) belong to the next trade date. Regular-session dates are unchanged. 約 2026-12-06 起美股交易日以美東 20:00 換日（前一日 20:00 到當日 20:00），21:00–24:00 的夜盤成交與量歸下一交易日；正規盤日期不變。 |
 
 ```python
@@ -778,6 +778,15 @@ previous close. 盤前 open/high/low 為 0，close 為前一日收盤價。
 - `Amount` is an estimate. Amount 為估算值。
 - One request covers at most 30 days, same as Taiwan. 單次最多 30 天。
 - There are no US daily (1D) bars yet. 美股日 K 尚未提供。
+- From 1.8.0: `sessions=[...]` (a list of
+  `sj.UsTradingSession`) adds other sessions, and US `KBars` gets a `Session`
+  column (1 pre-market, 2 regular, 3 after-hours, 4 overnight). Taiwan bars
+  have no `Session` key, so `pd.DataFrame({**kbars})` works for both; passing
+  `sessions` for a Taiwan contract raises `ShioajiValueError`.
+  1.8.0 起：`sessions=[...]`（`sj.UsTradingSession` 清單）
+  可加入其他時段，美股 `KBars` 多一欄 `Session`（1 盤前、2 正規、3 盤後、4 夜盤）。
+  台股 K 棒沒有 `Session` 鍵，`pd.DataFrame({**kbars})` 兩邊都能用；台股合約傳
+  `sessions` 會丟 `ShioajiValueError`。
 
 ```python
 import pandas as pd
@@ -785,6 +794,16 @@ import pandas as pd
 kbars = api.kbars(aapl, start="2026-11-17", end="2026-11-18")
 df = pd.DataFrame({**kbars})
 df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert("America/New_York")
+```
+
+```python
+# From 1.8.0 1.8.0 起
+kbars = api.kbars(
+    aapl, start="2026-11-17", end="2026-11-18",
+    sessions=[sj.UsTradingSession.PreMarket, sj.UsTradingSession.Regular,
+              sj.UsTradingSession.AfterHours],
+)
+kbars.Session       # List[int]: 1 pre-market, 2 regular, 3 after-hours, 4 overnight
 ```
 
 ### US Ticks 美股逐筆
@@ -798,15 +817,27 @@ df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert("America/New_York")
   midnight: `21:00` to `01:00` means US Eastern 16:00 to 20:00 in winter (EST, UTC-5).
   If start is later than end after conversion, the result is empty.
   RangeTime 的起訖是 UTC 時刻，可跨 UTC 午夜；換算後起點晚於終點回空。
-- Only the regular session is returned (US Eastern 09:30 to the close),
+- Once overnight trading starts (2026-12-07), times at or after 21:00 ET
+  belong to the evening before trade date D, so a range inside D's 20:00 to
+  21:00 ET returns no rows (outside the trade day).
+  夜盤開始後（2026-12-07 起），美東 21:00 以後的時刻屬於交易日 D 前一晚，
+  落在 D 當天美東 20:00–21:00 之間的區間不屬於任何交易日，回空。
+  For the same reason a range that starts before 21:00 ET and ends between
+  21:00 and 04:00 ET (for example 15:00 to 22:00 ET) counts as reversed and
+  returns empty; query the overnight part with its own range.
+  同理，起點在美東 21:00 以前、終點在 21:00–04:00 之間（例如美東 15:00–22:00）
+  會被當成反向區間而回空；夜盤時段請分開查。
+- By default only the regular session is returned (US Eastern 09:30 to the close),
   including closing-auction trades that arrive after the close with
   `session == 3`. Do not filter on `session == 2`.
-  目前只回正規盤，含收盤後才到、`session == 3` 的收盤集合競價成交；不要只篩 `session == 2`。
+  預設只回正規盤，含收盤後才到、`session == 3` 的收盤集合競價成交；不要只篩 `session == 2`。
 - Rows with the same `ts` are separate trades in trade order; do not dedupe on `ts`.
   同一 ts 多筆是不同成交，順序即成交順序。
 - A reply holds at most **100000** rows with no error or flag. If
-  `len(ticks.ts) == 100000`, continue with RangeTime from the last `ts` as a
-  UTC time. 每次最多 10 萬筆，不報錯也沒有旗標；剛好 10 萬筆就從最後一筆 ts 的 UTC 時刻續查。
+  `len(ticks.ts) == 100000`, fetch the next page: with `offset` from 1.8.0
+  (see below), or with RangeTime from the last `ts` as a UTC time.
+  每次最多 10 萬筆，不報錯也沒有旗標；剛好 10 萬筆就續查下一頁：1.8.0 起用
+  `offset`（見下方），或從最後一筆 ts 的 UTC 時刻用 RangeTime 續查。
 
 ```python
 # 2026-11-18 US Eastern 09:30 to 10:00 = 14:30 to 15:00 UTC (EST, UTC-5)
@@ -835,10 +866,69 @@ ticks.updates_last  # List[bool]
 ticks.odd_lot       # List[bool]: odd-lot trade 零股成交
 ```
 
-Fetching a full day past the 100000-row cap. The continuation starts at a
-whole UTC second, so drop the rows of that second from the first part and let
+#### US Ticks Options 美股逐筆查詢選項
+
+Available from 1.8.0. These are keyword-only,
+US-only options; on a Taiwan contract `full=True`, any `sessions` or
+`offset > 0` raises `ShioajiValueError` before any request is sent.
+1.8.0 起提供。以下皆為只能用關鍵字傳入的美股選項；台股合約傳
+`full=True`、任何 `sessions` 或 `offset > 0` 會在送出前丟 `ShioajiValueError`。
+
+| Option 選項 | Default 預設 | Meaning 意義 |
+|---|---|---|
+| `full` | `False` | `False`: the realtime `QuoteType.Tick` (TICL) definition, the trades that update last price, high/low and inner/outer volume. `True`: every trade, like realtime `QuoteType.TickFull` (odd lots and special-condition trades included). It is about which kinds of trades, not the row count; rows are paged with `offset`. `False` 與即時 `QuoteType.Tick`（TICL）同定義；`True` 是每一筆成交，同即時 `QuoteType.TickFull`（含零股與特殊條件成交）。這是成交種類，不是筆數，筆數用 `offset` 分頁。 |
+| `sessions` | `None` (regular only 只有正規盤) | List of `sj.UsTradingSession` (`PreMarket`, `Regular`, `AfterHours`, `Overnight`). 時段清單。 |
+| `offset` | `0` | Rows to skip. With `query_type=LastCount` it skips from the tail (the `last_cnt` rows before the last `offset` rows), otherwise from the head. 要略過的筆數；`LastCount` 從尾端算，其他從頭算。 |
+
+```python
+ticks = api.ticks(
+    contract=aapl,
+    date="2026-11-18",
+    full=True,
+    sessions=[sj.UsTradingSession.PreMarket, sj.UsTradingSession.Regular,
+              sj.UsTradingSession.AfterHours],
+)
+```
+
+Paging with `offset`: start at `offset=0`, add the page length (100000) after
+each full page, and stop when a page returns fewer than 100000 rows. Intraday,
+page with a head offset (AllDay or RangeTime), not `last_cnt` + `offset`,
+because the tail keeps moving as new trades arrive.
+用 `offset` 分頁：從 `offset=0` 開始，每拿到滿 10 萬筆就加 100000，回傳少於 10 萬筆即結束。
+盤中請用從頭算的 offset（AllDay 或 RangeTime），不要用 `last_cnt` + `offset`，因為尾端會隨新成交一直移動。
+
+```python
+import time
+
+LIMIT = 100_000
+offset = 0
+parts = []
+while True:
+    page = api.ticks(contract=aapl, date="2026-11-18", full=True, offset=offset)
+    parts.append({**page})
+    if len(page.ts) < LIMIT:
+        break
+    offset += LIMIT
+    time.sleep(0.2)   # pace the loop; see the usage note below 控制迴圈速度
+```
+
+Each page is one quote query and counts toward the quote-query rate limit
+(50 requests / 10 sec) and the daily traffic quota listed in
+[SKILL.md Rate Limits](../SKILL.md#rate-limits--速率限制). A `full=True` day
+of an active stock can take many pages, so pace paging loops, check
+`api.usage()` before large backfills, and treat an empty page as a possible
+quota hit ([TROUBLESHOOTING.md](TROUBLESHOOTING.md#historical-data-returns-empty-歷史行情回傳空資料)).
+每一頁都是一次行情查詢，計入行情查詢速率限制（每 10 秒 50 次）與每日流量額度，見
+[SKILL.md 速率限制](../SKILL.md#rate-limits--速率限制)。熱門股 `full=True` 一天可能要很多頁，
+分頁迴圈請控制速度，大量回補前先查 `api.usage()`，回空時先懷疑額度用完
+（[TROUBLESHOOTING.md](TROUBLESHOOTING.md#historical-data-returns-empty-歷史行情回傳空資料)）。
+
+#### US Ticks Paging on 1.8.0 1.8.0 的分頁方式
+
+On 1.8.0 (no `offset` yet), continue past the 100000-row cap with RangeTime.
+The continuation starts at a whole UTC second, so drop the rows of that second from the first part and let
 the next reply return them, instead of deduplicating on `ts`:
-超過 10 萬筆時分段續查；續查從整秒開始，先把前一段該秒的列去掉，不要用 ts 去重：
+1.8.0 還沒有 `offset`，超過 10 萬筆時用 RangeTime 分段續查；續查從整秒開始，先把前一段該秒的列去掉，不要用 ts 去重：
 
 ```python
 import datetime as dt
@@ -880,6 +970,14 @@ curl -X POST http://localhost:8080/api/v1/data/ticks \
   -d '{"contract": {"security_type": "STK", "region": "US", "exchange": "NASDAQ", "code": "AAPL"},
        "date": "2026-11-18", "query_type": "RangeTime",
        "time_start": "14:30:00", "time_end": "15:00:00"}'
+
+# From 1.8.0: every trade, extended sessions, second page
+# 1.8.0 起：每一筆成交、延長時段、第二頁
+curl -X POST http://localhost:8080/api/v1/data/ticks \
+  -H "Content-Type: application/json" \
+  -d '{"contract": {"security_type": "STK", "region": "US", "exchange": "NASDAQ", "code": "AAPL"},
+       "date": "2026-11-18", "full": true,
+       "sessions": ["PreMarket", "Regular", "AfterHours"], "offset": 100000}'
 ```
 
 - Snapshots: each row carries `region` (`"TW"` / `"US"`), the OpenAPI
@@ -891,10 +989,18 @@ curl -X POST http://localhost:8080/api/v1/data/ticks \
   `session` as names, and `null` in the bid/ask columns.
 - K-bars: same `KBars` JSON; for US the `datetime` strings have no offset and
   are UTC (bar end).
+- From 1.8.0: ticks take `full` (boolean),
+  `sessions` (names or ints 1-4) and `offset`; kbars take `sessions` and a US
+  reply adds a `Session` column (names). Taiwan requests with these options
+  get HTTP 400. 1.8.0 起：ticks 可帶 `full`（布林）、
+  `sessions`（名稱或 1–4）與 `offset`；kbars 可帶 `sessions`，美股回覆多 `Session`
+  欄（名稱）。台股請求帶這些選項回 HTTP 400。
 
-The CLI `data snapshots` / `ticks` / `kbars` commands look codes up in Taiwan
-only, so use Python or HTTP for US data. CLI 的 data 指令只查台股代碼，美股請用
-Python 或 HTTP。
+The CLI `data snapshots` command looks codes up in Taiwan only. From 1.8.0,
+`data ticks` and `data kbars` take `--region US` (plus `--full`, `--sessions`,
+`--offset`; see [CLI.md](CLI.md#data-ticks)); before that use Python or HTTP for
+US data. CLI 的 `data snapshots` 只查台股代碼；1.8.0 起 `data ticks`／`data kbars`
+可加 `--region US`（及 `--full`、`--sessions`、`--offset`），之前美股請用 Python 或 HTTP。
 
 ---
 

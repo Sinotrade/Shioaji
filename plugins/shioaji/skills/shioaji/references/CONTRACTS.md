@@ -63,7 +63,7 @@ print(
 | `security_type` | Python info type | Examples of type-specific fields |
 |-----------------|------------------|---------------------------------|
 | `STK` | `StockInfo` | `currency`, `unit`, `day_trade`, `reference`, margin/short fields |
-| `STK` (`region="US"`, 1.8.0b1) | `UsStockInfo` | `instrument_type`, `exchange_mic`, `round_lot`, `industry_l1/l2`, ETF fields |
+| `STK` (`region="US"`, 1.8.0) | `UsStockInfo` | `instrument_type`, `exchange_mic`, `round_lot`, `industry_l1/l2`, ETF fields |
 | `IND` | `IndexInfo` | `reference`, `open_time`, `close_time` |
 | `FUT` | `FuturesInfo` | `root`, `delivery_month`, `multiplier`, `tick_rule`, limits |
 | `OPT` | `OptionInfo` | `root`, `strike_price`, `option_right`, `expiry_weekday`, `tick_rule` |
@@ -210,13 +210,12 @@ txo_chain = await api.contracts.options("TXO")
 
 ## US Stocks 美股
 
-> **1.8.0b1 pre-release.** US stocks (contracts, orders, active reports,
-> accounting, quotes) ship in 1.8.0b1 (`pip install --pre shioaji` or
-> `shioaji==1.8.0b3`). Only `security_type="STK"` exists for US; HK and other
+> **1.8.0.** US stocks (contracts, orders, active reports,
+> accounting, quotes) ship in 1.8.0. Only `security_type="STK"` exists for US; HK and other
 > markets are not supported. Orders → [ORDERS.md § US Stock Orders](ORDERS.md#us-stock-orders-美股下單),
 > quotes → [STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情),
 > accounting → [ACCOUNTING.md § IntlAccount](ACCOUNTING.md#intlaccount-美股帳戶).
-> **1.8.0b1 預發行版**起支援美股（商品檔、下單、回報、帳務、行情）；美股只有 STK，港股等其他市場不支援。
+> **1.8.0** 起支援美股（商品檔、下單、回報、帳務、行情）；美股只有 STK，港股等其他市場不支援。
 
 A US contract is resolved by `{region, exchange, security_type, code}`.
 `exchange` is one of `NASDAQ`, `NYSE` (incl. NYSE Arca and NYSE American),
@@ -240,6 +239,9 @@ if info.instrument_type == "ETF":
   defaults to the exchange's region, else `TW`. With `exchange`, a contract
   listed on another exchange returns `None`; an exchange from another region
   raises `ValueError`.
+- Always pass `region="US"` or a US `exchange` for a US contract. With
+  neither, `get` searches Taiwan only, so `get("AAPL")` returns `None`.
+  查美股一定要帶 `region="US"` 或美股的 `exchange`；兩者都沒帶只會查台股，`get("AAPL")` 會回 `None`。
 - `api.contracts.list("STK", region="US")` returns every US stock base.
 - `UsStockInfo` has US-only fields (`exchange_mic`, `instrument_type`,
   `round_lot`, `industry_l1/l2`, ETF fields …) and no TW rule fields. US info

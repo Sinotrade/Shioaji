@@ -196,10 +196,10 @@ shioaji watchlist create --name "Futures" --codes TXFR1 --security-type FUT
 
 ### US Stocks 美股自選股
 
-Since 1.8.0b1 a watchlist contract carries `region` next to `exchange`. A US
+Since 1.8.0 a watchlist contract carries `region` next to `exchange`. A US
 stock must be sent with `region="US"` and its real exchange (`NASDAQ`, `NYSE`,
 `BATS` or `TXSE`), which is what a US contract from Contract V2 already holds.
-1.8.0b1 起自選股合約帶 `region`；美股要帶 `region="US"` 與實際交易所（NASDAQ／NYSE／BATS／TXSE），用 Contract V2 查到的美股商品即可。
+1.8.0 起自選股合約帶 `region`；美股要帶 `region="US"` 與實際交易所（NASDAQ／NYSE／BATS／TXSE），用 Contract V2 查到的美股商品即可。
 
 ```python
 aapl = api.contracts.get("AAPL", region="US")    # BaseContract(region="US", exchange="NASDAQ")

@@ -375,17 +375,17 @@ Shioaji prepare status:
 Shioaji can be installed as a Python package or as a standalone CLI binary.
 Shioaji 可作為 Python 套件或獨立 CLI 二進制檔安裝。
 
-Choose the command by intent: new Python project -> `uv add shioaji`; one-off Python without a project -> `uv run --with shioaji python ...`; one-off CLI/server -> `uvx --from shioaji shioaji ...`; persistent CLI install -> `uv tool install shioaji`.
-依目標選指令:新 Python 專案 -> `uv add shioaji`;不創專案的一次性 Python -> `uv run --with shioaji python ...`;一次性 CLI/server -> `uvx --from shioaji shioaji ...`;長期安裝 CLI -> `uv tool install shioaji`。
+Choose the command by intent: new Python project -> `uv add "shioaji==1.8.*"`; one-off Python without a project -> `uv run --with shioaji python ...`; one-off CLI/server -> `uvx --from shioaji shioaji ...`; persistent CLI install -> `uv tool install shioaji`.
+依目標選指令:新 Python 專案 -> `uv add "shioaji==1.8.*"`;不創專案的一次性 Python -> `uv run --with shioaji python ...`;一次性 CLI/server -> `uvx --from shioaji shioaji ...`;長期安裝 CLI -> `uv tool install shioaji`。
 
 ### Python Package 套件安裝
 
 ```bash
-# uv (recommended 推薦)
-uv add shioaji
+# uv (recommended 推薦) — pin the release line 鎖版本線, see Version Pinning
+uv add "shioaji==1.8.*"
 
 # pip (alternative)
-pip install shioaji
+pip install "shioaji==1.8.*"
 ```
 
 ### CLI Tool Install CLI 工具安裝
@@ -406,7 +406,7 @@ From 1.7.9 the CLI is also published alone as `shioaji-cli`: the same native bin
 1.7.9 起 CLI 另外單獨發佈為 `shioaji-cli`：同一個原生執行檔，包成不綁 Python 版本的 wheel（free-threaded 3.14t 也可裝），不含 Python 擴充模組。只需要 CLI 或本機 HTTP server 時用它；版本永遠和 `shioaji` 相同。
 
 ```bash
-uv tool install shioaji-cli          # or pin the line 或鎖版本線: "shioaji-cli==1.7.*"
+uv tool install shioaji-cli          # or pin the line 或鎖版本線: "shioaji-cli==1.8.*"
 uvx --from shioaji-cli shioaji server start
 ```
 
@@ -415,28 +415,41 @@ Install one or the other: both put a `shioaji` command on `PATH`, so installing 
 
 ### Version Pinning 鎖版號
 
-Shioaji's compatibility promise: releases that share the first two version parts never make incompatible changes. Every 1.5.x is compatible with other 1.5.x releases, and every 1.7.x with other 1.7.x releases; patch releases only add fixes or backward-compatible additions. Incompatible changes only happen when the first two parts change (for example 1.5 to 1.7).
-Shioaji 相容性承諾：前兩碼相同的版本之間不會有不相容的異動。1.5.x 之間彼此相容、1.7.x 之間彼此相容，修正版只會加修正或向下相容的新增功能；不相容的異動只會出現在前兩碼改變時（例如 1.5 到 1.7）。
+Shioaji's compatibility promise: releases that share the first two version parts never make incompatible changes. Every 1.5.x is compatible with other 1.5.x releases, every 1.7.x with other 1.7.x releases, and every 1.8.x with other 1.8.x releases; patch releases only add fixes or backward-compatible additions. Incompatible changes only happen when the first two parts change (for example 1.7 to 1.8).
+Shioaji 相容性承諾：前兩碼相同的版本之間不會有不相容的異動。1.5.x、1.7.x、1.8.x 各自之間彼此相容，修正版只會加修正或向下相容的新增功能；不相容的異動只會出現在前兩碼改變時（例如 1.7 到 1.8）。
 
 Pin only the first two version parts (the release line), never an exact patch version. PyPI keeps only the latest two patch releases of each line (for example two 1.7.x and two 1.5.x), so an exact pin such as `shioaji==1.7.3` stops installing once that release is removed, while a line pin keeps receiving fixes.
 只鎖前兩碼（版本線），不要鎖到第三碼。PyPI 每條版本線只保留最新兩個修正版（例如 1.7.x 兩版、1.5.x 兩版），鎖死 `shioaji==1.7.3` 這種版本在舊版移除後就會裝不到；鎖版本線則會持續拿到修正。
 
 ```bash
-# Python project 專案
+# First install 首次安裝 (pin the line 鎖版本線)
+uv add "shioaji==1.8.*"   # US stocks 美股
 uv add "shioaji==1.7.*"
+uv add "shioaji==1.5.*"
 
-# pip / existing environment 既有環境
-python -m pip install -U "shioaji==1.7.*"
+# Upgrade within the pinned line 版本升級（同版本線）
+uv sync -P shioaji
+
+# Switch line 換版本線 (e.g. 1.7 → 1.8)
+uv add "shioaji==1.8.*"
+
+# pip / existing environment 既有環境 (alternative)
+python -m pip install -U "shioaji==1.8.*"
 
 # CLI tool CLI 工具
-uv tool install --force "shioaji==1.7.*"
+uv tool install "shioaji==1.8.*"          # first install 首次安裝
+uv tool upgrade shioaji                    # upgrade within the line 同版本線升級
+uv tool install --force "shioaji==1.8.*"  # switch line 換版本線
 
 # requirements.txt / pyproject dependency 依賴寫法
-shioaji==1.7.*
+shioaji==1.8.*
 ```
 
-Use `shioaji==1.5.*` for code that must stay on the 1.5 stable API (for example before migrating to Contract V2), and `shioaji==1.7.*` for 1.7 features.
-程式必須維持 1.5 穩定版 API 時（例如尚未遷移到 Contract V2）用 `shioaji==1.5.*`；要用 1.7 功能則用 `shioaji==1.7.*`。
+`uv sync -P shioaji` and `uv tool upgrade shioaji` only upgrade within the pinned line; switching to another line needs the `uv add` / `uv tool install --force` command with the new line.
+`uv sync -P shioaji` 與 `uv tool upgrade shioaji` 只會在鎖定的版本線內升級；換版本線要用新版本線重下 `uv add`／`uv tool install --force`。
+
+Use `shioaji==1.5.*` for code that must stay on the 1.5 stable API (for example before migrating to Contract V2), `shioaji==1.7.*` for 1.7 features, and `shioaji==1.8.*` for US stocks.
+程式必須維持 1.5 穩定版 API 時（例如尚未遷移到 Contract V2）用 `shioaji==1.5.*`；要用 1.7 功能則用 `shioaji==1.7.*`；要用美股則用 `shioaji==1.8.*`。
 
 ### Standalone Binary 獨立二進制檔
 

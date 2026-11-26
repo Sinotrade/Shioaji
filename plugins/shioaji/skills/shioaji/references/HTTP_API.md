@@ -383,11 +383,11 @@ All stream data endpoints use Server-Sent Events (SSE). Connect with `Accept: te
 | GET | `/api/v1/stream/data/quote_stk` | Yes | Stock quote data stream |
 | GET | `/api/v1/stream/data/quote_fop` | Yes | Futures/options quote data stream |
 | GET | `/api/v1/stream/data/quote_idx` | Yes | Index quote data stream |
-| GET | `/api/v1/stream/data/us_tick` | Yes | US trade stream with `freshness` (1.8.0b1; production only); carries both `Tick` (trimmed) and `TickFull` subscriptions — [STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情) |
-| GET | `/api/v1/stream/data/us_bidask` | Yes | US best bid/ask stream with `freshness` (1.8.0b1; production only) |
-| POST | `/api/v1/stream/subscribe/us_halt` | Yes | Subscribe the US halt feed `IS/v1/HALT/US` (no body) |
-| POST | `/api/v1/stream/unsubscribe/us_halt` | Yes | Unsubscribe the US halt feed and clear the halt book |
-| GET | `/api/v1/stream/data/us_halt` | Yes | US halt / resumption event stream |
+| GET | `/api/v1/stream/data/tick_stk_us` | Yes | US trade stream with `freshness` (1.8.0); carries both `Tick` (trimmed) and `TickFull` subscriptions — [STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情) |
+| GET | `/api/v1/stream/data/bidask_stk_us` | Yes | US best bid/ask stream with `freshness` (1.8.0) |
+| POST | `/api/v1/stream/subscribe/halt_stk_us` | Yes | Subscribe the US halt feed `IS/v1/HALT/US` (no body) |
+| POST | `/api/v1/stream/unsubscribe/halt_stk_us` | Yes | Unsubscribe the US halt feed and clear the halt book |
+| GET | `/api/v1/stream/data/halt_stk_us` | Yes | US halt / resumption event stream |
 | GET | `/api/v1/stream/us_halts` | Yes | Currently halted entries seen since subscribing (JSON, not SSE) |
 | GET | `/api/v1/stream/us_tradable` | Yes | `?exchange=NASDAQ&code=AAPL`: tradable per received halt events (JSON, not SSE) |
 | GET | `/api/v1/stream/data/kbar` | Yes | Realtime KBar stream |
@@ -554,7 +554,7 @@ Request:
 }
 ```
 
-- `account_type`: `"S"` (stock), `"F"` (futures/options) or `"H"` (IntlAccount, US stock; 1.8.0b1). Subscribe the IntlAccount to receive US `IntlOrder` / `IntlDeal` reports.
+- `account_type`: `"S"` (stock), `"F"` (futures/options) or `"H"` (IntlAccount, US stock; 1.8.0). Subscribe the IntlAccount to receive US `IntlOrder` / `IntlDeal` reports.
 - Omit `broker_id`/`account_id` to subscribe the default account of `account_type` (for the IntlAccount, the first one).
 
 Response (200):
@@ -607,6 +607,16 @@ Get tick data for a contract.
 
 `query_type`: `"AllDay"` or `"LastCount"`. Optional fields: `time_start`, `time_end`.
 
+US only, from 1.8.0 美股限定，1.8.0 起:
+
+| Field 欄位 | Default 預設 | Meaning 意義 |
+|---|---|---|
+| `full` | `false` | `true`: every trade, like realtime `TickFull` (odd lots, special-condition trades); `false`: the realtime `Tick` (TICL) definition. Not about row count. 每一筆成交（同即時 TickFull），不是筆數 |
+| `sessions` | omitted (regular only 只有正規盤) | Array of `"PreMarket"`, `"Regular"`, `"AfterHours"`, `"Overnight"` (or ints 1-4) 時段 |
+| `offset` | `0` | Rows to skip: from the tail with `"LastCount"`, else from the head. At most 100000 rows per reply; page by adding 100000. 略過筆數，每次最多 10 萬筆 |
+
+A Taiwan contract with `full: true`, `sessions` or `offset > 0` gets HTTP 400. 台股合約帶這些選項回 HTTP 400。
+
 #### POST `/api/v1/data/kbars`
 
 Get K-bar (OHLCV) data.
@@ -619,7 +629,10 @@ Get K-bar (OHLCV) data.
 }
 ```
 
-US contracts (1.8.0b1): the three endpoints above also take US stocks; send `"region": "US"` and the real exchange (e.g. `{"security_type": "STK", "region": "US", "exchange": "NASDAQ", "code": "AAPL"}`). Snapshots may mix Taiwan and US contracts (max 2500) and return rows in request order, each tagged `"region": "TW"` (Snapshot) or `"US"` (UsSnapshot, integer UTC-ns `ts`, `trade_date`). A US ticks reply is `UsTicks` (integer UTC-ns `ts` column, `session`, `updates_last`, `odd_lot`, nullable bid/ask); `date` is the US Eastern trade date (rolls over at 20:00 ET from around 2026-12-06) and `time_start` / `time_end` (`"RangeTime"`) are UTC times; at most 100000 rows per reply. US K-bars use the same `KBars` JSON with UTC bar-end `datetime`, regular session only. History starts 2026-10-27. Details: [MARKET_DATA.md § US Market Data](MARKET_DATA.md#us-market-data-美股歷史行情與快照).
+US only, from 1.8.0: optional `sessions` (same values as ticks); a US reply then adds a `Session` column (names). Taiwan replies have no `Session` key; a Taiwan request with `sessions` gets HTTP 400.
+美股限定，1.8.0 起：可帶 `sessions`（同 ticks），美股回覆多 `Session` 欄（名稱）；台股回覆沒有 `Session`，台股請求帶 `sessions` 回 HTTP 400。
+
+US contracts (1.8.0): the three endpoints above also take US stocks; send `"region": "US"` and the real exchange (e.g. `{"security_type": "STK", "region": "US", "exchange": "NASDAQ", "code": "AAPL"}`). Snapshots may mix Taiwan and US contracts (max 2500) and return rows in request order, each tagged `"region": "TW"` (Snapshot) or `"US"` (UsSnapshot, integer UTC-ns `ts`, `trade_date`). A US ticks reply is `UsTicks` (integer UTC-ns `ts` column, `session`, `updates_last`, `odd_lot`, nullable bid/ask); `date` is the US Eastern trade date (rolls over at 20:00 ET from around 2026-12-06) and `time_start` / `time_end` (`"RangeTime"`) are UTC times; at most 100000 rows per reply. US K-bars use the same `KBars` JSON with UTC bar-end `datetime`, regular session by default. History starts 2026-10-27. Details: [MARKET_DATA.md § US Market Data](MARKET_DATA.md#us-market-data-美股歷史行情與快照).
 
 #### POST `/api/v1/data/daily_quotes`
 
@@ -701,7 +714,7 @@ Omit both `page` and `page_size` to return all Base records for the selected typ
 
 #### GET `/api/v1/data/contracts/{code}`
 
-Look up one Base contract by `{region, exchange, security_type, code}`. Optional query parameters are `region` (default `TW`), `security_type`, and `exchange`. When `security_type` is omitted, the server searches types in that region; provide it when the code is ambiguous or the caller requires an exact type. With `exchange`, a contract listed on another exchange returns 404; an exchange from another region (e.g. `region=TW&exchange=NASDAQ`) returns 400. US exchanges are `NASDAQ`, `NYSE`, `BATS`, `TXSE` (1.8.0b1; see [CONTRACTS.md § US Stocks](CONTRACTS.md#us-stocks-美股)).
+Look up one Base contract by `{region, exchange, security_type, code}`. Optional query parameters are `region` (default `TW`), `security_type`, and `exchange`. When `security_type` is omitted, the server searches types in that region; provide it when the code is ambiguous or the caller requires an exact type. With `exchange`, a contract listed on another exchange returns 404; an exchange from another region (e.g. `region=TW&exchange=NASDAQ`) returns 400. US exchanges are `NASDAQ`, `NYSE`, `BATS`, `TXSE` (1.8.0; see [CONTRACTS.md § US Stocks](CONTRACTS.md#us-stocks-美股)).
 
 ```bash
 curl "http://localhost:8080/api/v1/data/contracts/IX0001?region=TW&security_type=IND"
@@ -718,7 +731,7 @@ curl "http://localhost:8080/api/v1/data/contracts/2330/info?region=TW&security_t
 
 For TW stocks, a missing source currency is normalized to `TWD`. Boolean and integer fields are emitted as JSON booleans and numbers, not strings.
 
-Every info record carries `dataset` = `"{region}/{security_type}"` (`TW/STK`, `US/STK`, `TW/IND`, `TW/FUT`, `TW/OPT`, `TW/WRT`). It is the single OpenAPI discriminator of the info `oneOf` (with an explicit mapping), so generated clients should dispatch on `dataset`, not `security_type`: US stocks (`region=US`, 1.8.0b1) also use `"security_type": "STK"` but have a different shape (`UsStockContractInfoRecord` vs `StockContractInfoRecord`). US info has no TW rule fields and emits coded fields as raw codes: strings for `exchange_mic`, `instrument_type`, `classification_source`; integers for `industry_l1`, `industry_l2`, `fund_category`, `dividend_frequency`. `isin` is `null` until licensing is confirmed, and `dividend_frequency` is set only for ETF/ETN (weekly ICE fund master); stocks return `null`. Codes newer than the server's SDK are passed through unchanged, so clients should tolerate unknown values. Code tables: [CONTRACT_FIELDS.md § UsStockInfo](CONTRACT_FIELDS.md#usstockinfo-attributes-美股資訊屬性).
+Every info record carries `dataset` = `"{region}/{security_type}"` (`TW/STK`, `US/STK`, `TW/IND`, `TW/FUT`, `TW/OPT`, `TW/WRT`). It is the single OpenAPI discriminator of the info `oneOf` (with an explicit mapping), so generated clients should dispatch on `dataset`, not `security_type`: US stocks (`region=US`, 1.8.0) also use `"security_type": "STK"` but have a different shape (`UsStockContractInfoRecord` vs `StockContractInfoRecord`). US info has no TW rule fields and emits coded fields as raw codes: strings for `exchange_mic`, `instrument_type`, `classification_source`; integers for `industry_l1`, `industry_l2`, `fund_category`, `dividend_frequency`. `isin` is `null` until licensing is confirmed, and `dividend_frequency` is set only for ETF/ETN (weekly ICE fund master); stocks return `null`. Codes newer than the server's SDK are passed through unchanged, so clients should tolerate unknown values. Code tables: [CONTRACT_FIELDS.md § UsStockInfo](CONTRACT_FIELDS.md#usstockinfo-attributes-美股資訊屬性).
 
 ```bash
 curl "http://localhost:8080/api/v1/data/contracts/AAPL/info?region=US&security_type=STK"
@@ -1006,7 +1019,7 @@ They are a local snapshot, not an authoritative reconciliation: use
 `refresh: true` when active reports may have been missed or final status must be
 confirmed.
 
-US trades (1.8.0b1) live under the IntlAccount: send `{"account_type": "H"}`
+US trades (1.8.0) live under the IntlAccount: send `{"account_type": "H"}`
 (first IntlAccount) or the IntlAccount's `broker_id` / `account_id`. A refreshed US
 trade may carry one cumulative deal (`seq` `"1"`, `ts` 0) for everything filled
 so far instead of one deal per fill; see ORDERS.md, US Order Reports. The same `account_type: "H"` works
@@ -1252,10 +1265,10 @@ overnight round-lot trades at a valid price, which carry `updates_last=false`;
 odd lots and special-condition trades are left out and `serial_num` skips,
 while `total_volume` stays cumulative), `"TickFull"` the
 full stream (`IS/v1/TIC`, every trade incl. odd lots; `serial_num` is shared with BidAsk).
-Both arrive as `us_tick` events; subscribing both for one contract delivers
+Both arrive as `tick_stk_us` events; subscribing both for one contract delivers
 the shared trades twice. `"TickFull"` on a Taiwan contract is rejected.
 Details: [STREAMING.md § US Quotes](STREAMING.md#us-quotes-美股行情).
-美股 `"Tick"` 是精簡成交（正規盤會更新最新價的成交，加上盤前、盤後、夜盤的整股有效價成交，後者 `updates_last=false`；零股與特殊條件成交不送、序號會跳號，累計量仍完整），`"TickFull"` 是全部成交（含零股；`serial_num` 與 BidAsk 共用，只訂 `TickFull` 也會跳號）；兩者都以 `us_tick` 事件送出，同一檔兩個都訂會重複收到。台股不能用 `"TickFull"`。
+美股 `"Tick"` 是精簡成交（正規盤會更新最新價的成交，加上盤前、盤後、夜盤的整股有效價成交，後者 `updates_last=false`；零股與特殊條件成交不送、序號會跳號，累計量仍完整），`"TickFull"` 是全部成交（含零股；`serial_num` 與 BidAsk 共用，只訂 `TickFull` 也會跳號）；兩者都以 `tick_stk_us` 事件送出，同一檔兩個都訂會重複收到。台股不能用 `"TickFull"`。
 
 For HTTP subscriptions to futures continuous-month aliases such as `TXFR1`/`TXFR2`, first call `GET /api/v1/data/contracts/TXFR1?security_type=FUT` and copy the returned `target_code` into the subscribe body. Regular futures codes do not need this. If `target_code` is missing for `TXFR1`/`TXFR2`, the server can return `200` while the SSE stream only emits heartbeats.
 

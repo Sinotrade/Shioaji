@@ -445,12 +445,11 @@ trade = api.place_order(contract, order)
 
 ## US Stock Orders 美股下單
 
-Since 1.8.0b1 (pre-release: `pip install --pre shioaji` or
-`shioaji==1.8.0b3`). US stock orders use the same `StockOrder`, `place_order`,
+Since 1.8.0. US stock orders use the same `StockOrder`, `place_order`,
 `update_order`, `cancel_order`, `update_status` and `list_trades` as Taiwan
 orders. They need an IntlAccount (`account_type == sj.AccountType.Intl`, 複委託帳戶) and a US
 contract. HK and other markets cannot be ordered.
-1.8.0b1（預發行版）起支援。美股下單沿用 `StockOrder` 與同一組下單、改單、刪單、查詢 API，但要用複委託國際帳戶（IntlAccount，`account_type == sj.AccountType.Intl`）和美股商品；港股等其他市場不可下單。
+1.8.0 起支援。美股下單沿用 `StockOrder` 與同一組下單、改單、刪單、查詢 API，但要用複委託國際帳戶（IntlAccount，`account_type == sj.AccountType.Intl`）和美股商品；港股等其他市場不可下單。
 
 Contents: [order fields](#us-order-fields-美股委託欄位) ·
 [local checks and errors](#us-local-checks-and-errors-美股本地檢查與錯誤) ·
@@ -938,7 +937,7 @@ curl -X POST http://localhost:8080/api/v1/order/trade_cache_health \
 | `{"account_type":"S"}` | Default stock account 預設股票帳戶 |
 | `{"account_type":"F"}` | Default futures/options account 預設期貨／選擇權帳戶 |
 | `{}` | Same as `S` 視為 `S` |
-| `{"account_type":"H"}` | First IntlAccount (US stock) (1.8.0b1) 第一個國際帳戶（IntlAccount，美股） |
+| `{"account_type":"H"}` | First IntlAccount (US stock) (1.8.0) 第一個國際帳戶（IntlAccount，美股） |
 | `{"broker_id":"9A95","account_id":"1234567"}` | That specific account; `account_type` may be omitted 指定帳戶，`account_type` 可省略 |
 | `account_type` other than `S`/`F`/`H` 非 `S`/`F`/`H` | HTTP 400 `Invalid account_type` |
 
@@ -1086,10 +1085,10 @@ Shioaji 將這個功能稱為 `order_deal_event`：在 `place_order`、`update_o
 | `OrderState.StockDeal` / `SDEAL` | Stock deal / partial fill / fill | dict-like event with `trade_id`, `seqno`, `ordno`, `exchange_seq`, `broker_id`, `account_id`, `action`, `code`, `order_cond`, `order_lot`, `price`, `quantity`, `web_id`, `custom_field`, `ts` | `{"state":"StockDeal","data":{"StockDeal":{...}}}` |
 | `OrderState.FuturesOrder` / `FORDER` | Futures/options order accepted/updated/cancelled | dict-like event with `operation`, `order`, `status`, `contract` | `{"state":"FuturesOrder","data":{"FuturesOrder":{...}}}` |
 | `OrderState.FuturesDeal` / `FDEAL` | Futures/options deal / partial fill / fill | dict-like event with `trade_id`, `seqno`, `ordno`, `exchange_seq`, `broker_id`, `account_id`, `action`, `code`, `price`, `quantity`, `subaccount`, `security_type`, `delivery_month`, `full_code`, `strike_price`, `option_right`, `market_type`, `combo`, `ts` | `{"state":"FuturesDeal","data":{"FuturesDeal":{...}}}` |
-| `OrderState.IntlOrder` / `IORDER` | US stock order accepted/reduced/cancelled/rejected (1.8.0b1) | dict-like event with `operation`, `order`, `status`, `contract` ([fields](#us-order-reports-美股回報)) | `{"state":"IntlOrder","data":{"IntlOrder":{...}}}` |
-| `OrderState.IntlDeal` / `IDEAL` | US stock fill (1.8.0b1) | dict-like event with `trade_id`, `seqno`, `ordno`, `exchange_seq`, `broker_id`, `account_id`, `action`, `code`, `region`, `price`, `quantity`, `web_id`, `ts` | `{"state":"IntlDeal","data":{"IntlDeal":{...}}}` |
+| `OrderState.IntlOrder` / `IORDER` | US stock order accepted/reduced/cancelled/rejected (1.8.0) | dict-like event with `operation`, `order`, `status`, `contract` ([fields](#us-order-reports-美股回報)) | `{"state":"IntlOrder","data":{"IntlOrder":{...}}}` |
+| `OrderState.IntlDeal` / `IDEAL` | US stock fill (1.8.0) | dict-like event with `trade_id`, `seqno`, `ordno`, `exchange_seq`, `broker_id`, `account_id`, `action`, `code`, `region`, `price`, `quantity`, `web_id`, `ts` | `{"state":"IntlDeal","data":{"IntlDeal":{...}}}` |
 
-All six payloads expose top-level `event_id: str` (1.7.6+; US since 1.8.0b1). Live reports require a
+All six payloads expose top-level `event_id: str` (1.7.6+; US since 1.8.0). Live reports require a
 nonempty ID. Historical `order_deal_records()` returns `""` when no ID was
 saved; skip ID-based deduplication and sequence tracking for these records.
 Treat the ID as an opaque string and preserve it exactly.
@@ -1190,8 +1189,8 @@ sj.OrderState.StockOrder  # 股票委託回報
 sj.OrderState.StockDeal   # 股票成交回報
 sj.OrderState.FuturesOrder  # 期貨委託回報
 sj.OrderState.FuturesDeal   # 期貨成交回報
-sj.OrderState.IntlOrder     # 美股委託回報 (IORDER, 1.8.0b1)
-sj.OrderState.IntlDeal      # 美股成交回報 (IDEAL, 1.8.0b1)
+sj.OrderState.IntlOrder     # 美股委託回報 (IORDER, 1.8.0)
+sj.OrderState.IntlDeal      # 美股成交回報 (IDEAL, 1.8.0)
 ```
 
 ### Handle Different Events 處理不同事件

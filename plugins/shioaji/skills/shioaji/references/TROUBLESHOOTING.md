@@ -422,22 +422,26 @@ the fixes are opposite.
 | Symptom / detail | Cause | Fix |
 |---|---|---|
 | `操作異常，請1分鐘後再重新登入` | Temporary rate-limit ban. The account/IP has exceeded a request-rate guardrail, so the backend blocks the whole session path; even `login()` can return 503 during the ban window. | Stop retry loops. Wait at least one minute without sending more login/API requests, then reduce request rate, replace polling with streaming, batch/cache repeated queries, and add client-side backoff. |
-| `Please update the version of shioaji ...` followed by `Not authenticated` on later calls | Version rejected by the server. Known bad yanked 1.5.x releases are not accepted; PyPI marks `1.5.0` and `1.5.1` yanked, and as of 2026-06-25 `1.5.2` is also yanked. | Upgrade to the latest release of your line (`shioaji==1.5.*` or `shioaji==1.7.*`), then restart the Python process or `shioaji server` daemon and login again. |
+| `Please update the version of shioaji ...` followed by `Not authenticated` on later calls | Version rejected by the server. Known bad yanked 1.5.x releases are not accepted; PyPI marks `1.5.0` and `1.5.1` yanked, and as of 2026-06-25 `1.5.2` is also yanked. | Upgrade to the latest release of your line with `uv sync -P shioaji` (lines: `shioaji==1.5.*`, `1.7.*` or `1.8.*`); if the required version is on a newer line, switch with `uv add "shioaji==X.Y.*"`. Then restart the Python process or `shioaji server` daemon and login again. |
 
 | 症狀 / detail | 成因 | 修法 |
 |---|---|---|
 | `操作異常，請1分鐘後再重新登入` | 暫時限流 ban。帳號/IP 超過 request-rate 防護後，後端會擋住整個 session path；ban 期間連 `login()` 都可能回 503。 | 停止重試迴圈。至少一分鐘內不要再送 login/API request，再降低頻率、用 streaming 取代輪詢、批次/快取重複查詢，並加入 client-side backoff。 |
-| `Please update the version of shioaji ...`，後續呼叫又出現 `Not authenticated` | 版本被伺服器拒收。已知有問題的 yanked 1.5.x 版本不被接受；PyPI 標記 `1.5.0`、`1.5.1` 為 yanked，截至 2026-06-25 `1.5.2` 也被標記為 yanked。 | 升級到所用版本線的最新版（`shioaji==1.5.*` 或 `shioaji==1.7.*`），然後重啟 Python process 或 `shioaji server` daemon，再重新登入。 |
+| `Please update the version of shioaji ...`，後續呼叫又出現 `Not authenticated` | 版本被伺服器拒收。已知有問題的 yanked 1.5.x 版本不被接受；PyPI 標記 `1.5.0`、`1.5.1` 為 yanked，截至 2026-06-25 `1.5.2` 也被標記為 yanked。 | 用 `uv sync -P shioaji` 升級到所用版本線的最新版（版本線：`shioaji==1.5.*`、`1.7.*` 或 `1.8.*`）；要求的版本在較新的版本線時，用 `uv add "shioaji==X.Y.*"` 換線。然後重啟 Python process 或 `shioaji server` daemon，再重新登入。 |
 
 ```bash
-# uv project
-uv add "shioaji==1.5.*"
+# uv project: upgrade within the pinned line 同版本線升級
+uv sync -P shioaji
 
-# pip / existing environment
-python -m pip install -U "shioaji==1.5.*"
+# uv project: switch line 換版本線 (e.g. to 1.8)
+uv add "shioaji==1.8.*"
+
+# pip / existing environment: use your line 填所用版本線
+python -m pip install -U "shioaji==1.8.*"
 
 # CLI tool install
-uv tool install --force "shioaji==1.5.*"
+uv tool upgrade shioaji                    # within the line 同版本線
+uv tool install --force "shioaji==1.8.*"  # switch line 換版本線
 ```
 
 Rate-limit ban guardrails include market-data queries (50 / 10 sec),
